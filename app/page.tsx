@@ -23,7 +23,7 @@ export default function Home() {
           <Reveal delay={0.32}><div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div></Reveal>
         </div>
         <div className="hero-stamp"><span>Next public running</span><strong>26</strong><small>JUL · 10:00</small></div>
-        <div className="track-line"><div className="train-marker" aria-hidden="true"><div className="loco-smoke"><i/><i/><i/></div><div className="mini-loco"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></div></div></div>
+        <div className="track-line"><div className="train-marker" aria-hidden="true"><div className="loco-smoke"><i/><i/><i/></div><div className="mini-loco"><span className="loco-tender"/><span className="loco-cab"/><span className="loco-boiler"/><span className="loco-dome"/><span className="loco-chimney"/><span className="loco-buffer"/><b className="loco-wheel wheel-tender"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></div></div></div>
       </section>
 
       <section className="ticker" aria-label="Club highlights"><div>FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM <i/> YORK’S HIDDEN RAILWAY <i/> FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM</div></section>
