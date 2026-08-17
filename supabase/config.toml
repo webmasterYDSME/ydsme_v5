@@ -248,16 +248,37 @@ uri = "pg-functions://postgres/public/custom_access_token_hook"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Branded local Auth templates. Hosted projects use the same files by copying their
+# contents into Authentication > Email Templates in the Supabase Dashboard.
+[auth.email.template.confirmation]
+subject = "Confirm your York Model Engineers email"
+content_path = "./supabase/templates/confirmation.html"
 
-# Uncomment to customize notification email template
-# [auth.email.notification.password_changed]
-# enabled = true
-# subject = "Your password has been changed"
-# content_path = "./templates/password_changed_notification.html"
+[auth.email.template.invite]
+subject = "Your invitation to York Model Engineers"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.magic_link]
+subject = "Your secure York Model Engineers sign-in link"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.recovery]
+subject = "Reset your York Model Engineers password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "Confirm your new York Model Engineers email"
+content_path = "./supabase/templates/email_change.html"
+
+[auth.email.notification.password_changed]
+enabled = true
+subject = "Your York Model Engineers password was changed"
+content_path = "./templates/password_changed.html"
+
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Your York Model Engineers email was changed"
+content_path = "./templates/email_changed.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.

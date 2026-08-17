@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Your email was changed</title>
+  <style>body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}table{border-collapse:collapse!important}img{border:0;height:auto;line-height:100%;outline:none;text-decoration:none}body{height:100%!important;margin:0!important;padding:0!important;width:100%!important;background:#0a1310}.wrap{width:100%;background:#0a1310}.card{width:600px;max-width:600px;background:#f7f3e9}.pad{padding:42px 52px}.button{background:#244f3d;border-radius:4px;color:#fff!important;display:inline-block;font-family:Arial,sans-serif;font-size:16px;font-weight:700;line-height:52px;text-align:center;text-decoration:none;width:210px}@media screen and (max-width:620px){.card{width:100%!important}.pad{padding:32px 24px!important}.button{width:100%!important}.headline{font-size:30px!important;line-height:36px!important}}</style>
+</head>
+<body><table role="presentation" class="wrap" width="100%"><tr><td align="center" style="padding:24px 12px"><table role="presentation" class="card" width="600">
+  <tr><td align="center" style="background:#10271f;border-bottom:5px solid #b98a37;padding:30px 24px 25px"><img src="{{ .SiteURL }}/ydsme-logo.png" width="88" alt="York City and District Society of Model Engineers" style="display:block;width:88px;max-width:88px;margin:0 auto 14px"><div style="color:#f7f3e9;font-family:Georgia,serif;font-size:21px;line-height:27px">York Model Engineers</div></td></tr>
+  <tr><td class="pad">
+    <div style="color:#8a542b;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase">Security notice</div>
+    <h1 class="headline" style="color:#13241d;font-family:Georgia,serif;font-size:38px;font-weight:400;line-height:44px;margin:14px 0 18px">Your email was changed</h1>
+    <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 10px">The sign-in email for your York Model Engineers account has changed:</p>
+    <table role="presentation" width="100%" style="background:#e6dfd1;border-left:5px solid #b98a37;margin:0 0 28px"><tr><td style="color:#34453e;font-family:Arial,sans-serif;font-size:14px;line-height:24px;padding:16px 18px"><strong>Previous:</strong> {{ .OldEmail }}<br><strong>New:</strong> {{ .Email }}</td></tr></table>
+    <table role="presentation" width="100%"><tr><td align="center"><a class="button" href="{{ .SiteURL }}/signin" target="_blank">Review your account</a></td></tr></table>
+    <div style="background:#f0e2d8;border-left:5px solid #9a4431;color:#5b2b22;font-family:Arial,sans-serif;font-size:14px;line-height:23px;margin-top:30px;padding:18px">If this was not you, contact a Society administrator immediately and secure your email account.</div>
+  </td></tr>
+  <tr><td style="background:#e6dfd1;color:#4e5b55;font-family:Arial,sans-serif;font-size:12px;line-height:19px;padding:22px 52px;text-align:center">York City &amp; District Society of Model Engineers<br><a href="{{ .SiteURL }}" style="color:#244f3d">{{ .SiteURL }}</a></td></tr>
+</table></td></tr></table></body>
+</html>
