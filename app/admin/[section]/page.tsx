@@ -1,0 +1,50 @@
+import { notFound } from "next/navigation";
+import { format, parseISO } from "date-fns";
+import { CalendarDays, Pencil, Plus, Trash2, UserPlus, UsersRound, Wrench } from "lucide-react";
+import { canManageContent, isAdministrator, requireUser } from "@/lib/auth";
+import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { deleteEvent, deleteMember, deleteWorkshop, inviteMember, saveEvent, saveWorkshop, updateMemberRole } from "@/lib/actions/content";
+
+export const dynamic = "force-dynamic";
+
+type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; is_ticket_required:boolean; reservation_link:string };
+type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number };
+
+function EventForm({ event }: { event?: EventRow }) {
+  return <form action={saveEvent} className="editor-form" encType="multipart/form-data">{event ? <input type="hidden" name="id" value={event.id}/> : null}<label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label><label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label><label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label><label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label><label>Event image<input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/avif"/></label><input type="hidden" name="file_url" value={event?.file_url || ""}/><label className="wide">Reservation link<input type="url" name="reservation_link" defaultValue={event?.reservation_link}/></label><label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label><label className="check"><input type="checkbox" name="is_ticket_required" defaultChecked={event?.is_ticket_required}/>Booking required</label><button type="submit" className="button dark">{event ? "Save changes" : "Create event"}</button></form>;
+}
+
+function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
+  return <form action={saveWorkshop} className="editor-form">{workshop ? <input type="hidden" name="id" value={workshop.id}/> : null}<label className="wide">Workshop title<input name="title" defaultValue={workshop?.title} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={workshop?.descriptions} rows={4} required/></label><label>Date<input type="date" name="date" defaultValue={workshop?.date} required/></label><label>Host<input name="host_name" defaultValue={workshop?.host_name} required/></label><label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label><label>Venue<input name="venue" defaultValue={workshop?.venue} required/></label><label>Maximum places<input type="number" min="1" max="500" name="maximum_participants" defaultValue={workshop?.maximum_participants || 20} required/></label><label className="wide">Virtual link<input type="url" name="virtual_link" defaultValue={workshop?.virtual_link}/></label><label className="wide">Notes<textarea name="notes" defaultValue={workshop?.notes} rows={3}/></label><button type="submit" className="button dark">{workshop ? "Save changes" : "Create workshop"}</button></form>;
+}
+
+export default async function AdminSection({ params, searchParams }: { params: Promise<{ section: string }>; searchParams: Promise<{ error?: string; notice?: string }> }) {
+  const [{ section }, query, { role }] = await Promise.all([params, searchParams, requireUser()]);
+  if (!(["events","workshops","members"] as const).includes(section as never)) notFound();
+  if (section === "members" && !isAdministrator(role)) notFound();
+  const admin = createAdminClient();
+  const editable = canManageContent(role);
+
+  if (section === "events") {
+    const { data, error } = await admin.from("events").select("*").order("start_date", { ascending: false });
+    if (error) throw new Error(error.message);
+    const events = (data ?? []) as EventRow[];
+    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Event timetable</h1><p>Public and member-only dates are managed here. Public pages only receive public events.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{query.notice ? <p className="form-message success">Event saved.</p> : null}{editable ? <details className="manager-panel" open={!events.length}><summary><Plus/>Create an event</summary><EventForm/></details> : <p className="read-only-note">Read-only committee access: you can review records but cannot change them.</p>}<div className="admin-list">{events.map(event=><article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_"," ")}</span><h2>{event.name}</h2><p>{format(parseISO(event.start_date), "d MMMM yyyy")} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div>{editable ? <div className="admin-list-actions"><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><button type="submit"><Trash2/>Delete</button></form></div> : null}</article>)}</div></div>;
+  }
+
+  if (section === "workshops") {
+    const { data, error } = await admin.from("workshops").select("*").order("date", { ascending: false });
+    if (error) throw new Error(error.message);
+    const workshops = (data ?? []) as WorkshopRow[];
+    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule practical sessions and control available places.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{query.notice ? <p className="form-message success">Workshop saved.</p> : null}{editable ? <details className="manager-panel"><summary><Plus/>Create a workshop</summary><WorkshopForm/></details> : <p className="read-only-note">Read-only committee access: you can review records but cannot change them.</p>}<div className="admin-list">{workshops.map(workshop=><article key={workshop.id}><div className="admin-list-icon"><Wrench/></div><div><span>{workshop.host_name}</span><h2>{workshop.title}</h2><p>{format(parseISO(workshop.date), "d MMMM yyyy")} · {workshop.venue} · {workshop.maximum_participants} places</p></div>{editable ? <div className="admin-list-actions"><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><button type="submit"><Trash2/>Delete</button></form></div> : null}</article>)}</div></div>;
+  }
+
+  const [{ data: users, error }, { data: roles }] = await Promise.all([
+    admin.from("users").select("id,title,full_name,email,contact_number,club_rules_agreement").order("full_name"),
+    admin.from("user_roles").select("user_id,role"),
+  ]);
+  if (error) throw new Error(error.message);
+  const roleMap = new Map((roles ?? []).map(item => [item.user_id, item.role]));
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Member register</h1><p>Invite members, review their details and maintain role-based access.</p></div><span className="count-badge"><UsersRound/>{users?.length ?? 0} members</span></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{query.notice ? <p className="form-message success">Invitation sent.</p> : null}<details className="manager-panel"><summary><UserPlus/>Invite a member</summary><form action={inviteMember} className="editor-form"><label>Full name<input name="full_name" required/></label><label>Email address<input type="email" name="email" required/></label><button type="submit" className="button dark">Send secure invitation</button></form></details><div className="bulk-links"><Link href="/administrator/add-members">Bulk invite by CSV</Link><Link href="/administrator/delete-members">Bulk delete by CSV</Link></div><div className="member-table"><div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>{(users ?? []).map(member=><div className="member-row" key={member.id}><div><strong>{member.full_name || "Name not set"}</strong><small>{member.title}</small></div><div><span>{member.email}</span><small>{member.contact_number}</small></div><form action={updateMemberRole}><input type="hidden" name="user_id" value={member.id}/><select name="role" defaultValue={roleMap.get(member.id) || "member"}><option value="member">Member</option><option value="read-only-committee">Read-only committee</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select><button type="submit">Save</button></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><button className="danger-button" type="submit"><Trash2/>Delete</button></form></div>)}</div></div>;
+}

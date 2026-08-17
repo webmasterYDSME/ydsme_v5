@@ -23,8 +23,8 @@ export function PageShell({children}:{children:ReactNode}) {
   return <>
     <header className="site-header">
       <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt="York City and District Society of Model Engineers" width={76} height={76} priority /></span><span>York Model<br/><b>Engineers</b></span></Link>
-      <nav className={open?"main-nav open":"main-nav"}>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<a className="login-mobile" href="https://www.yorkmodelengineers.co.uk/signin">Member login <ArrowUpRight size={15}/></a></nav>
-      <a className="member-login" href="https://www.yorkmodelengineers.co.uk/signin">Member login <ArrowUpRight size={15}/></a>
+      <nav className={open?"main-nav open":"main-nav"}>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin">Member login <ArrowUpRight size={15}/></Link></nav>
+      <Link className="member-login" href="/signin">Member login <ArrowUpRight size={15}/></Link>
       <button className="menu-button" onClick={()=>setOpen(!open)} aria-label="Toggle navigation">{open?<X/>:<Menu/>}</button>
     </header>
     <main>{children}</main>

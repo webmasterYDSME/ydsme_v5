@@ -1,7 +1,11 @@
 import { ArrowRight, CalendarDays, Gauge, MapPin, Sparkles, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { format, parseISO } from "date-fns";
 import { PageShell, Reveal, SectionHeading } from "./components/RailSite";
+import { getPublicEvents } from "@/lib/data";
+
+export const dynamic = "force-dynamic";
 
 const interests = [
   "2.5–7.25 inch locomotives", "Stationary engines", "Traction engines",
@@ -9,7 +13,8 @@ const interests = [
   "Kit building & 3D printing",
 ];
 
-export default function Home() {
+export default async function Home() {
+  const [nextEvent] = await getPublicEvents();
   return (
     <PageShell>
       <section className="hero">
@@ -22,7 +27,7 @@ export default function Home() {
           <Reveal delay={0.22}><p className="hero-lede">Five woodland acres. Three miniature railways. Generations of makers keeping steam, skill and wonder in motion.</p></Reveal>
           <Reveal delay={0.32}><div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div></Reveal>
         </div>
-        <div className="hero-stamp"><span>Next public running</span><strong>26</strong><small>JUL · 10:00</small></div>
+        {nextEvent ? <div className="hero-stamp"><span>Next public running</span><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><small>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()} · {nextEvent.start_time.slice(0,5)}</small></div> : null}
         <div className="track-line"><div className="train-marker" aria-hidden="true"><div className="loco-smoke"><i/><i/><i/></div><div className="mini-loco"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></div></div></div>
       </section>
 
@@ -48,7 +53,7 @@ export default function Home() {
         <div className="visit-copy"><p className="eyebrow">Your day on the rails</p><h2>Come curious.<br/><em>Leave inspired.</em></h2><div className="quick-facts"><p><MapPin/> Dringhouses, York · YO24 2JE</p><p><Sparkles/> Free entry · donations welcome</p><p><CalendarDays/> Public open days & special events</p><p><Users/> Wheelchair-friendly paths</p></div><Link className="button brass" href="/visitors">Visitor information <ArrowRight size={17}/></Link></div>
       </section>
 
-      <section className="section event-tease"><p className="eyebrow dark">On the platform</p><div className="event-title"><span>26.07.26</span><h2>Monthly Public<br/><em>Open Day</em></h2><p>Sunday · 10:00<br/>Free entrance & rides<br/>Hot food & drinks available</p></div><Link href="/events" className="circle-link" aria-label="See all events"><ArrowRight/></Link></section>
+      {nextEvent ? <section className="section event-tease"><p className="eyebrow dark">On the platform</p><div className="event-title"><span>{format(parseISO(nextEvent.start_date), "dd.MM.yy")}</span><h2>{nextEvent.name}</h2><p>{format(parseISO(nextEvent.start_date), "EEEE")} · {nextEvent.start_time.slice(0,5)}<br/>{nextEvent.is_ticket_required ? "Advance booking required" : "Free entrance & rides"}<br/>Hot food & drinks available</p></div><Link href="/events" className="circle-link" aria-label="See all events"><ArrowRight/></Link></section> : null}
     </PageShell>
   );
 }
