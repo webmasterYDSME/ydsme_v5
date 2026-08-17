@@ -18,6 +18,14 @@ $$;
 revoke all on function public.has_app_role(text[]) from public;
 grant execute on function public.has_app_role(text[]) to authenticated;
 
+-- Role assignment is administrator-only in application Server Actions. Direct
+-- member/committee access is removed, while trusted server and Auth-hook roles
+-- retain the table privileges required by the application and token hook.
+drop policy if exists "Enable read access for all members" on public.user_roles;
+drop policy if exists "Enable update for committee and administrator" on public.user_roles;
+revoke all on public.user_roles from anon, authenticated;
+grant select, insert, update, delete on public.user_roles to service_role;
+
 -- Anonymous clients only receive public events. Signed-in members receive the full timetable.
 drop policy if exists "Enable read access for all users" on public.events;
 drop policy if exists "Enable update for mod, committee and admin" on public.events;

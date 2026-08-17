@@ -1,9 +1,18 @@
 import type { NextConfig } from "next";
 
+const isDevelopment = process.env.NODE_ENV === "development";
+const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):54321(?:\/|$)/.test(
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+);
+
 const nextConfig: NextConfig = {
   images: {
+    dangerouslyAllowLocalIP: usesLocalSupabase,
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },
+      ...(usesLocalSupabase
+        ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "54321", pathname: "/storage/v1/object/public/**" }]
+        : []),
     ],
   },
   poweredByHeader: false,
@@ -14,13 +23,13 @@ const nextConfig: NextConfig = {
       "form-action 'self'",
       "frame-ancestors 'none'",
       "object-src 'none'",
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com`,
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://*.supabase.co",
+      `img-src 'self' data: blob: https://*.supabase.co${usesLocalSupabase ? " http://127.0.0.1:54321" : ""}`,
       "font-src 'self' data:",
-      "connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com",
+      `connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com${usesLocalSupabase ? " http://127.0.0.1:54321 ws://127.0.0.1:54321" : ""}`,
       "frame-src https://challenges.cloudflare.com",
-      "upgrade-insecure-requests",
+      ...(isDevelopment || usesLocalSupabase ? [] : ["upgrade-insecure-requests"]),
     ].join("; ");
     return [{
       source: "/:path*",

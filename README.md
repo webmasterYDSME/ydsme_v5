@@ -1,19 +1,22 @@
 # York City & District Society of Model Engineers
 
-A redesigned Next.js 16 website and secure Society portal, built for Vercel and connected to the existing Supabase project.
+A redesigned Next.js 16 website and secure Society portal, built for Vercel. Local development uses an isolated Docker-based Supabase stack; production can use the hosted Supabase project through Vercel environment variables.
 
 ## Local development
 
-Requirements: Node.js 22.13 or newer.
+Requirements: Node.js 22.13 or newer and Docker Desktop.
 
 ```bash
 npm install
+npm run supabase:start
 npm run dev -- --port 3010
 ```
 
-Open [http://localhost:3010](http://localhost:3010).
+Open the website at [http://localhost:3010](http://localhost:3010), local Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), and captured local email at [http://127.0.0.1:54324](http://127.0.0.1:54324).
 
-Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`; it contains the Supabase service role and Stripe credentials.
+Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Stripe, Facebook, production SMTP and production webhooks should remain disabled during local development.
+
+The local database currently contains a private production snapshot for development. Its ignored export files live under `supabase/.temp/`; never commit, upload or share them. `supabase db reset` erases the local snapshot and rebuilds only the schema because automatic production-data seeding is intentionally disabled.
 
 ## Main routes
 
@@ -47,7 +50,7 @@ npm audit
 
 ## Database migration
 
-The app-level hardening is active in code. The defence-in-depth RLS and Storage changes live at `supabase/migrations/202608170001_security_hardening.sql` and should be tested in a Supabase branch/local database before being applied to production.
+The original migration history and the defence-in-depth RLS and Storage migration live under `supabase/migrations/`. They have been applied and tested against the local database only. The hardening migration must not be applied to production until every application role has been validated.
 
 ## Vercel
 

@@ -7,7 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 
 const emailSchema = z.string().trim().email().max(254);
-const passwordSchema = z.string().min(8).max(128);
+const existingPasswordSchema = z.string().min(6).max(128);
+const newPasswordSchema = z.string().min(8).max(128);
 
 function safeNext(value: FormDataEntryValue | null) {
   const next = typeof value === "string" ? value : "/dashboard";
@@ -19,7 +20,7 @@ function authError(message: string): never {
 }
 
 export async function signInWithPassword(formData: FormData) {
-  const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse({
+  const parsed = z.object({ email: emailSchema, password: existingPasswordSchema }).safeParse({
     email: formData.get("email"), password: formData.get("password"),
   });
   if (!parsed.success) authError("Enter a valid email address and password.");
@@ -58,7 +59,7 @@ export async function sendPasswordReset(formData: FormData) {
 
 export async function updatePassword(formData: FormData) {
   await requireUser();
-  const parsed = passwordSchema.safeParse(formData.get("password"));
+  const parsed = newPasswordSchema.safeParse(formData.get("password"));
   if (!parsed.success) redirect("/reset-password?error=Password+must+be+at+least+8+characters.");
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: parsed.data });

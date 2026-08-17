@@ -47,14 +47,24 @@ test("ships database and HTTP defence in depth", async () => {
   assert.match(migration, /ydsme_events_public_read/);
   assert.match(migration, /participants_workshop_member_unique/);
   assert.match(migration, /has_app_role/);
+  assert.match(migration, /revoke all on public\.user_roles from anon, authenticated/);
+  assert.match(migration, /grant select, insert, update, delete on public\.user_roles to service_role/);
+  assert.match(migration, /drop policy if exists "Enable update for committee and administrator"/);
   assert.match(config, /Content-Security-Policy/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /Permissions-Policy/);
 });
 
 test("keeps the supplied logo and local member login", async () => {
-  const shell = await read("app/components/RailSite.tsx");
+  const [shell, signIn, authActions] = await Promise.all([
+    read("app/components/RailSite.tsx"),
+    read("app/signin/page.tsx"),
+    read("lib/actions/auth.ts"),
+  ]);
   assert.match(shell, /\/ydsme-logo\.png/);
   assert.match(shell, /href="\/signin"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);
+  assert.match(signIn, /minLength=\{6\}/);
+  assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
+  assert.match(authActions, /newPasswordSchema = z\.string\(\)\.min\(8\)/);
 });
