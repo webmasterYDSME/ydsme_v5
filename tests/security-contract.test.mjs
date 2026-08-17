@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -67,4 +67,24 @@ test("keeps the supplied logo and local member login", async () => {
   assert.match(signIn, /minLength=\{6\}/);
   assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
   assert.match(authActions, /newPasswordSchema = z\.string\(\)\.min\(8\)/);
+});
+
+test("publishes reviewed legal notices and original Society PDFs", async () => {
+  const [shell, privacy, cookies, history, safetyPdf, historyPdf] = await Promise.all([
+    read("app/components/RailSite.tsx"),
+    read("app/privacy-policy/page.tsx"),
+    read("app/cookie-policy/page.tsx"),
+    read("app/club-history/page.tsx"),
+    stat(new URL("public/documents/visitor-safety-guide.pdf", root)),
+    stat(new URL("public/documents/ydsme-1929-1982.pdf", root)),
+  ]);
+  assert.match(shell, /Legal navigation/);
+  assert.match(privacy, /Supabase/);
+  assert.match(privacy, /Vercel/);
+  assert.match(privacy, /Stripe/);
+  assert.match(privacy, /Cloudflare Turnstile/);
+  assert.match(cookies, /does not use advertising or analytics cookies/);
+  assert.match(history, /ydsme-1929-1982\.pdf/);
+  assert.ok(safetyPdf.size > 300_000);
+  assert.ok(historyPdf.size > 100_000);
 });

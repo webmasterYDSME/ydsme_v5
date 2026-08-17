@@ -12,6 +12,8 @@ const routes: Array<{
   { path: "/club-history", changeFrequency: "yearly", priority: 0.7 },
   { path: "/committees", changeFrequency: "monthly", priority: 0.7 },
   { path: "/membership", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/privacy-policy", changeFrequency: "yearly", priority: 0.3 },
+  { path: "/cookie-policy", changeFrequency: "yearly", priority: 0.3 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
