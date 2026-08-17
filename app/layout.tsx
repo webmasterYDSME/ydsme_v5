@@ -4,8 +4,8 @@ import "./globals.css";
 import {ReactNode} from "react";
 import { organisationJsonLd, safeJsonLd } from "@/lib/seo";
 
-const display = Cormorant_Garamond({ variable: "--font-display", subsets: ["latin"], weight: ["400","500","600","700"], style: ["normal","italic"] });
-const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400","500","600","700"] });
+const display = Cormorant_Garamond({ variable: "--font-display", subsets: ["latin"], weight: ["400","500","600","700"], style: ["normal","italic"], display: "swap", preload: false });
+const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400","500","600","700"], preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.yorkmodelengineers.co.uk"),

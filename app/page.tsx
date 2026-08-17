@@ -1,12 +1,13 @@
-import { ArrowRight, CalendarDays, Gauge, MapPin, Sparkles, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, MapPin, Sparkles, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { PageShell, Reveal, SectionHeading } from "./components/RailSite";
+import { InteractiveSteamTrain, PageShell, Reveal, SectionHeading } from "./components/RailSite";
 import { getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-static";
+export const revalidate = 300;
 export const metadata = publicPageMetadata({
   title: "Miniature Railways & Live Steam in York",
   description: "Discover miniature railways, live steam and model engineering across five woodland acres at York Model Engineers in Dringhouses.",
@@ -21,21 +22,22 @@ const interests = [
 ];
 
 export default async function Home() {
-  const [nextEvent] = await getPublicEvents();
+  const publicEvents = await getPublicEvents();
+  const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>
       <section className="hero" aria-labelledby="home-hero-title">
-        <Image src="/images/hero.webp" alt="A miniature steam locomotive at York Model Engineers" fill priority sizes="100vw" />
+        <Image src="/images/hero.webp" alt="A miniature steam locomotive at York Model Engineers" fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" />
         <div className="hero-wash" />
         <div className="steam steam-one" /><div className="steam steam-two" /><div className="steam steam-three" />
         <div className="hero-copy">
-          <Reveal><p className="eyebrow">York · Since 1929</p></Reveal>
-          <Reveal delay={0.12}><h1 id="home-hero-title">Small engines.<br/><em>Grand adventures.</em></h1></Reveal>
-          <Reveal delay={0.22}><p className="hero-lede">Five woodland acres. Three miniature railways. Generations of makers keeping steam, skill and wonder in motion.</p></Reveal>
-          <Reveal delay={0.32}><div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div></Reveal>
+          <p className="eyebrow">York · Since 1929</p>
+          <h1 id="home-hero-title">Small engines.<br/><em>Grand adventures.</em></h1>
+          <p className="hero-lede">Five woodland acres. Three miniature railways. Generations of makers keeping steam, skill and wonder in motion.</p>
+          <div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div>
         </div>
-        {nextEvent ? <div className="hero-stamp"><span>Next public running</span><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><small>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()} · {nextEvent.start_time.slice(0,5)}</small></div> : null}
-        <div className="track-line"><div className="train-marker" aria-hidden="true"><div className="loco-smoke"><i/><i/><i/></div><div className="mini-loco"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></div></div></div>
+        {nextEvent ? <Link className="next-running-badge" href="/events"><span className="next-running-kicker"><i aria-hidden="true"/> Next public running</span><time className="next-running-date" dateTime={`${nextEvent.start_date}T${nextEvent.start_time.slice(0,5)}`}><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><span>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()}<small>{format(parseISO(nextEvent.start_date), "yyyy")}</small></span></time><span className="next-running-name">{nextEvent.name}</span><span className="next-running-detail">{format(parseISO(nextEvent.start_date), "EEE")} · {nextEvent.start_time.slice(0,5)}</span><span className="next-running-arrow" aria-hidden="true"><ArrowUpRight/></span></Link> : null}
+        <div className="track-line"><InteractiveSteamTrain/></div>
       </section>
 
       <section className="ticker" aria-label="Club highlights"><div>FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM <i/> YORK’S HIDDEN RAILWAY <i/> FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM</div></section>
@@ -46,7 +48,7 @@ export default async function Home() {
       </section>
 
       <section className="feature-photo">
-        <Image src="/images/track.webp" alt="Miniature railway track through the club grounds" fill sizes="100vw" />
+        <Image src="/images/track.webp" alt="Miniature railway track through the club grounds" fill quality={35} sizes="100vw" />
         <div className="feature-card"><span className="counter">03</span><h2>Railways,<br/>one remarkable site</h2><p>Raised and ground-level tracks engineered for locomotives from 2.5&quot; to 7.25&quot; gauge.</p></div>
       </section>
 
@@ -56,7 +58,7 @@ export default async function Home() {
       </section>
 
       <section className="visit-panel">
-        <div className="visit-image"><Image src="/images/entrance.webp" alt="Entrance to York Model Engineers" fill sizes="(max-width: 800px) 100vw, 50vw" /></div>
+        <div className="visit-image"><Image src="/images/entrance.webp" alt="Entrance to York Model Engineers" fill quality={35} sizes="(max-width: 800px) 100vw, 50vw" /></div>
         <div className="visit-copy"><p className="eyebrow">Your day on the rails</p><h2>Come curious.<br/><em>Leave inspired.</em></h2><div className="quick-facts"><p><MapPin/> Dringhouses, York · YO24 2JE</p><p><Sparkles/> Free entry · donations welcome</p><p><CalendarDays/> Public open days & special events</p><p><Users/> Wheelchair-friendly paths</p></div><Link className="button brass" href="/visitors">Visitor information <ArrowRight size={17}/></Link></div>
       </section>
 

@@ -7,6 +7,7 @@ const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):54321(?:\/|$)/.t
 
 const nextConfig: NextConfig = {
   images: {
+    qualities: [35, 55, 75],
     dangerouslyAllowLocalIP: usesLocalSupabase,
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },

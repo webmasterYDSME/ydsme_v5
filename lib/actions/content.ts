@@ -52,7 +52,7 @@ export async function saveEvent(formData: FormData) {
   const query = id ? admin.from("events").update(values).eq("id", id) : admin.from("events").insert({ ...values, host: user.id });
   const { error } = await query;
   if (error) redirect(`/admin/events?error=${encodeURIComponent(error.message)}`);
-  revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
+  revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect("/admin/events?notice=event-saved");
 }
 
@@ -61,7 +61,7 @@ export async function deleteEvent(formData: FormData) {
   const id = z.coerce.number().int().positive().parse(formData.get("id"));
   const { error } = await createAdminClient().from("events").delete().eq("id", id);
   if (error) redirect(`/admin/events?error=${encodeURIComponent(error.message)}`);
-  revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
+  revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
 }
 
 export async function saveWorkshop(formData: FormData) {
