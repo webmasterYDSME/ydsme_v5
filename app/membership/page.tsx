@@ -1,7 +1,15 @@
 import { ArrowRight, Check, KeyRound, Wrench } from "lucide-react";
 import { InnerHero, PageShell, Reveal } from "../components/RailSite";
+import { publicPageMetadata } from "@/lib/seo";
+
+export const metadata = publicPageMetadata({
+  title: "Membership & How to Join",
+  description: "Join York Model Engineers for member running days, workshops, shared facilities and a welcoming community of traditional and modern makers.",
+  path: "/membership",
+  keywords: ["join model engineering club", "York Model Engineers membership", "model railway club York"],
+});
 const tiers=[["Adult","£60","A full year of making, running and Society life."],["Concession","£30","For members aged 80 and over."],["Student","£30","For students and young makers under 25."],["Junior associate","£15","For ages 14–17. Membership requires approval."]];
-export default function Membership(){return <PageShell><InnerHero kicker="Become a member" title={<>Don’t just watch.<br/><em>Make it move.</em></>} copy="Join a generous community of makers, drivers, fixers and lifelong learners—with nearly five acres to explore." image="/images/engine.webp"/>
+export default function Membership(){return <PageShell><InnerHero kicker="Become a member" title={<>Don’t just watch.<br/><em>Make it move.</em></>} copy="Join a generous community of makers, drivers, fixers and lifelong learners—with nearly five acres to explore." image="/images/engine.webp" imageAlt="A live-steam locomotive at York Model Engineers"/>
 <section className="section membership-lead"><div><p className="eyebrow dark">Your workshop gets bigger</p><h2>Tools, tracks<br/>& <em>good company.</em></h2></div><div><p>Membership opens up member-only running days, workshops, events and the collective knowledge of people who love solving practical problems.</p><ul><li><Check/>Member-only events and running days</li><li><Check/>Learn from experienced model engineers</li><li><Check/>Use and help shape our unique facilities</li><li><Check/>A welcoming home for traditional and modern making</li></ul></div></section>
 <section className="tier-grid">{tiers.map((t,i)=><Reveal key={t[0]} delay={i*.05}><article className={i===0?"tier featured":"tier"}><div className="tier-top"><span>0{i+1}</span><Wrench/></div><p>{t[0]}</p><h3>{t[1]}<small>/ year</small></h3><p>{t[2]}</p>{i===0&&<b>MOST POPULAR</b>}</article></Reveal>)}</section>
 <section className="join-panel"><div><KeyRound/><p className="eyebrow">Membership year ends 31 December 2026</p><h2>Ready to come<br/><em>aboard?</em></h2><p>Applications and renewals are handled securely through MemberMojo.</p></div><a className="button brass large" href="https://membermojo.co.uk/york-model-engineers">Join or renew <ArrowRight/></a></section></PageShell>}

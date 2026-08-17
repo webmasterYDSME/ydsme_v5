@@ -4,8 +4,15 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { PageShell, Reveal, SectionHeading } from "./components/RailSite";
 import { getPublicEvents } from "@/lib/data";
+import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata = publicPageMetadata({
+  title: "Miniature Railways & Live Steam in York",
+  description: "Discover miniature railways, live steam and model engineering across five woodland acres at York Model Engineers in Dringhouses.",
+  path: "/",
+  keywords: ["family days out York", "York railway attraction"],
+});
 
 const interests = [
   "2.5–7.25 inch locomotives", "Stationary engines", "Traction engines",
@@ -17,13 +24,13 @@ export default async function Home() {
   const [nextEvent] = await getPublicEvents();
   return (
     <PageShell>
-      <section className="hero">
+      <section className="hero" aria-labelledby="home-hero-title">
         <Image src="/images/hero.webp" alt="A miniature steam locomotive at York Model Engineers" fill priority sizes="100vw" />
         <div className="hero-wash" />
         <div className="steam steam-one" /><div className="steam steam-two" /><div className="steam steam-three" />
         <div className="hero-copy">
           <Reveal><p className="eyebrow">York · Since 1929</p></Reveal>
-          <Reveal delay={0.12}><h1>Small engines.<br/><em>Grand adventures.</em></h1></Reveal>
+          <Reveal delay={0.12}><h1 id="home-hero-title">Small engines.<br/><em>Grand adventures.</em></h1></Reveal>
           <Reveal delay={0.22}><p className="hero-lede">Five woodland acres. Three miniature railways. Generations of makers keeping steam, skill and wonder in motion.</p></Reveal>
           <Reveal delay={0.32}><div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div></Reveal>
         </div>

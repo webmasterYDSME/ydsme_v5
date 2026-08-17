@@ -20,18 +20,25 @@ export function SectionHeading({children}:{children:ReactNode}) { return <h2 cla
 
 export function PageShell({children}:{children:ReactNode}) {
   const path=usePathname(); const [open,setOpen]=useState(false);
+  useEffect(()=>{
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape")setOpen(false);};
+    document.documentElement.classList.toggle("nav-open",open);
+    window.addEventListener("keydown",closeOnEscape);
+    return()=>{document.documentElement.classList.remove("nav-open");window.removeEventListener("keydown",closeOnEscape);};
+  },[open]);
   return <>
+    <a className="skip-link" href="#main-content">Skip to main content</a>
     <header className="site-header">
       <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt="York City and District Society of Model Engineers" width={76} height={76} priority /></span><span>York Model<br/><b>Engineers</b></span></Link>
-      <nav className={open?"main-nav open":"main-nav"}>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin">Member login <ArrowUpRight size={15}/></Link></nav>
+      <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin" onClick={()=>setOpen(false)}>Member login <ArrowUpRight size={15}/></Link></nav>
       <Link className="member-login" href="/signin">Member login <ArrowUpRight size={15}/></Link>
-      <button className="menu-button" onClick={()=>setOpen(!open)} aria-label="Toggle navigation">{open?<X/>:<Menu/>}</button>
+      <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
-    <main>{children}</main>
-    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="York City and District Society of Model Engineers" width={92} height={92} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><p>Dringhouses<br/>York · YO24 2JE</p><a href="mailto:secretary@yorkmodelengineers.co.uk">secretary@yorkmodelengineers.co.uk</a></div><div><h3>Explore</h3>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}<a href="https://www.facebook.com/YorkModelEngineers">Facebook</a></div><div className="footer-small"><p>York City & District Society<br/>of Model Engineers Limited<br/>Company no. 26478R</p><p>© 2026 YCDSME</p></div></footer>
+    <main id="main-content">{children}</main>
+    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address>Dringhouses<br/>York · YO24 2JE</address><a className="footer-email" href="mailto:secretary@yorkmodelengineers.co.uk">secretary@yorkmodelengineers.co.uk</a></div><nav aria-label="Footer navigation"><h3>Explore</h3>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}<a href="https://www.facebook.com/YorkModelEngineers">Facebook</a></nav><div className="footer-small"><p>York City & District Society<br/>of Model Engineers Limited<br/>Company no. 26478R</p><p>© 2026 YCDSME</p></div></footer>
   </>;
 }
 
-export function InnerHero({kicker,title,copy,image}:{kicker:string;title:ReactNode;copy:string;image:string}) {
-  return <section className="inner-hero"><div className="inner-photo" style={{backgroundImage:`linear-gradient(90deg,rgba(5,12,9,.96) 0%,rgba(7,16,12,.76) 52%,rgba(7,16,12,.34) 100%),url(${image})`}}/><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1>{title}</h1><p>{copy}</p></div><div className="vertical-label">YORK · ENGLAND · EST 1929</div></section>;
+export function InnerHero({kicker,title,copy,image,imageAlt}:{kicker:string;title:ReactNode;copy:string;image:string;imageAlt:string}) {
+  return <section className="inner-hero" aria-labelledby="inner-hero-title"><div className="inner-photo"><Image src={image} alt={imageAlt} fill priority sizes="100vw" /></div><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1 id="inner-hero-title">{title}</h1><p>{copy}</p></div><div className="vertical-label" aria-hidden="true">YORK · ENGLAND · EST 1929</div></section>;
 }
