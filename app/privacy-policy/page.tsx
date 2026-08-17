@@ -28,7 +28,8 @@ export default function PrivacyPolicy() {
         <li>Membership information, including membership status, Society role, rules agreement and account identifiers.</li>
         <li>Account and security information used to authenticate you and protect the members’ area. We do not have access to your password in readable form.</li>
         <li>Event and workshop participation, documents or notices you submit, and associated authorship records.</li>
-        <li>Subscription and payment references, such as a Stripe customer reference, subscription status and limited payment-method metadata. Full payment-card details are entered into and retained by Stripe, not this website.</li>
+        <li>Membership application, renewal and subscription records managed through membermojo, including membership type, status, renewal dates and related payment references.</li>
+        <li>If you make a donation through Stripe, we may receive limited transaction information such as the donation amount, date, status and payment reference. Full payment-card details are entered into and retained by Stripe, not this website.</li>
       </ul>
       <h3>Public visitors and correspondents</h3>
       <ul>
@@ -43,8 +44,8 @@ export default function PrivacyPolicy() {
       <div className="legal-table-wrap"><table>
         <thead><tr><th>Purpose</th><th>Typical lawful basis</th></tr></thead>
         <tbody>
-          <tr><td>Process applications and administer membership, member access and benefits</td><td>Performance of the membership agreement and the Society’s legitimate interests in running the club</td></tr>
-          <tr><td>Collect subscriptions, maintain financial records and provide the Stripe billing portal</td><td>Performance of the membership agreement and compliance with legal obligations</td></tr>
+          <tr><td>Process applications and administer membership, renewals, member access and benefits through membermojo</td><td>Performance of the membership agreement and the Society’s legitimate interests in running the club</td></tr>
+          <tr><td>Collect membership subscriptions through membermojo, process voluntary donations through Stripe and maintain financial records</td><td>Performance of the membership agreement, the Society’s legitimate interests and compliance with legal obligations</td></tr>
           <tr><td>Organise events, workshops, volunteer activity and Society communications</td><td>Legitimate interests in operating and promoting the Society; consent where the law requires it</td></tr>
           <tr><td>Protect accounts, prevent abuse and investigate security incidents</td><td>Legitimate interests in keeping members, systems and information secure</td></tr>
           <tr><td>Meet safety, insurance, governance and other legal requirements, or establish and defend legal claims</td><td>Legal obligation and legitimate interests</td></tr>
@@ -55,7 +56,7 @@ export default function PrivacyPolicy() {
 
     <section>
       <h2>Where information comes from</h2>
-      <p>We normally receive information directly from you, from a parent or guardian where appropriate, or from a Society officer acting on an application or existing membership record. Payment and subscription updates may also be received from Stripe.</p>
+      <p>We normally receive information directly from you, from a parent or guardian where appropriate, or from a Society officer acting on an application or existing membership record. Membership application, renewal and subscription updates may also be received from membermojo. Donation-payment confirmations may be received from Stripe.</p>
     </section>
 
     <section>
@@ -64,7 +65,8 @@ export default function PrivacyPolicy() {
       <ul>
         <li><strong>Supabase</strong> for authentication, database and file storage;</li>
         <li><strong>Vercel</strong> for website hosting, delivery and operational logs;</li>
-        <li><strong>Stripe</strong> for subscription billing and its hosted billing portal; and</li>
+        <li><strong>membermojo Ltd</strong> for membership applications, renewals, subscription collection and membership record administration;</li>
+        <li><strong>Stripe</strong> solely for processing voluntary donations and associated fraud prevention and payment records; and</li>
         <li><strong>Cloudflare Turnstile</strong> to distinguish genuine sign-in and recovery attempts from automated abuse.</li>
       </ul>
       <p>We may disclose information to insurers, professional advisers, regulators, law-enforcement bodies or other parties where the law requires or permits it. We do not sell personal information.</p>

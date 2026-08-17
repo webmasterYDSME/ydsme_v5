@@ -40,7 +40,7 @@ export default function CookiePolicy() {
 
     <section>
       <h2>Third-party destinations</h2>
-      <p>The website links to services such as Stripe’s hosted billing portal and Facebook. Once you follow an external link, that service may use cookies under its own notice and controls. Those cookies are not set by this website merely because a link is displayed.</p>
+      <p>The website links to external services such as membermojo for membership applications and renewals, Stripe for voluntary donation payments, and Facebook. Once you follow an external link, that service may use cookies under its own notice and controls. Those cookies are not set by this website merely because a link is displayed.</p>
     </section>
 
     <section>
