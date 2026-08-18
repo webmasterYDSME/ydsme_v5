@@ -156,9 +156,11 @@ export type Database = {
       configs: {
         Row: {
           affiliates: Json[]
+          club_address: Json
           company_no: string
           contacts: Json[]
           created_at: string
+          email: string
           full_name: string
           id: number
           registered_address: Json
@@ -171,9 +173,11 @@ export type Database = {
         }
         Insert: {
           affiliates?: Json[]
+          club_address?: Json
           company_no?: string
           contacts?: Json[]
           created_at?: string
+          email?: string
           full_name?: string
           id?: number
           registered_address: Json
@@ -186,9 +190,11 @@ export type Database = {
         }
         Update: {
           affiliates?: Json[]
+          club_address?: Json
           company_no?: string
           contacts?: Json[]
           created_at?: string
+          email?: string
           full_name?: string
           id?: number
           registered_address?: Json
@@ -1011,6 +1017,20 @@ export type Database = {
           name: string | null
           position: number | null
           url: string | null
+        }
+        Relationships: []
+      }
+      public_site_config: {
+        Row: {
+          club_address: Json | null
+          company_no: string | null
+          email: string | null
+          full_name: string | null
+          registered_address: Json | null
+          registered_name: string | null
+          short_name: string | null
+          telephone: string | null
+          website: string | null
         }
         Relationships: []
       }

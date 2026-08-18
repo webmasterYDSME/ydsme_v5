@@ -1,7 +1,8 @@
 import { ArrowRight, CalendarDays, Ticket } from "lucide-react";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { InnerHero, PageShell, Reveal } from "../components/RailSite";
+import { InnerHero, Reveal } from "../components/RailSite";
+import { PageShell } from "../components/PageShell";
 import { getPublicEvents, type EventRecord } from "@/lib/data";
 import { publicPageMetadata, safeJsonLd, SITE_URL } from "@/lib/seo";
 import { safeHttpUrl } from "@/lib/security-input";

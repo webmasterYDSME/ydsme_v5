@@ -30,7 +30,8 @@ begin
     raise exception 'Anonymous config access is still granted';
   end if;
   if has_table_privilege('anon', 'public.donation_campaigns', 'SELECT')
-    or not has_table_privilege('anon', 'public.public_site_links', 'SELECT') then
+    or not has_table_privilege('anon', 'public.public_site_links', 'SELECT')
+    or not has_table_privilege('anon', 'public.public_site_config', 'SELECT') then
     raise exception 'Normalized public configuration privileges are incorrect';
   end if;
   if has_table_privilege('anon', 'public.events', 'SELECT')

@@ -10,6 +10,7 @@ import {
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
   fitAnnouncementText,
 } from "@/lib/announcements";
+import { safeHttpUrl } from "@/lib/security-input";
 
 export type EventRecord = {
   id: number;
@@ -46,6 +47,69 @@ export type AnnouncementRecord = {
   published_at: string;
   updated_at: string;
 };
+
+export type PostalAddress = {
+  address_line_one: string;
+  address_line_two: string;
+  city: string;
+  postcode: string;
+  country: string;
+};
+
+export type PublicSiteConfig = {
+  shortName: string;
+  fullName: string;
+  registeredName: string;
+  companyNumber: string;
+  website: string;
+  email: string;
+  telephone: string;
+  clubAddress: PostalAddress;
+  registeredAddress: PostalAddress;
+  socialLinks: Array<{ name: string; url: string }>;
+};
+
+const defaultClubAddress: PostalAddress = {
+  address_line_one: "Dringhouses",
+  address_line_two: "",
+  city: "York",
+  postcode: "YO24 2JE",
+  country: "United Kingdom",
+};
+
+const defaultRegisteredAddress: PostalAddress = {
+  address_line_one: "Hill House",
+  address_line_two: "Stocks Hill, Huggate",
+  city: "York",
+  postcode: "YO42 1YQ",
+  country: "United Kingdom",
+};
+
+export const defaultPublicSiteConfig: PublicSiteConfig = {
+  shortName: "YCDSME",
+  fullName: "York City & District Society of Model Engineers",
+  registeredName: "York City & District Society of Model Engineers Limited",
+  companyNumber: "26478R",
+  website: "https://www.yorkmodelengineers.co.uk",
+  email: "secretary@yorkmodelengineers.co.uk",
+  telephone: "",
+  clubAddress: defaultClubAddress,
+  registeredAddress: defaultRegisteredAddress,
+  socialLinks: [{ name: "Facebook", url: "https://www.facebook.com/YorkModelEngineers" }],
+};
+
+function asAddress(value: unknown, fallback: PostalAddress): PostalAddress {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const address = value as Record<string, unknown>;
+  const field = (name: keyof PostalAddress) => typeof address[name] === "string" ? address[name].trim() : fallback[name];
+  return {
+    address_line_one: field("address_line_one"),
+    address_line_two: field("address_line_two"),
+    city: field("city"),
+    postcode: field("postcode"),
+    country: field("country"),
+  };
+}
 
 type PublicEventRow = Omit<EventRecord, "booked_places" | "available_places">;
 
@@ -178,6 +242,44 @@ export async function getCarriageAnnouncements(limit = 6) {
     title: fitAnnouncementText(announcement.title, ANNOUNCEMENT_TITLE_MAX_LENGTH),
     body: fitAnnouncementText(announcement.body, ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH),
   }));
+}
+
+export async function getPublicSiteConfig() {
+  await connection();
+  const supabase = createPublicClient();
+  const [configResult, linksResult] = await Promise.all([
+    supabase
+      .from("public_site_config")
+      .select("short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address")
+      .maybeSingle(),
+    supabase
+      .from("public_site_links")
+      .select("name,url,position")
+      .eq("link_type", "social")
+      .order("position", { ascending: true }),
+  ]);
+
+  if (isMissingProjection(configResult.error)) return defaultPublicSiteConfig;
+  if (configResult.error || !configResult.data) throw new Error("Unable to load public Society information.");
+  if (linksResult.error && !isMissingProjection(linksResult.error)) throw new Error("Unable to load public Society links.");
+
+  const config = configResult.data;
+  const socialLinks = (linksResult.data ?? []).flatMap((link) => {
+    const url = safeHttpUrl(link.url);
+    return link.name?.trim() && url ? [{ name: link.name.trim(), url }] : [];
+  });
+  return {
+    shortName: config.short_name?.trim() || defaultPublicSiteConfig.shortName,
+    fullName: config.full_name?.trim() || defaultPublicSiteConfig.fullName,
+    registeredName: config.registered_name?.trim() || defaultPublicSiteConfig.registeredName,
+    companyNumber: config.company_no?.trim() || defaultPublicSiteConfig.companyNumber,
+    website: safeHttpUrl(config.website) || defaultPublicSiteConfig.website,
+    email: config.email?.trim() || defaultPublicSiteConfig.email,
+    telephone: config.telephone?.trim() || "",
+    clubAddress: asAddress(config.club_address, defaultClubAddress),
+    registeredAddress: asAddress(config.registered_address, defaultRegisteredAddress),
+    socialLinks,
+  } satisfies PublicSiteConfig;
 }
 
 export async function getDonationSettings() {
