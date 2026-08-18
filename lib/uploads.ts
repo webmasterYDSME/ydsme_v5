@@ -19,18 +19,43 @@ function detectedExtension(bytes: Uint8Array, kind: UploadKind) {
   return null;
 }
 
+const PDF_ACTIVE_CONTENT = /\/(?:JavaScript|JS|OpenAction|AA|Launch|EmbeddedFiles?|RichMedia|XFA|AcroForm)\b/;
+
+function hasControlCharacters(value: string) {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+}
+
+function hasSafePdfStructure(bytes: Uint8Array) {
+  const source = new TextDecoder("latin1").decode(bytes);
+  if (!source.startsWith("%PDF-1.")) return false;
+  const lastEndMarker = source.lastIndexOf("%%EOF");
+  if (lastEndMarker < Math.max(0, source.length - 2048)) return false;
+  const normalizedNames = source.replace(/#([0-9a-f]{2})/gi, (_match, hex: string) =>
+    String.fromCharCode(Number.parseInt(hex, 16)),
+  );
+  return !PDF_ACTIVE_CONTENT.test(normalizedNames);
+}
+
 export async function finalizeQuarantinedUpload(kind: UploadKind, quarantinePath: string, userId: string) {
   const config = configs[kind];
-  if (!quarantinePath.startsWith(`quarantine/${userId}/`) || quarantinePath.includes("..")) throw new Error("Invalid quarantine object.");
+  if (
+    !quarantinePath.startsWith(`quarantine/${userId}/`)
+    || quarantinePath.includes("\\")
+    || quarantinePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
+    || hasControlCharacters(quarantinePath)
+  ) throw new Error("Invalid quarantine object.");
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from(config.bucket).download(quarantinePath);
   if (error || !data || data.size < 4 || data.size > config.maximum) {
     await admin.storage.from(config.bucket).remove([quarantinePath]);
     throw new Error("The uploaded file failed validation.");
   }
-  const bytes = new Uint8Array(await data.slice(0, 32).arrayBuffer());
-  const extension = detectedExtension(bytes, kind);
-  if (!extension) {
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  const extension = detectedExtension(bytes.subarray(0, 32), kind);
+  if (!extension || (kind === "document" && !hasSafePdfStructure(bytes))) {
     await admin.storage.from(config.bucket).remove([quarantinePath]);
     throw new Error("The uploaded file signature is not allowed.");
   }

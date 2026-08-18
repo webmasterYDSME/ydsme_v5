@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { createUploadIntent } from "@/lib/actions/uploads";
 import type { Database } from "@/lib/supabase/database";
 
@@ -33,6 +32,7 @@ export function SignedUploadField({ kind, label, required = false }: { kind: Kin
       setUploading(false);
       return;
     }
+    const { createClient } = await import("@supabase/supabase-js");
     const client = createClient<Database>(url, key, { auth: { persistSession: false } });
     const { error } = await client.storage.from(intent.bucket).uploadToSignedUrl(intent.path, intent.token, file, { contentType: file.type });
     if (error) {

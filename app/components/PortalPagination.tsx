@@ -19,9 +19,9 @@ export function PortalPagination({
 
   return (
     <nav className="pagination" aria-label={ariaLabel}>
-      {currentPage > 1 ? <Link href={href(currentPage - 1)}>← Previous</Link> : <span />}
+      {currentPage > 1 ? <Link href={href(currentPage - 1)} prefetch={false}>← Previous</Link> : <span />}
       <span>Page {currentPage} of {totalPages} · {totalItems} {itemLabel}</span>
-      {currentPage < totalPages ? <Link href={href(currentPage + 1)}>Next →</Link> : <span />}
+      {currentPage < totalPages ? <Link href={href(currentPage + 1)} prefetch={false}>Next →</Link> : <span />}
     </nav>
   );
 }

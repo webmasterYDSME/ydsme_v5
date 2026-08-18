@@ -65,11 +65,12 @@ test("automatically archives workshops after their scheduled date", async () => 
 
 test("sorts event and workshop lifecycle tabs by operational priority", async () => {
   const admin = await read("app/admin/[section]/page.tsx");
-  assert.match(admin, /function compareEvents[\s\S]*status === "published"[\s\S]*a\.start_date\.localeCompare\(b\.start_date\)/);
-  assert.match(admin, /function compareEvents[\s\S]*status === "draft" \|\| status === "cancelled"[\s\S]*b\.updated_at\.localeCompare\(a\.updated_at\)/);
-  assert.match(admin, /function compareEvents[\s\S]*b\.end_date\.localeCompare\(a\.end_date\)/);
-  assert.match(admin, /function compareWorkshops[\s\S]*status === "published"[\s\S]*a\.date\.localeCompare\(b\.date\)/);
-  assert.match(admin, /function compareWorkshops[\s\S]*status === "draft" \|\| status === "cancelled"[\s\S]*b\.updated_at\.localeCompare\(a\.updated_at\)/);
+  assert.match(admin, /status === "published"[\s\S]*eventQuery\.order\("start_date"\)\.order\("start_time"\)/);
+  assert.match(admin, /status === "draft" \|\| status === "cancelled"[\s\S]*eventQuery\.order\("updated_at", \{ ascending: false \}\)/);
+  assert.match(admin, /eventQuery\.order\("end_date", \{ ascending: false \}\)/);
+  assert.match(admin, /status === "published"[\s\S]*workshopQuery\.order\("date"\)\.order\("start_time"\)/);
+  assert.match(admin, /workshopQuery\.order\("updated_at", \{ ascending: false \}\)/);
+  assert.match(admin, /\.range\(\(currentPage - 1\) \* WORKSHOP_PAGE_SIZE/);
 });
 
 test("keeps scheduled maintenance inside Supabase", async () => {
@@ -158,10 +159,11 @@ test("uses exactly three database-backed application roles", async () => {
 });
 
 test("ships database and HTTP defence in depth", async () => {
-  const [migration, secureMigration, config] = await Promise.all([
+  const [migration, secureMigration, config, proxy] = await Promise.all([
     read("supabase/migrations/202608170001_security_hardening.sql"),
     read("supabase/migrations/202608180004_secure_dashboard.sql"),
     read("next.config.ts"),
+    read("proxy.ts"),
   ]);
   assert.match(migration, /ydsme_events_public_read/);
   assert.match(migration, /participants_workshop_member_unique/);
@@ -174,9 +176,47 @@ test("ships database and HTTP defence in depth", async () => {
   assert.match(secureMigration, /revoke insert, update, delete on public\.participants from authenticated/);
   assert.match(secureMigration, /audit_logs/);
   assert.match(secureMigration, /run_dashboard_retention/);
-  assert.match(config, /Content-Security-Policy/);
+  assert.match(proxy, /Content-Security-Policy/);
+  assert.match(proxy, /'nonce-\$\{nonce\}' 'strict-dynamic'/);
+  assert.doesNotMatch(proxy, /script-src[^`\n]*'unsafe-inline'/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /Permissions-Policy/);
+});
+
+test("bounds portal reads and narrows member profile updates", async () => {
+  const [adminPage, settings, account, audit, summaries, profileGrant] = await Promise.all([
+    read("app/admin/[section]/page.tsx"),
+    read("app/settings/page.tsx"),
+    read("app/account/page.tsx"),
+    read("app/admin/audit/page.tsx"),
+    read("supabase/migrations/202608180024_portal_management_summaries.sql"),
+    read("supabase/migrations/202608180025_limit_member_profile_updates.sql"),
+  ]);
+  assert.match(adminPage, /\.range\(\(currentPage - 1\) \* ANNOUNCEMENT_PAGE_SIZE/);
+  assert.match(adminPage, /\.in\("reference_id", visibleWorkshopIds\)/);
+  assert.match(settings, /requireCapability\("settings\.manage"\)/);
+  assert.match(settings, /head: true/);
+  assert.match(account, /createClient/);
+  assert.doesNotMatch(account, /createAdminClient/);
+  assert.doesNotMatch(audit, /before_state,after_state/);
+  assert.match(summaries, /grant execute on function public\.donation_management_summary[\s\S]*to service_role/);
+  assert.match(profileGrant, /grant update \(title, full_name, contact_number\)/);
+});
+
+test("defers document delivery and rejects active PDF content", async () => {
+  const [documents, download, uploads, uploadField] = await Promise.all([
+    read("app/dashboard/[section]/page.tsx"),
+    read("app/dashboard/documents/[id]/download/route.ts"),
+    read("lib/uploads.ts"),
+    read("app/components/SignedUploadField.tsx"),
+  ]);
+  assert.doesNotMatch(documents, /createSignedUrl/);
+  assert.match(download, /createSignedUrl\(path, 60/);
+  assert.doesNotMatch(download, /download:/);
+  assert.match(download, /documentStoragePath/);
+  assert.match(uploads, /PDF_ACTIVE_CONTENT/);
+  assert.match(uploads, /lastIndexOf\("%%EOF"\)/);
+  assert.match(uploadField, /await import\("@supabase\/supabase-js"\)/);
 });
 
 test("keeps the supplied logo and local member login", async () => {
@@ -288,7 +328,7 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(form, /Math\.min\(6, availablePlaces\)/);
   assert.match(form, /Please do not make multiple bookings/);
   assert.match(admin, /checkInBooking/);
-  assert.match(admin, /event_booking_abuse_summary/);
+  assert.match(admin, /booking_management_summary/);
   assert.match(admin, /Export CSV/);
   assert.match(data, /available_places/);
   assert.match(email, /Idempotency-Key/);

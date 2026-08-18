@@ -1,4 +1,6 @@
 import { HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
+import { redirect } from "next/navigation";
+import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   deleteCommittee,
@@ -42,39 +44,48 @@ export default async function Settings({
 }: {
   searchParams: Promise<{ error?: string; notice?: string; tab?: string; page?: string }>;
 }) {
-  const query = await searchParams;
+  const [query] = await Promise.all([searchParams, requireCapability("settings.manage")]);
   const admin = createAdminClient();
-  const [{ data, error }, { data: config, error: configError }, { data: socialData }, { data: affiliateData }, { data: campaignData }] = await Promise.all([
-    admin.from("committees").select("id,name,title,email,file_url").order("id"),
+  const requestedTab = ["committee", "donations", "site"].includes(query.tab || "") ? query.tab! : "committee";
+  const tab = query.notice === "donations-saved" ? "donations" : query.notice === "config-saved" ? "site" : requestedTab;
+  const committeePageSize = 8;
+  const requestedPage = Number.parseInt(query.page || "1", 10);
+  const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const committeeQuery = tab === "committee"
+    ? admin.from("committees").select("id,name,title,email,file_url", { count: "exact" }).order("id").range((currentPage - 1) * committeePageSize, currentPage * committeePageSize - 1)
+    : admin.from("committees").select("id", { count: "exact", head: true });
+  const [committeeResult, configResult, socialResult, affiliateResult, campaignResult] = await Promise.all([
+    committeeQuery,
     admin
       .from("configs")
       .select("id,short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address")
       .limit(1)
       .single(),
-    admin.from("site_social_links").select("name,url,position").order("position"),
-    admin.from("site_affiliates").select("name,url,logo_path,position").order("position"),
-    admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence"),
+    tab === "site" ? admin.from("site_social_links").select("name,url,position").order("position") : Promise.resolve({ data: [], error: null }),
+    tab === "site" ? admin.from("site_affiliates").select("name,url,logo_path,position").order("position") : Promise.resolve({ data: [], error: null }),
+    tab === "donations" ? admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence") : Promise.resolve({ data: [], error: null }),
   ]);
-
-  if (error || configError) throw new Error(error?.message || configError?.message);
-  const people = (data ?? []) as Committee[];
+  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || campaignResult.error || !configResult.data) {
+    throw new Error("Unable to load Society settings.");
+  }
+  const config = configResult.data;
+  const people = ((committeeResult.data ?? []) as unknown) as Committee[];
+  const committeeCount = committeeResult.count ?? 0;
+  const committeePages = Math.max(1, Math.ceil(committeeCount / committeePageSize));
+  if (tab === "committee" && currentPage > committeePages) redirect(`/settings?tab=committee&page=${committeePages}`);
   const clubAddress = config.club_address as Record<string, string>;
   const registeredAddress = config.registered_address as Record<string, string>;
-  const socials = (socialData ?? []).map(item => ({ name: item.name, link: item.url }));
-  const affiliates = (affiliateData ?? []).map(item => ({ name: item.name, website: item.url, logo: item.logo_path }));
+  const socialData = (socialResult.data ?? []) as Array<{ name: string; url: string; position: number }>;
+  const affiliateData = (affiliateResult.data ?? []) as Array<{ name: string; url: string; logo_path: string; position: number }>;
+  const campaignData = (campaignResult.data ?? []) as Array<{ kind: string; enabled: boolean; title: string; description: string; button_label: string; target_pence: number }>;
+  const socials = socialData.map(item => ({ name: item.name, link: item.url }));
+  const affiliates = affiliateData.map(item => ({ name: item.name, website: item.url, logo: item.logo_path }));
   const generic = campaignData?.find(item => item.kind === "generic");
   const target = campaignData?.find(item => item.kind === "target");
   const donations = {
     generic: generic ? { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label } : defaultDonationSettings.generic,
     target: target ? { enabled: target.enabled, title: target.title, description: target.description, buttonLabel: target.button_label, targetPence: Number(target.target_pence), raisedPence: 0 } : defaultDonationSettings.target,
   };
-  const requestedTab = ["committee", "donations", "site"].includes(query.tab || "") ? query.tab! : "committee";
-  const tab = query.notice === "donations-saved" ? "donations" : query.notice === "config-saved" ? "site" : requestedTab;
-  const committeePageSize = 8;
-  const committeePages = Math.max(1, Math.ceil(people.length / committeePageSize));
-  const requestedPage = Number.parseInt(query.page || "1", 10);
-  const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, committeePages) : 1;
-  const visiblePeople = people.slice((currentPage - 1) * committeePageSize, currentPage * committeePageSize);
 
   return (
     <div className="portal-content">
@@ -91,7 +102,7 @@ export default async function Settings({
       {query.notice ? <p className="form-message success">{query.notice === "donations-saved" ? "Donation appeals saved." : "Society settings saved."}</p> : null}
 
       <PortalTabs label="Committee and site settings" tabs={[
-        { href: "/settings?tab=committee", label: "Committee roster", count: people.length, current: tab === "committee" },
+        { href: "/settings?tab=committee", label: "Committee roster", count: committeeCount, current: tab === "committee" },
         { href: "/settings?tab=donations", label: "Donation appeals", current: tab === "donations" },
         { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
       ]}/>
@@ -175,14 +186,14 @@ export default async function Settings({
       </section> : null}
 
       {tab === "committee" ? <section className="committee-settings-panel">
-        <div className="settings-panel-heading committee-panel-heading"><div><span>Public officers</span><h2>Committee roster</h2><p>Maintain the people and vacant positions shown on the public committee page.</p></div><span className="count-badge"><UsersRound/>{people.length} positions</span></div>
+        <div className="settings-panel-heading committee-panel-heading"><div><span>Public officers</span><h2>Committee roster</h2><p>Maintain the people and vacant positions shown on the public committee page.</p></div><span className="count-badge"><UsersRound/>{committeeCount} positions</span></div>
         <details className="manager-panel">
           <summary><Plus />Add a committee position</summary>
           <CommitteeForm />
         </details>
 
         <div className="admin-list committee-admin-list">
-        {visiblePeople.map((person) => (
+        {people.map((person) => (
           <article key={person.id}>
             <div>
               <span>{person.title}</span>
@@ -202,8 +213,8 @@ export default async function Settings({
           </article>
         ))}
         </div>
-        {!visiblePeople.length ? <div className="empty-state"><UsersRound/><h2>No committee positions</h2><p>Add the first public Society position above.</p></div> : null}
-        <PortalPagination currentPage={currentPage} totalPages={committeePages} totalItems={people.length} itemLabel="positions" href={(page) => `/settings?tab=committee&page=${page}`} ariaLabel="Committee roster pages"/>
+        {!people.length ? <div className="empty-state"><UsersRound/><h2>No committee positions</h2><p>Add the first public Society position above.</p></div> : null}
+        <PortalPagination currentPage={currentPage} totalPages={committeePages} totalItems={committeeCount} itemLabel="positions" href={(page) => `/settings?tab=committee&page=${page}`} ariaLabel="Committee roster pages"/>
       </section> : null}
     </div>
   );

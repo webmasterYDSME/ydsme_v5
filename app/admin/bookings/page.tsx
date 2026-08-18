@@ -33,7 +33,7 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   const status = ["confirmed", "checked_in", "cancelled"].includes(query.status || "") ? query.status! : "active";
   const page = Math.max(1, Number.parseInt(query.page || "1", 10) || 1);
 
-  const { data: events, error: eventError } = await admin.from("events")
+  const eventsQuery = admin.from("events")
     .select("id,name,start_date,start_time,booking_capacity")
     .or("booking_enabled.eq.true,booking_mode.eq.website")
     .order("start_date", { ascending: false });
@@ -43,28 +43,22 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   if (status === "active") bookingQuery = bookingQuery.in("status", ["confirmed", "checked_in"]);
   else bookingQuery = bookingQuery.eq("status", status);
   if (search) bookingQuery = bookingQuery.or(`reference_code.ilike.%${search}%,lead_name.ilike.%${search}%,email.ilike.%${search}%`);
-  const { data: bookings, count, error: bookingError } = await bookingQuery
-    .order("created_at", { ascending: false })
-    .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
-  if (eventError || bookingError) throw new Error("Unable to load visitor bookings.");
-
-  let totalsQuery = admin.from("event_bookings").select("event_id,party_size,status").in("status", ["confirmed", "checked_in"]);
-  if (eventId) totalsQuery = totalsQuery.eq("event_id", eventId);
-  const { data: activeTotals } = await totalsQuery;
-  let abuseQuery = admin.from("event_booking_abuse_summary")
-    .select("browser_blocks,ip_blocks,both_blocks,last_blocked_at");
-  if (eventId) abuseQuery = abuseQuery.eq("event_id", eventId);
-  const { data: abuseSummaries, error: abuseError } = await abuseQuery;
-  if (abuseError) throw new Error("Unable to load booking security totals.");
-  const confirmedPeople = (activeTotals ?? []).reduce((total, booking) => total + booking.party_size, 0);
-  const abuseTotals = (abuseSummaries ?? []).reduce((totals, summary) => ({
-    browser: totals.browser + summary.browser_blocks,
-    ip: totals.ip + summary.ip_blocks,
-    both: totals.both + summary.both_blocks,
-    lastBlockedAt: !totals.lastBlockedAt || summary.last_blocked_at > totals.lastBlockedAt
-      ? summary.last_blocked_at
-      : totals.lastBlockedAt,
-  }), { browser: 0, ip: 0, both: 0, lastBlockedAt: "" });
+  const [eventResult, bookingResult, summaryResult] = await Promise.all([
+    eventsQuery,
+    bookingQuery.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
+    admin.rpc("booking_management_summary", { p_event_id: eventId }),
+  ]);
+  const { data: events, error: eventError } = eventResult;
+  const { data: bookings, count, error: bookingError } = bookingResult;
+  if (eventError || bookingError || summaryResult.error) throw new Error("Unable to load visitor bookings.");
+  const summary = (summaryResult.data ?? {}) as Record<string, number | string | null>;
+  const confirmedPeople = Number(summary.confirmed_people ?? 0);
+  const abuseTotals = {
+    browser: Number(summary.browser ?? 0),
+    ip: Number(summary.ip ?? 0),
+    both: Number(summary.both ?? 0),
+    lastBlockedAt: typeof summary.last_blocked_at === "string" ? summary.last_blocked_at : null,
+  };
   const blockedAttempts = abuseTotals.browser + abuseTotals.ip + abuseTotals.both;
   const eventMap = new Map((events ?? []).map((event) => [event.id, event]));
   const selectedEvent = eventId ? eventMap.get(eventId) : null;
@@ -86,16 +80,16 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Passenger control</p><h1>Visitor bookings</h1><p>Search, check in, contact and reconcile visitor groups.</p></div><div className="booking-heading-summary"><span className="count-badge"><UsersRound/>{confirmedPeople} active {confirmedPeople === 1 ? "visitor" : "visitors"}{selectedEvent?.booking_capacity ? ` / ${selectedEvent.booking_capacity}` : ""}</span><small>{bookingCount} matching {bookingCount === 1 ? "booking" : "bookings"}</small></div></header>
     {query.error ? <p className="form-message error">{query.error}</p> : null}
     {notice ? <p className={query.notice === "cancelled-email-failed" ? "form-message error" : "form-message success"}>{notice}</p> : null}
-    {blockedAttempts > 0 ? <div className="booking-abuse-summary"><ShieldAlert/><div><strong>{blockedAttempts} automatic booking {blockedAttempts === 1 ? "block" : "blocks"}</strong><span>{abuseTotals.browser} browser · {abuseTotals.ip} network · {abuseTotals.both} both · latest {format(new Date(abuseTotals.lastBlockedAt), "d MMM yyyy, HH:mm")}</span></div></div> : null}
+    {blockedAttempts > 0 ? <div className="booking-abuse-summary"><ShieldAlert/><div><strong>{blockedAttempts} automatic booking {blockedAttempts === 1 ? "block" : "blocks"}</strong><span>{abuseTotals.browser} browser · {abuseTotals.ip} network · {abuseTotals.both} both{abuseTotals.lastBlockedAt ? ` · latest ${format(new Date(abuseTotals.lastBlockedAt), "d MMM yyyy, HH:mm")}` : ""}</span></div></div> : null}
     <form className="booking-filter-panel" action="/admin/bookings" method="get">
-      <div className="booking-filter-heading"><div><h2>Find a booking</h2><p>Search the passenger list or narrow it by event and status.</p></div><Link className="button secondary" href={`/admin/bookings/export?${exportParams}`}><Download/>Export CSV</Link></div>
+      <div className="booking-filter-heading"><div><h2>Find a booking</h2><p>Search the passenger list or narrow it by event and status.</p></div><Link prefetch={false} className="button secondary" href={`/admin/bookings/export?${exportParams}`}><Download/>Export CSV</Link></div>
       <div className="booking-filter-grid">
         <label className="booking-filter-search" htmlFor="booking-search">Reference, visitor name or email<span><Search/><input id="booking-search" name="q" defaultValue={query.q} placeholder="YME-12345-ABCDE" autoComplete="off"/></span></label>
         <label>Event<select name="event" defaultValue={query.event || ""}><option value="">All events</option>{(events ?? []).map((event) => <option value={event.id} key={event.id}>{format(parseISO(event.start_date), "d MMM yyyy")} — {event.name}</option>)}</select></label>
         <label>Status<select name="status" defaultValue={status}><option value="active">Active</option><option value="confirmed">Confirmed</option><option value="checked_in">Checked in</option><option value="cancelled">Cancelled</option></select></label>
         <button className="button dark" type="submit">Apply filters</button>
       </div>
-      {hasFilters ? <Link className="booking-filter-clear" href="/admin/bookings"><RotateCcw/>Clear filters</Link> : null}
+      {hasFilters ? <Link prefetch={false} className="booking-filter-clear" href="/admin/bookings"><RotateCcw/>Clear filters</Link> : null}
     </form>
     <div className="booking-admin-list">{(bookings ?? []).map((booking) => {
       const event = eventMap.get(booking.event_id);
@@ -115,6 +109,6 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
       </article>;
     })}</div>
     {!bookings?.length ? <div className="booking-admin-empty"><TicketCheck/><h2>No bookings found</h2><p>Adjust the event, status or search filters.</p></div> : null}
-    {pages > 1 ? <nav className="pagination" aria-label="Booking pages">{page > 1 ? <Link href={pageLink(query, page - 1)}>Previous</Link> : <span/>}<span>Page {page} of {pages} · {count} bookings</span>{page < pages ? <Link href={pageLink(query, page + 1)}>Next</Link> : <span/>}</nav> : null}
+    {pages > 1 ? <nav className="pagination" aria-label="Booking pages">{page > 1 ? <Link prefetch={false} href={pageLink(query, page - 1)}>Previous</Link> : <span/>}<span>Page {page} of {pages} · {count} bookings</span>{page < pages ? <Link prefetch={false} href={pageLink(query, page + 1)}>Next</Link> : <span/>}</nav> : null}
   </div>;
 }

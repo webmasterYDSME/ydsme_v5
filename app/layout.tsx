@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
 import NextTopLoader from "nextjs-toploader";
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
+import { connection } from "next/server";
 import "./globals.css";
 import { organisationJsonLd, safeJsonLd } from "@/lib/seo";
 
@@ -44,7 +46,9 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+  await connection();
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en-GB">
       <body className={`${display.variable} ${sans.variable}`}>
@@ -56,6 +60,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
           showForHashAnchor={false}
         />
         <script
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: safeJsonLd(organisationJsonLd) }}
         />
