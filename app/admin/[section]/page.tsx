@@ -30,6 +30,7 @@ import { AnnouncementFields } from "@/app/components/AnnouncementFields";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
+const ANNOUNCEMENT_PAGE_SIZE = 12;
 
 type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; reservation_link:string; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
@@ -85,7 +86,31 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const { data, error } = await admin.from("announcements").select("id,title,body,lifecycle_status,published_at,updated_at").order("updated_at", { ascending: false });
     if (error) throw new Error("Unable to load announcements.");
     const announcements = (data ?? []) as AnnouncementRow[];
-    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}<details className="manager-panel" open={!announcements.length}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details><div className="admin-list">{announcements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div></div>;
+    const status = query.status === "draft" || query.status === "archived" ? query.status : "published";
+    const publishedCount = announcements.filter(item => item.lifecycle_status === "published").length;
+    const draftCount = announcements.filter(item => item.lifecycle_status === "draft").length;
+    const archivedCount = announcements.filter(item => item.lifecycle_status === "archived").length;
+    const filteredAnnouncements = announcements.filter(item => item.lifecycle_status === status);
+    const pageCount = Math.max(1, Math.ceil(filteredAnnouncements.length / ANNOUNCEMENT_PAGE_SIZE));
+    const requestedPage = Number(query.page);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
+    const visibleAnnouncements = filteredAnnouncements.slice((currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE, currentPage * ANNOUNCEMENT_PAGE_SIZE);
+    const pageHref = (page: number) => `/admin/announcements?status=${status}&page=${page}`;
+
+    return <div className="portal-content">
+      <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>
+      {query.error ? <p className="form-message error">{query.error}</p> : null}
+      {notice ? <p className="form-message success">{notice}</p> : null}
+      <details className="manager-panel" open={!announcements.length}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details>
+      <nav className="status-filter" aria-label="Filter announcements by status">
+        <Link href="/admin/announcements?status=published" aria-current={status === "published" ? "page" : undefined}>Published <span>{publishedCount}</span></Link>
+        <Link href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{draftCount}</span></Link>
+        <Link href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{archivedCount}</span></Link>
+      </nav>
+      <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
+      {!visibleAnnouncements.length ? <div className="empty-state"><Megaphone/><h2>No {status} announcements</h2><p>{status === "archived" ? "Archived announcements will appear here." : `Create or move an announcement into ${status} status to see it here.`}</p></div> : null}
+      {pageCount > 1 ? <nav className="pagination" aria-label="Announcement pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+    </div>;
   }
 
   if (section === "events") {

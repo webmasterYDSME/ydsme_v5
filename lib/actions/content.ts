@@ -187,7 +187,7 @@ export async function saveAnnouncement(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
-  redirect("/admin/announcements?notice=announcement-saved");
+  redirect(`/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved`);
 }
 
 export async function archiveAnnouncement(formData: FormData) {
@@ -220,7 +220,7 @@ export async function restoreAnnouncement(formData: FormData) {
   if (error || !data) redirect("/admin/announcements?error=The+announcement+could+not+be+restored.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.restored", entityType: "announcement", entityId: id, summary: data.title, after: { lifecycle_status: "draft" } });
   revalidatePath("/admin/announcements");
-  redirect("/admin/announcements?notice=announcement-restored");
+  redirect("/admin/announcements?status=draft&notice=announcement-restored");
 }
 
 export async function deleteWorkshop(formData: FormData) {
