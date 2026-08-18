@@ -134,7 +134,7 @@ function AddressLines({ address }: { address: PostalAddress }) {
   return <>{address.address_line_one}<br/>{address.address_line_two ? <>{address.address_line_two}<br/></> : null}{locality}{address.country ? <><br/>{address.country}</> : null}</>;
 }
 
-export function RailSiteFrame({children, siteConfig}:{children:ReactNode;siteConfig:PublicSiteConfig}) {
+export function RailSiteFrame({children, siteConfig, headerTheme="overlay"}:{children:ReactNode;siteConfig:PublicSiteConfig;headerTheme?:"overlay"|"light"}) {
   const path=usePathname(); const [open,setOpen]=useState(false);
   useEffect(()=>{
     if (!window.location.hash) window.scrollTo({top:0,left:0,behavior:"auto"});
@@ -147,7 +147,7 @@ export function RailSiteFrame({children, siteConfig}:{children:ReactNode;siteCon
   },[open]);
   return <>
     <a className="skip-link" href="#main-content">Skip to main content</a>
-    <header className="site-header">
+    <header className={headerTheme === "light" ? "site-header site-header-light" : "site-header"}>
       <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt={siteConfig.fullName} width={76} height={76} /></span><span>York Model<br/><b>Engineers</b></span></Link>
       <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin" onClick={()=>setOpen(false)}>Member login <ArrowUpRight size={15}/></Link></nav>
       <Link className="member-login" href="/signin">Member login <ArrowUpRight size={15}/></Link>

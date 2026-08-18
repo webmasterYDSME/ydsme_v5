@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { Megaphone } from "lucide-react";
-import { InnerHero, Reveal } from "@/app/components/RailSite";
+import { Reveal } from "@/app/components/RailSite";
 import { PageShell } from "@/app/components/PageShell";
 import { getPublicAnnouncements } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
@@ -16,18 +16,11 @@ export const metadata = publicPageMetadata({
 export default async function News() {
   const announcements = await getPublicAnnouncements();
 
-  return <PageShell>
-    <InnerHero
-      kicker="From the signal box"
-      title={<>News from<br/><em>the line.</em></>}
-      copy="Public notices and the latest updates from York Model Engineers, with the newest announcement first."
-      image="/images/engine.webp"
-      imageAlt="A miniature steam locomotive at York Model Engineers"
-    />
+  return <PageShell headerTheme="light">
     <section className="section news-board" aria-labelledby="news-heading">
       <header className="news-heading">
-        <div><p className="eyebrow dark">The Society noticeboard</p><h2 id="news-heading">Latest announcements</h2></div>
-        <p>Important updates for visitors, members and friends of the railway.</p>
+        <div><p className="eyebrow dark">The Society noticeboard</p><h1 id="news-heading">News from the line.</h1></div>
+        <p>Public notices and the latest updates for visitors, members and friends of the railway, with the newest announcement first.</p>
       </header>
       {announcements.length ? <div className="news-list">
         {announcements.map((announcement, index) => <Reveal key={announcement.id} delay={index * 0.05}>
