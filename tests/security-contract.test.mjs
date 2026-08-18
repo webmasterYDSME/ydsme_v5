@@ -31,6 +31,46 @@ test("keeps private events off public pages", async () => {
   assert.doesNotMatch(events, /member_only/);
 });
 
+test("keeps event management current and uses only the website booking system", async () => {
+  const [migration, admin, bookingFields, actions, publicEvents] = await Promise.all([
+    read("supabase/migrations/202608180021_event_management_lifecycle.sql"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/components/EventBookingFields.tsx"),
+    read("lib/actions/content.ts"),
+    read("app/events/page.tsx"),
+  ]);
+  assert.match(migration, /end_date < current_date/);
+  assert.match(migration, /create trigger archive_past_event_on_write/);
+  assert.match(migration, /check \(booking_mode in \('none', 'website'\)\)/);
+  assert.match(migration, /create extension if not exists pg_cron/);
+  assert.match(migration, /cron\.schedule\([\s\S]*auto-archive-past-events/);
+  assert.match(migration, /dashboard-data-retention[\s\S]*run_dashboard_retention/);
+  assert.match(migration, /cleanup-quarantine-uploads[\s\S]*net\.http_post/);
+  assert.match(admin, /EVENT_PAGE_SIZE = 12/);
+  assert.match(admin, /status=archived/);
+  assert.match(bookingFields, /No booking needed/);
+  assert.match(bookingFields, /mode === "website"[\s\S]*booking_capacity/);
+  assert.doesNotMatch(bookingFields, /external/i);
+  assert.doesNotMatch(publicEvents, /featuredExternalUrl|safeHttpUrl/);
+  assert.match(actions, /booking_mode: z\.enum\(\["none", "website"\]\)/);
+});
+
+test("keeps scheduled maintenance inside Supabase", async () => {
+  const [edgeFunction, config, vercelSource, environment] = await Promise.all([
+    read("supabase/functions/cleanup-quarantine/index.ts"),
+    read("supabase/config.toml"),
+    read("vercel.json"),
+    read(".env.example"),
+  ]);
+  const vercel = JSON.parse(vercelSource);
+  assert.match(edgeFunction, /withSupabase\(\{ auth: "secret" \}/);
+  assert.match(edgeFunction, /storage\.from\(bucket\)\.remove/);
+  assert.match(edgeFunction, /quarantine\.cleanup\.completed/);
+  assert.match(config, /\[functions\.cleanup-quarantine\][\s\S]*verify_jwt = false/);
+  assert.equal(vercel.crons, undefined);
+  assert.doesNotMatch(environment, /CRON_SECRET/);
+});
+
 test("publishes announcements through a safe public projection and staff-only actions", async () => {
   const [migration, limitsMigration, descriptionMigration, limits, actions, data, home, train, sitemap, adminPage, news] = await Promise.all([
     read("supabase/migrations/202608180016_public_announcements.sql"),

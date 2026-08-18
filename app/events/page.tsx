@@ -5,7 +5,6 @@ import { InnerHero, Reveal } from "../components/RailSite";
 import { PageShell } from "../components/PageShell";
 import { getPublicEvents, type EventRecord } from "@/lib/data";
 import { publicPageMetadata, safeJsonLd, SITE_URL } from "@/lib/seo";
-import { safeHttpUrl } from "@/lib/security-input";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
@@ -16,9 +15,7 @@ export const metadata = publicPageMetadata({
 });
 
 const eventTime = (value: string) => value.slice(0, 5);
-const bookingUrl = (event: EventRecord) => event.booking_enabled
-  ? `/events/${event.id}/book`
-  : safeHttpUrl(event.reservation_link);
+const bookingUrl = (event: EventRecord) => event.booking_enabled ? `/events/${event.id}/book` : null;
 const bookingStatus = (event: EventRecord) => {
   if (event.booking_enabled) return event.available_places > 0 ? `${event.available_places} places left` : "Fully booked";
   return event.is_ticket_required ? "Booking required" : "Free entry";
@@ -27,7 +24,6 @@ const bookingStatus = (event: EventRecord) => {
 export default async function Events() {
   const events = await getPublicEvents();
   const [featured, ...more] = events;
-  const featuredExternalUrl = featured && !featured.booking_enabled ? safeHttpUrl(featured.reservation_link) : null;
   const eventJsonLd = {
     "@context": "https://schema.org",
     "@graph": events.map((event) => ({
@@ -56,12 +52,12 @@ export default async function Events() {
         name: "York Model Engineers",
         url: SITE_URL,
       },
-      ...(bookingUrl(event) ? { url: event.booking_enabled ? `${SITE_URL}${bookingUrl(event)}` : bookingUrl(event) } : { url: `${SITE_URL}/events` }),
+      ...(bookingUrl(event) ? { url: `${SITE_URL}${bookingUrl(event)}` } : { url: `${SITE_URL}/events` }),
     })),
   };
 
   return <PageShell><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(eventJsonLd) }} /><InnerHero kicker="The public running board" title={<>What’s next<br/><em>down the line.</em></>} copy="Public open days and special running days—live dates from the Society timetable, ready for your visit." image="/images/engine.webp" imageAlt="A miniature steam locomotive prepared for a public running day"/>
-    {featured ? <section className="section featured-event"><div className="big-date"><strong>{format(parseISO(featured.start_date), "dd")}</strong><span>{format(parseISO(featured.start_date), "MMM").toUpperCase()}<br/>{format(parseISO(featured.start_date), "yyyy")}</span></div><div><p className="eyebrow dark">Next departure · Public event</p><h2>{featured.name}</h2><p>{featured.descriptions}</p><div className="event-meta"><span><CalendarDays/> {format(parseISO(featured.start_date), "EEEE")}</span><span>{eventTime(featured.start_time)}</span><span>{bookingStatus(featured)}</span></div>{featured.booking_enabled && featured.available_places > 0 ? <Link className="button dark" href={`/events/${featured.id}/book`}>Book free places <Ticket size={17}/></Link> : featured.is_ticket_required && featuredExternalUrl ? <a className="button dark" href={featuredExternalUrl} target="_blank" rel="noreferrer">Reserve a place <Ticket size={17}/></a> : null}</div><div className="signal"><i/><i/><i className="lit"/></div></section> : <section className="section featured-event empty-state"><div><p className="eyebrow dark">Timetable update</p><h2>Fresh dates are<br/><em>being prepared.</em></h2><p>There are no public running days currently listed. Please check back soon or contact the Society.</p></div></section>}
+    {featured ? <section className="section featured-event"><div className="big-date"><strong>{format(parseISO(featured.start_date), "dd")}</strong><span>{format(parseISO(featured.start_date), "MMM").toUpperCase()}<br/>{format(parseISO(featured.start_date), "yyyy")}</span></div><div><p className="eyebrow dark">Next departure · Public event</p><h2>{featured.name}</h2><p>{featured.descriptions}</p><div className="event-meta"><span><CalendarDays/> {format(parseISO(featured.start_date), "EEEE")}</span><span>{eventTime(featured.start_time)}</span><span>{bookingStatus(featured)}</span></div>{featured.booking_enabled && featured.available_places > 0 ? <Link className="button dark" href={`/events/${featured.id}/book`}>Book free places <Ticket size={17}/></Link> : null}</div><div className="signal"><i/><i/><i className="lit"/></div></section> : <section className="section featured-event empty-state"><div><p className="eyebrow dark">Timetable update</p><h2>Fresh dates are<br/><em>being prepared.</em></h2><p>There are no public running days currently listed. Please check back soon or contact the Society.</p></div></section>}
     {more.length ? <section className="events-list"><div className="events-label"><span>MORE PUBLIC DEPARTURES</span><span>YORK · {new Date().getFullYear()}</span></div>{more.map((event, index)=>{
       const url = bookingUrl(event);
       const internal = event.booking_enabled;

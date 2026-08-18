@@ -15,6 +15,17 @@ The application is deployed to Vercel from `main`. A successful build is necessa
    - Contract: remove obsolete schema or compatibility code only in a later deployment after production verification.
 5. Do not place production credentials in GitHub Actions, repository files, logs, or PR comments. `.env.prod` is for an explicitly authorized production deployment or read-only audit only.
 6. Do not map a custom domain or consider a release complete until the production-alias smoke tests pass.
+7. Scheduled data lifecycle work belongs to Supabase Cron. Quarantine file cleanup must use the `cleanup-quarantine` Edge Function and the Storage API; do not delete rows directly from `storage.objects`.
+
+## Scheduled maintenance setup
+
+Before applying `202608180021_event_management_lifecycle.sql` to a hosted project:
+
+1. Create a dedicated Supabase secret API key for maintenance automation.
+2. Store the project URL in Supabase Vault as `project_url` and the secret API key as `maintenance_secret_key`. Never put either value in a migration or repository file.
+3. Deploy the `cleanup-quarantine` Edge Function. Its platform JWT check is disabled because Supabase Cron calls it service-to-service; the function itself accepts secret API keys only.
+4. Apply the migration. It installs three staggered jobs: event archiving at 01:10 GMT, database retention at 02:17 GMT, and quarantine cleanup at 03:17 GMT.
+5. Confirm the jobs in Supabase Cron and inspect their first run history. Invoke the Edge Function once with the maintenance secret key and verify that an audit record is written before considering the rollout complete.
 
 ## Release sequence
 

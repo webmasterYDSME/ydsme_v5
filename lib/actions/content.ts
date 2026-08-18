@@ -31,9 +31,9 @@ function storagePath(value: string | null | undefined, bucket: "images" | "docum
 const eventSchema = z.object({
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
   start_date: z.iso.date(), end_date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8),
-  event_type: z.enum(["public", "member_only"]), reservation_link: optionalUrl,
+  event_type: z.enum(["public", "member_only"]),
   file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(),
-  booking_mode: z.enum(["none", "external", "website"]),
+  booking_mode: z.enum(["none", "website"]),
   lifecycle_status: z.enum(["draft", "published", "cancelled"]),
   booking_capacity: z.coerce.number().int().min(1).max(10000).optional(),
 });
@@ -68,7 +68,7 @@ export async function saveEvent(formData: FormData) {
   const parsed = eventSchema.safeParse({
     id: formData.get("id") || undefined, name: formData.get("name"), descriptions: formData.get("descriptions"),
     start_date: formData.get("start_date"), end_date: formData.get("end_date"), start_time: formData.get("start_time"), end_time: formData.get("end_time"),
-    event_type: formData.get("event_type"), reservation_link: formData.get("reservation_link") || "", file_url: formData.get("file_url") || "",
+    event_type: formData.get("event_type"), file_url: formData.get("file_url") || "",
     display_in_homepage: bool(formData, "display_in_homepage"),
     booking_mode: formData.get("booking_mode") || "none",
     lifecycle_status: formData.get("lifecycle_status") || "published",
@@ -79,14 +79,13 @@ export async function saveEvent(formData: FormData) {
   if (parsed.data.booking_mode === "website" && (parsed.data.event_type !== "public" || !parsed.data.booking_capacity)) {
     redirect("/admin/events?error=Website+booking+needs+a+public+event+and+a+visitor+capacity.");
   }
-  if (parsed.data.booking_mode === "external" && !parsed.data.reservation_link) redirect("/admin/events?error=External+booking+needs+a+reservation+link.");
   const { id, booking_capacity, ...parsedValues } = parsed.data;
   const values = {
     ...parsedValues,
-    reservation_link: parsedValues.booking_mode === "external" ? parsedValues.reservation_link : "",
+    reservation_link: "",
     booking_capacity: parsedValues.booking_mode === "website" ? booking_capacity : null,
     booking_enabled: parsedValues.booking_mode === "website",
-    is_ticket_required: parsedValues.booking_mode !== "none",
+    is_ticket_required: parsedValues.booking_mode === "website",
     updated_at: new Date().toISOString(),
   };
   const admin = createAdminClient();
@@ -100,17 +99,17 @@ export async function saveEvent(formData: FormData) {
     }
   }
   const query = id
-    ? admin.from("events").update(values).eq("id", id).select("id").single()
-    : admin.from("events").insert({ ...values, host: user.id }).select("id").single();
+    ? admin.from("events").update(values).eq("id", id).select("id,lifecycle_status").single()
+    : admin.from("events").insert({ ...values, host: user.id }).select("id,lifecycle_status").single();
   const { data: saved, error } = await query;
   if (error) redirect("/admin/events?error=The+event+could+not+be+saved.");
   if (quarantinePath) {
     const oldPath = storagePath(before?.file_url, "images");
     if (oldPath && oldPath !== storagePath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: values.lifecycle_status, booking_mode: values.booking_mode } });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode } });
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
-  redirect("/admin/events?notice=event-saved");
+  redirect(`/admin/events?status=${saved.lifecycle_status}&notice=event-saved`);
 }
 
 export async function deleteEvent(formData: FormData) {
@@ -121,15 +120,19 @@ export async function deleteEvent(formData: FormData) {
   if (error) redirect("/admin/events?error=The+event+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.archived", entityType: "event", entityId: id, summary: data.name });
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
+  redirect("/admin/events?status=archived&notice=event-archived");
 }
 
 export async function restoreEvent(formData: FormData) {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const id = z.coerce.number().int().positive().parse(formData.get("id"));
-  const { data, error } = await createAdminClient().from("events").update({ lifecycle_status: "draft", archived_at: null, archived_by: null, updated_at: new Date().toISOString() }).eq("id", id).eq("lifecycle_status", "archived").select("id,name").maybeSingle();
-  if (error || !data) redirect("/admin/events?error=The+event+could+not+be+restored.");
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await createAdminClient().from("events").update({ lifecycle_status: "draft", archived_at: null, archived_by: null, updated_at: new Date().toISOString() }).eq("id", id).eq("lifecycle_status", "archived").gte("end_date", today).select("id,name").maybeSingle();
+  if (error) redirect("/admin/events?status=archived&error=The+event+could+not+be+restored.");
+  if (!data) redirect("/admin/events?status=archived&error=Past+events+stay+archived.+Use+Reschedule+to+move+the+dates+forward.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.restored", entityType: "event", entityId: id, summary: data.name, after: { lifecycle_status: "draft" } });
   revalidatePath("/admin/events");
+  redirect("/admin/events?status=draft&notice=event-restored");
 }
 
 export async function saveWorkshop(formData: FormData) {
@@ -187,7 +190,7 @@ export async function saveAnnouncement(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
-  redirect("/admin/announcements?notice=announcement-saved");
+  redirect(`/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved`);
 }
 
 export async function archiveAnnouncement(formData: FormData) {
@@ -220,7 +223,7 @@ export async function restoreAnnouncement(formData: FormData) {
   if (error || !data) redirect("/admin/announcements?error=The+announcement+could+not+be+restored.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.restored", entityType: "announcement", entityId: id, summary: data.title, after: { lifecycle_status: "draft" } });
   revalidatePath("/admin/announcements");
-  redirect("/admin/announcements?notice=announcement-restored");
+  redirect("/admin/announcements?status=draft&notice=announcement-restored");
 }
 
 export async function deleteWorkshop(formData: FormData) {

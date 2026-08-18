@@ -24,9 +24,8 @@ export type EventRecord = {
   event_type: "public" | "member_only";
   display_in_homepage: boolean;
   is_ticket_required: boolean;
-  reservation_link: string;
   booking_enabled: boolean;
-  booking_mode: "none" | "external" | "website";
+  booking_mode: "none" | "website";
   booking_capacity: number | null;
   booked_places: number;
   available_places: number;
@@ -125,7 +124,7 @@ export async function getPublicEvents() {
   const today = new Date().toISOString().slice(0, 10);
   const projection = await supabase
     .from("public_events")
-    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_mode,booking_capacity")
+    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,booking_enabled,booking_mode,booking_capacity")
     .eq("event_type", "public")
     .eq("lifecycle_status", "published")
     .gte("end_date", today)
@@ -135,7 +134,7 @@ export async function getPublicEvents() {
   if (isMissingProjection(projection.error)) {
     const legacy = await supabase
       .from("events")
-      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_capacity")
+      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,booking_enabled,booking_capacity")
       .eq("event_type", "public")
       .gte("end_date", today)
       .order("start_date", { ascending: true })
@@ -143,7 +142,7 @@ export async function getPublicEvents() {
     if (legacy.error) throw new Error("Unable to load public events.");
     events = (legacy.data ?? []).map((event) => ({
       ...event,
-      booking_mode: event.booking_enabled ? "website" : event.reservation_link ? "external" : "none",
+      booking_mode: event.booking_enabled ? "website" : "none",
     })) as PublicEventRow[];
   } else {
     if (projection.error) throw new Error("Unable to load public events.");
@@ -179,7 +178,7 @@ export async function getBookableEvent(id: number) {
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
   const { data: event, error } = await admin.from("events")
-    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_mode,booking_capacity")
+    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,booking_enabled,booking_mode,booking_capacity")
     .eq("id", id)
     .eq("event_type", "public")
     .eq("lifecycle_status", "published")
