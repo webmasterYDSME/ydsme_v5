@@ -324,6 +324,31 @@ test("exposes normalized public configuration through a limited view", async () 
   assert.doesNotMatch(data, /createPublicClient\(\)[\s\S]*from\("configs"\)/);
 });
 
+test("keeps club and registered-office addresses distinct in the configured footer", async () => {
+  const [migration, settings, actions, data, shell, pageShell] = await Promise.all([
+    read("supabase/migrations/202608180019_public_society_information.sql"),
+    read("app/settings/page.tsx"),
+    read("lib/actions/content.ts"),
+    read("lib/data.ts"),
+    read("app/components/RailSite.tsx"),
+    read("app/components/PageShell.tsx"),
+  ]);
+  assert.match(migration, /add column if not exists club_address jsonb/);
+  assert.match(migration, /view public\.public_site_config/);
+  assert.match(migration, /grant select on public\.public_site_config to anon, authenticated/);
+  assert.match(settings, /Club \/ railway address/);
+  assert.match(settings, /Registered office address/);
+  assert.match(actions, /club_address: \{/);
+  assert.match(actions, /registered_address: \{/);
+  assert.match(data, /from\("public_site_config"\)/);
+  assert.match(data, /from\("public_site_links"\)/);
+  assert.match(pageShell, /getPublicSiteConfig\(\)/);
+  assert.match(shell, /siteConfig\.clubAddress/);
+  assert.match(shell, /siteConfig\.registeredAddress/);
+  assert.match(shell, /siteConfig\.socialLinks/);
+  assert.doesNotMatch(shell, /York · YO24 2JE|Company no\. 26478R|facebook\.com\/YorkModelEngineers/i);
+});
+
 test("keeps public reads available during the additive projection rollout", async () => {
   const data = await read("lib/data.ts");
   assert.match(data, /error\?\.code === "PGRST205"/);

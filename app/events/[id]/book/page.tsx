@@ -4,7 +4,7 @@ import { ArrowLeft, CalendarDays, Clock3, MapPin, ShieldCheck, UsersRound } from
 import { format, parseISO } from "date-fns";
 import { notFound } from "next/navigation";
 import { BookingForm } from "@/app/components/BookingForm";
-import { PageShell } from "@/app/components/RailSite";
+import { PageShell } from "@/app/components/PageShell";
 import { getBookableEvent } from "@/lib/data";
 
 export const dynamic = "force-dynamic";

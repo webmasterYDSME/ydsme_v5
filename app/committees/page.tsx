@@ -1,6 +1,7 @@
 import { Mail } from "lucide-react";
 import Image from "next/image";
-import { InnerHero, PageShell, Reveal } from "../components/RailSite";
+import { InnerHero, Reveal } from "../components/RailSite";
+import { PageShell } from "../components/PageShell";
 import { committeeImage, getCommittees } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 

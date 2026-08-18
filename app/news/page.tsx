@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { Megaphone } from "lucide-react";
-import { InnerHero, PageShell, Reveal } from "@/app/components/RailSite";
+import { InnerHero, Reveal } from "@/app/components/RailSite";
+import { PageShell } from "@/app/components/PageShell";
 import { getPublicAnnouncements } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 

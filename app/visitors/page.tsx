@@ -1,6 +1,7 @@
 import { AlertTriangle, Camera, Car, CheckCircle2, Download, Gauge, MapPin, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { InnerHero, PageShell, Reveal, SectionHeading } from "../components/RailSite";
+import { InnerHero, Reveal, SectionHeading } from "../components/RailSite";
+import { PageShell } from "../components/PageShell";
 import { GenericDonation } from "../components/DonationCards";
 import { getDonationSettings } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";

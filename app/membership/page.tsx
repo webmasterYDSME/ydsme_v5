@@ -1,5 +1,6 @@
 import { ArrowRight, Check, KeyRound, Wrench } from "lucide-react";
-import { InnerHero, PageShell, Reveal } from "../components/RailSite";
+import { InnerHero, Reveal } from "../components/RailSite";
+import { PageShell } from "../components/PageShell";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const metadata = publicPageMetadata({

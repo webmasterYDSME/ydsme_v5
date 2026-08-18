@@ -2,7 +2,8 @@ import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, MapPin, Sparkles, Users 
 import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { InteractiveSteamTrain, PageShell, Reveal, SectionHeading } from "./components/RailSite";
+import { InteractiveSteamTrain, Reveal, SectionHeading } from "./components/RailSite";
+import { PageShell } from "./components/PageShell";
 import { TargetDonation } from "./components/DonationCards";
 import { getCarriageAnnouncements, getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";

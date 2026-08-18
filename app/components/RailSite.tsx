@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, Menu, X } from "lucide-react";
+import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
 const nav = [["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
 
@@ -128,7 +129,12 @@ export function InteractiveSteamTrain({ announcements }: { announcements: Array<
   </div>;
 }
 
-export function PageShell({children}:{children:ReactNode}) {
+function AddressLines({ address }: { address: PostalAddress }) {
+  const locality = [address.city, address.postcode].filter(Boolean).join(" · ");
+  return <>{address.address_line_one}<br/>{address.address_line_two ? <>{address.address_line_two}<br/></> : null}{locality}{address.country ? <><br/>{address.country}</> : null}</>;
+}
+
+export function RailSiteFrame({children, siteConfig}:{children:ReactNode;siteConfig:PublicSiteConfig}) {
   const path=usePathname(); const [open,setOpen]=useState(false);
   useEffect(()=>{
     if (!window.location.hash) window.scrollTo({top:0,left:0,behavior:"auto"});
@@ -142,13 +148,13 @@ export function PageShell({children}:{children:ReactNode}) {
   return <>
     <a className="skip-link" href="#main-content">Skip to main content</a>
     <header className="site-header">
-      <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt="York City and District Society of Model Engineers" width={76} height={76} /></span><span>York Model<br/><b>Engineers</b></span></Link>
+      <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt={siteConfig.fullName} width={76} height={76} /></span><span>York Model<br/><b>Engineers</b></span></Link>
       <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin" onClick={()=>setOpen(false)}>Member login <ArrowUpRight size={15}/></Link></nav>
       <Link className="member-login" href="/signin">Member login <ArrowUpRight size={15}/></Link>
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
     <main id="main-content">{children}</main>
-    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address>Dringhouses<br/>York · YO24 2JE</address><a className="footer-email" href="mailto:secretary@yorkmodelengineers.co.uk">secretary@yorkmodelengineers.co.uk</a></div><nav aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}<a href="https://www.facebook.com/YorkModelEngineers">Facebook</a></nav><nav aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav><div className="footer-small"><p>York City & District Society<br/>of Model Engineers Limited<br/>Company no. 26478R</p><p>© 2026 YCDSME</p></div></footer>
+    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address><AddressLines address={siteConfig.clubAddress}/></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</div><nav aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}{siteConfig.socialLinks.map(link=><a key={`${link.name}-${link.url}`} href={link.url} rel="noreferrer">{link.name}</a>)}</nav><nav aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav><div className="footer-small"><div><h3>Registered</h3><p>{siteConfig.registeredName}<br/>Company no. {siteConfig.companyNumber}</p><address><AddressLines address={siteConfig.registeredAddress}/></address></div><p>© {new Date().getFullYear()} {siteConfig.shortName}</p></div></footer>
   </>;
 }
 

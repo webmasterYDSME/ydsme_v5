@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { PageShell } from "./RailSite";
+import { PageShell } from "./PageShell";
 
 const legalLinks = [
   ["Privacy notice", "/privacy-policy"],

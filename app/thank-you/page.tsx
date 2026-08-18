@@ -1,7 +1,7 @@
 import { CircleCheck, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { PageShell } from "../components/RailSite";
+import { PageShell } from "../components/PageShell";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = {

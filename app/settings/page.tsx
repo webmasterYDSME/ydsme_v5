@@ -46,7 +46,7 @@ export default async function Settings({
     admin.from("committees").select("id,name,title,email,file_url").order("id"),
     admin
       .from("configs")
-      .select("id,short_name,full_name,registered_name,company_no,website,telephone,registered_address")
+      .select("id,short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address")
       .limit(1)
       .single(),
     admin.from("site_social_links").select("name,url,position").order("position"),
@@ -56,7 +56,8 @@ export default async function Settings({
 
   if (error || configError) throw new Error(error?.message || configError?.message);
   const people = (data ?? []) as Committee[];
-  const address = config.registered_address as Record<string, string>;
+  const clubAddress = config.club_address as Record<string, string>;
+  const registeredAddress = config.registered_address as Record<string, string>;
   const socials = (socialData ?? []).map(item => ({ name: item.name, link: item.url }));
   const affiliates = (affiliateData ?? []).map(item => ({ name: item.name, website: item.url, logo: item.logo_path }));
   const generic = campaignData?.find(item => item.kind === "generic");
@@ -89,12 +90,30 @@ export default async function Settings({
           <label>Registered name<input name="registered_name" defaultValue={config.registered_name} required /></label>
           <label>Company number<input name="company_no" defaultValue={config.company_no} required /></label>
           <label>Website<input type="url" name="website" defaultValue={config.website} required /></label>
+          <label>Public email<input type="email" name="email" defaultValue={config.email} required /></label>
           <label>Telephone<input name="telephone" defaultValue={config.telephone} /></label>
-          <label>Address line 1<input name="address_line_one" defaultValue={address.address_line_one} required /></label>
-          <label>Address line 2<input name="address_line_two" defaultValue={address.address_line_two} /></label>
-          <label>City<input name="city" defaultValue={address.city} required /></label>
-          <label>Postcode<input name="postcode" defaultValue={address.postcode} required /></label>
-          <label>Country<input name="country" defaultValue={address.country} required /></label>
+          <fieldset className="wide settings-fieldset">
+            <legend>Club / railway address</legend>
+            <p className="form-help">Shown to visitors as the place to visit.</p>
+            <div className="settings-field-grid">
+              <label>Address line 1<input name="club_address_line_one" defaultValue={clubAddress.address_line_one} required /></label>
+              <label>Address line 2<input name="club_address_line_two" defaultValue={clubAddress.address_line_two} /></label>
+              <label>City<input name="club_city" defaultValue={clubAddress.city} required /></label>
+              <label>Postcode<input name="club_postcode" defaultValue={clubAddress.postcode} required /></label>
+              <label>Country<input name="club_country" defaultValue={clubAddress.country} required /></label>
+            </div>
+          </fieldset>
+          <fieldset className="wide settings-fieldset">
+            <legend>Registered office address</legend>
+            <p className="form-help">The legal address at which the Society is registered.</p>
+            <div className="settings-field-grid">
+              <label>Address line 1<input name="registered_address_line_one" defaultValue={registeredAddress.address_line_one} required /></label>
+              <label>Address line 2<input name="registered_address_line_two" defaultValue={registeredAddress.address_line_two} /></label>
+              <label>City<input name="registered_city" defaultValue={registeredAddress.city} required /></label>
+              <label>Postcode<input name="registered_postcode" defaultValue={registeredAddress.postcode} required /></label>
+              <label>Country<input name="registered_country" defaultValue={registeredAddress.country} required /></label>
+            </div>
+          </fieldset>
           <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
           <PendingSubmitButton className="button dark">Save Society settings</PendingSubmitButton>
         </form>

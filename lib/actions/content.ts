@@ -597,8 +597,12 @@ export async function saveSiteConfig(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
   const parsed = z.object({
     id: z.coerce.number().int().positive(), short_name: text(2, 30), full_name: text(2, 240),
-    registered_name: text(2, 240), company_no: text(1, 50), website: httpUrl, telephone: z.string().trim().max(50),
-    address_line_one: text(1, 180), address_line_two: z.string().trim().max(180), city: text(1, 100), postcode: text(1, 20), country: text(1, 100),
+    registered_name: text(2, 240), company_no: text(1, 50), website: httpUrl,
+    email: z.string().trim().email().max(254), telephone: z.string().trim().max(50),
+    club_address_line_one: text(1, 180), club_address_line_two: z.string().trim().max(180),
+    club_city: text(1, 100), club_postcode: text(1, 20), club_country: text(1, 100),
+    registered_address_line_one: text(1, 180), registered_address_line_two: z.string().trim().max(180),
+    registered_city: text(1, 100), registered_postcode: text(1, 20), registered_country: text(1, 100),
   }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/settings?error=Please+check+the+Society+details.");
   const socialNames = formData.getAll("social_name").map(String);
@@ -609,12 +613,38 @@ export async function saveSiteConfig(formData: FormData) {
   const socials = z.array(z.object({ name: text(1, 60), link: optionalUrl })).safeParse(socialNames.map((name, index) => ({ name, link: socialLinks[index] || "" })));
   const affiliates = z.array(z.object({ name: text(1, 120), website: optionalUrl, logo: z.string().max(2048) })).safeParse(affiliateNames.map((name, index) => ({ name, website: affiliateLinks[index] || "", logo: affiliateLogos[index] || "" })));
   if (!socials.success || !affiliates.success) redirect("/settings?error=Social+or+affiliate+links+are+invalid.");
-  const { id, address_line_one, address_line_two, city, postcode, country, ...values } = parsed.data;
+  const {
+    id,
+    club_address_line_one,
+    club_address_line_two,
+    club_city,
+    club_postcode,
+    club_country,
+    registered_address_line_one,
+    registered_address_line_two,
+    registered_city,
+    registered_postcode,
+    registered_country,
+    ...values
+  } = parsed.data;
   const admin = createAdminClient();
-  const { data: before } = await admin.from("configs").select("short_name,full_name,registered_name,company_no,website,telephone,registered_address,socials,affiliates").eq("id", id).maybeSingle();
+  const { data: before } = await admin.from("configs").select("short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address,socials,affiliates").eq("id", id).maybeSingle();
   const after = {
     ...values,
-    registered_address: { address_line_one, address_line_two, city, postcode, country },
+    club_address: {
+      address_line_one: club_address_line_one,
+      address_line_two: club_address_line_two,
+      city: club_city,
+      postcode: club_postcode,
+      country: club_country,
+    },
+    registered_address: {
+      address_line_one: registered_address_line_one,
+      address_line_two: registered_address_line_two,
+      city: registered_city,
+      postcode: registered_postcode,
+      country: registered_country,
+    },
     socials: socials.data,
     affiliates: affiliates.data,
   };
@@ -623,6 +653,7 @@ export async function saveSiteConfig(formData: FormData) {
   const { error: linkError } = await admin.rpc("replace_public_site_links", { p_socials: socials.data, p_affiliates: affiliates.data });
   if (linkError) redirect("/settings?error=Society+details+were+saved,+but+public+links+could+not+be+updated.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "site-settings.updated", entityType: "site-config", entityId: id, before, after });
+  revalidatePath("/", "layout");
   revalidatePath("/settings");
   redirect("/settings?notice=config-saved");
 }
