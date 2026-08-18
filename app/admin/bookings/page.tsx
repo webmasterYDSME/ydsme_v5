@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { Ban, Download, MailCheck, RotateCcw, Search, TicketCheck, UserCheck, UsersRound } from "lucide-react";
+import { Ban, Download, MailCheck, RotateCcw, Search, ShieldAlert, TicketCheck, UserCheck, UsersRound } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
 import { cancelBooking, checkInBooking, resendBookingCancellation, resendBookingConfirmation, undoBookingCheckIn } from "@/lib/actions/bookings";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -51,7 +51,21 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   let totalsQuery = admin.from("event_bookings").select("event_id,party_size,status").in("status", ["confirmed", "checked_in"]);
   if (eventId) totalsQuery = totalsQuery.eq("event_id", eventId);
   const { data: activeTotals } = await totalsQuery;
+  let abuseQuery = admin.from("event_booking_abuse_summary")
+    .select("browser_blocks,ip_blocks,both_blocks,last_blocked_at");
+  if (eventId) abuseQuery = abuseQuery.eq("event_id", eventId);
+  const { data: abuseSummaries, error: abuseError } = await abuseQuery;
+  if (abuseError) throw new Error("Unable to load booking security totals.");
   const confirmedPeople = (activeTotals ?? []).reduce((total, booking) => total + booking.party_size, 0);
+  const abuseTotals = (abuseSummaries ?? []).reduce((totals, summary) => ({
+    browser: totals.browser + summary.browser_blocks,
+    ip: totals.ip + summary.ip_blocks,
+    both: totals.both + summary.both_blocks,
+    lastBlockedAt: !totals.lastBlockedAt || summary.last_blocked_at > totals.lastBlockedAt
+      ? summary.last_blocked_at
+      : totals.lastBlockedAt,
+  }), { browser: 0, ip: 0, both: 0, lastBlockedAt: "" });
+  const blockedAttempts = abuseTotals.browser + abuseTotals.ip + abuseTotals.both;
   const eventMap = new Map((events ?? []).map((event) => [event.id, event]));
   const selectedEvent = eventId ? eventMap.get(eventId) : null;
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
@@ -70,6 +84,7 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Passenger control</p><h1>Visitor bookings</h1><p>Search, check in, contact and reconcile visitor groups.</p></div><span className="count-badge"><UsersRound/>{confirmedPeople} active visitors{selectedEvent?.booking_capacity ? ` / ${selectedEvent.booking_capacity}` : ""}</span></header>
     {query.error ? <p className="form-message error">{query.error}</p> : null}
     {notice ? <p className={query.notice === "cancelled-email-failed" ? "form-message error" : "form-message success"}>{notice}</p> : null}
+    {blockedAttempts > 0 ? <div className="booking-abuse-summary"><ShieldAlert/><div><strong>{blockedAttempts} automatic booking {blockedAttempts === 1 ? "block" : "blocks"}</strong><span>{abuseTotals.browser} browser · {abuseTotals.ip} network · {abuseTotals.both} both · latest {format(new Date(abuseTotals.lastBlockedAt), "d MMM yyyy, HH:mm")}</span></div></div> : null}
     <form className="booking-search" action="/admin/bookings" method="get">
       <label htmlFor="booking-search">Reference, visitor name or email</label>
       <div><Search/><input id="booking-search" name="q" defaultValue={query.q} placeholder="YME-12345-ABCDE" autoComplete="off"/><button className="button dark" type="submit">Filter</button></div>

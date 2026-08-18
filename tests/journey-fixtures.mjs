@@ -45,6 +45,8 @@ async function removeFixtures() {
     const eventIds = events.map((event) => event.id);
     const { error: bookingError } = await admin.from("event_bookings").delete().in("event_id", eventIds);
     if (bookingError) throw bookingError;
+    const { error: abuseSummaryError } = await admin.from("event_booking_abuse_summary").delete().in("event_id", eventIds);
+    if (abuseSummaryError) throw abuseSummaryError;
     const { error: eventError } = await admin.from("events").delete().in("id", eventIds);
     if (eventError) throw eventError;
   }
