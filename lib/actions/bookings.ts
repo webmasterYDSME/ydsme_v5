@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import { requireCapability } from "@/lib/auth";
+import { bookingAbuseIdentifiers } from "@/lib/booking-abuse";
 import { sendBookingCancellation, sendBookingConfirmation } from "@/lib/booking-email";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -26,7 +27,7 @@ const bookingSchema = z.object({
   eventId: z.coerce.number().int().positive(),
   leadName: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254),
-  partySize: z.coerce.number().int().min(1).max(20),
+  partySize: z.coerce.number().int().min(1).max(6),
   website: z.string().max(0),
 });
 
@@ -44,6 +45,9 @@ function bookingError(message?: string): BookingActionState {
   }
   if (message?.includes("booking_closed")) {
     return { status: "error", message: "Booking for this event is no longer available." };
+  }
+  if (message?.includes("booking_automatic_limit")) {
+    return { status: "error", message: "We couldn’t accept another booking automatically. If these places are for a separate group, please contact YDSME." };
   }
   return { status: "error", message: "We could not complete the booking. Please try again." };
 }
@@ -72,6 +76,12 @@ export async function createVisitorBooking(
   if (!permitted) {
     return { status: "error", message: "Too many booking attempts. Please wait and try again." };
   }
+  let abuseIdentifiers: Awaited<ReturnType<typeof bookingAbuseIdentifiers>>;
+  try {
+    abuseIdentifiers = await bookingAbuseIdentifiers(parsed.data.eventId);
+  } catch {
+    return { status: "error", message: "We could not complete the booking. Please try again." };
+  }
 
   const admin = createAdminClient();
   const { data: event, error: eventError } = await admin
@@ -87,14 +97,24 @@ export async function createVisitorBooking(
   let booking: { booking_id: string; reference_code: string; available_places: number } | undefined;
   let rpcError: { message: string; code?: string } | null = null;
   for (let attempt = 0; attempt < 2 && !booking; attempt += 1) {
-    const { data, error } = await admin.rpc("create_event_booking", {
+    const { data, error } = await admin.rpc("create_event_booking_v2", {
+      p_device_hash: abuseIdentifiers.deviceHash,
       p_event_id: parsed.data.eventId,
       p_lead_name: parsed.data.leadName,
       p_email: parsed.data.email,
+      p_ip_hash: abuseIdentifiers.ipHash,
       p_party_size: parsed.data.partySize,
       p_reference_code: bookingReference(),
     });
-    booking = data?.[0];
+    const result = data?.[0];
+    if (result?.outcome === "blocked") return bookingError("booking_automatic_limit");
+    if (result?.outcome === "accepted" && result.booking_id && result.reference_code) {
+      booking = {
+        booking_id: result.booking_id,
+        reference_code: result.reference_code,
+        available_places: result.available_places,
+      };
+    }
     rpcError = error;
     if (error?.code !== "23505") break;
   }

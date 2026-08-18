@@ -18,9 +18,10 @@ const { data: profiles, error: profileError } = await admin.from("users")
 if (profileError) throw profileError;
 assert.equal(profiles.length, 2, "Run the journey fixture setup first.");
 const memberId = profiles.find((profile) => profile.email === "journey.member@example.test").id;
-const unique = crypto.randomUUID().slice(0, 8);
+const unique = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
 let workshopId;
 let eventId;
+let abuseEventId;
 
 try {
   const workshopResult = await admin.from("workshops").insert({
@@ -69,13 +70,56 @@ try {
   if (eventResult.error) throw eventResult.error;
   eventId = eventResult.data.id;
   const bookingAttempts = await Promise.all([
-    admin.rpc("create_event_booking", { p_event_id: eventId, p_lead_name: "First", p_email: `first-${unique}@example.test`, p_party_size: 1, p_reference_code: `YME-${unique}-A` }),
-    admin.rpc("create_event_booking", { p_event_id: eventId, p_lead_name: "Second", p_email: `second-${unique}@example.test`, p_party_size: 1, p_reference_code: `YME-${unique}-B` }),
+    admin.rpc("create_event_booking", { p_event_id: eventId, p_lead_name: "First", p_email: `first-${unique}@example.test`, p_party_size: 1, p_reference_code: `YME-${unique}-CAP-A` }),
+    admin.rpc("create_event_booking", { p_event_id: eventId, p_lead_name: "Second", p_email: `second-${unique}@example.test`, p_party_size: 1, p_reference_code: `YME-${unique}-CAP-B` }),
   ]);
   assert.equal(bookingAttempts.filter((result) => !result.error).length, 1, "Exactly one final visitor place must be booked.");
   assert.equal(bookingAttempts.filter((result) => result.error).length, 1, "The competing visitor booking must be rejected.");
-  console.log("Workshop and visitor final-place concurrency checks passed.");
+
+  const abuseEventResult = await admin.from("events").insert({
+    name: `Concurrent abuse event ${unique}`,
+    descriptions: "Atomic rapid-repeat contract test",
+    start_date: "2026-09-22",
+    end_date: "2026-09-22",
+    start_time: "10:00",
+    end_time: "11:00",
+    event_type: "public",
+    booking_enabled: true,
+    booking_mode: "website",
+    booking_capacity: 100,
+    lifecycle_status: "published",
+    host: memberId,
+  }).select("id").single();
+  if (abuseEventResult.error) throw abuseEventResult.error;
+  abuseEventId = abuseEventResult.data.id;
+  const deviceHash = "a".repeat(64);
+  const ipHash = "b".repeat(64);
+  const abuseAttempts = await Promise.all(["A", "B", "C"].map((suffix) =>
+    admin.rpc("create_event_booking_v2", {
+      p_device_hash: deviceHash,
+      p_email: `rapid-${suffix.toLowerCase()}-${unique}@example.test`,
+      p_event_id: abuseEventId,
+      p_ip_hash: ipHash,
+      p_lead_name: `Rapid ${suffix}`,
+      p_party_size: 6,
+      p_reference_code: `YME-${unique}-RAPID-${suffix}`,
+    })));
+  if (abuseAttempts.some((result) => result.error)) {
+    throw abuseAttempts.find((result) => result.error).error;
+  }
+  const outcomes = abuseAttempts.map((result) => result.data?.[0]?.outcome);
+  assert.equal(outcomes.filter((outcome) => outcome === "accepted").length, 2, "Exactly 12 rapid places must be accepted.");
+  assert.equal(outcomes.filter((outcome) => outcome === "blocked").length, 1, "The competing booking above 12 rapid places must be blocked.");
+  console.log("Workshop, capacity and rapid-repeat concurrency checks passed.");
 } finally {
-  if (eventId) await admin.from("events").delete().eq("id", eventId);
+  if (abuseEventId) {
+    await admin.from("event_booking_abuse_summary").delete().eq("event_id", abuseEventId);
+    await admin.from("event_bookings").delete().eq("event_id", abuseEventId);
+    await admin.from("events").delete().eq("id", abuseEventId);
+  }
+  if (eventId) {
+    await admin.from("event_bookings").delete().eq("event_id", eventId);
+    await admin.from("events").delete().eq("id", eventId);
+  }
   if (workshopId) await admin.from("workshops").delete().eq("id", workshopId);
 }

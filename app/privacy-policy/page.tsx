@@ -35,7 +35,7 @@ export default function PrivacyPolicy() {
       <ul>
         <li>When an event requires advance booking, the lead visitor’s name, email address, number of people attending, booking reference and check-in status.</li>
         <li>Information you choose to send by email or otherwise provide when contacting the Society.</li>
-        <li>Basic technical and security information generated when the website is used, such as IP address, browser or device information, request time and security events.</li>
+        <li>Basic technical and security information generated when the website is used, such as IP address, an event-scoped pseudonymous browser identifier, request time and security events.</li>
       </ul>
       <p>Committee names, Society roles, role email addresses and photographs may be published where needed to identify current officers and provide a point of contact.</p>
     </section>
@@ -53,6 +53,7 @@ export default function PrivacyPolicy() {
         </tbody>
       </table></div>
       <p>Some identity and contact information is necessary to administer membership. If it is not provided, we may be unable to create or maintain a membership or online account. We do not use personal information for solely automated decisions that produce legal or similarly significant effects.</p>
+      <p>To protect fair access to visitor places, we compare pseudonymous, event-scoped versions of the booking browser and IP address with recently accepted bookings. A rapid attempt that would take either total above 12 places may be declined automatically and directed to the Society for offline assistance. We do not retain the submitted name or email address from a declined attempt.</p>
     </section>
 
     <section>

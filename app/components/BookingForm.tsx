@@ -31,10 +31,11 @@ export function BookingForm({ eventId, availablePlaces }: { eventId: number; ava
     <input type="hidden" name="eventId" value={eventId}/>
     <div className="booking-form-heading"><div><p className="eyebrow dark">Free reservation</p><h2>Reserve your visit</h2></div><span><UsersRound/>{availablePlaces} places left</span></div>
     <p>One person can book for the whole group. We only need the lead visitor’s details.</p>
+    <p className="booking-rules">Bookings are limited to 6 visitors per group. Please do not make multiple bookings to increase your allocation. For a larger group, <a href="mailto:secretary@yorkmodelengineers.co.uk">contact YDSME</a>.</p>
     {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
     <label>Lead visitor’s name<input name="leadName" autoComplete="name" maxLength={120} required/></label>
     <label>Email address<input type="email" name="email" autoComplete="email" maxLength={254} inputMode="email" required/><small>Your confirmation and booking reference will be sent here.</small></label>
-    <label>How many people are coming?<input type="number" name="partySize" min="1" max={Math.min(20, availablePlaces)} defaultValue="1" inputMode="numeric" required/><small>Include adults and children. Maximum 20 people per booking.</small></label>
+    <label>How many people are coming?<input type="number" name="partySize" min="1" max={Math.min(6, availablePlaces)} defaultValue="1" inputMode="numeric" required/><small>Include adults and children. Maximum 6 people per booking.</small></label>
     <label className="booking-honeypot" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off"/></label>
     <CaptchaField/>
     <PendingSubmitButton className="button dark large" pendingLabel="Reserving…"><CalendarCheck/>Confirm free booking</PendingSubmitButton>

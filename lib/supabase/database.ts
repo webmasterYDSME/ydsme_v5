@@ -342,9 +342,46 @@ export type Database = {
         }
         Relationships: []
       }
+      event_booking_abuse_summary: {
+        Row: {
+          both_blocks: number
+          browser_blocks: number
+          event_id: number
+          ip_blocks: number
+          last_blocked_at: string
+          updated_at: string
+        }
+        Insert: {
+          both_blocks?: number
+          browser_blocks?: number
+          event_id: number
+          ip_blocks?: number
+          last_blocked_at?: string
+          updated_at?: string
+        }
+        Update: {
+          both_blocks?: number
+          browser_blocks?: number
+          event_id?: number
+          ip_blocks?: number
+          last_blocked_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_booking_abuse_summary_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_bookings: {
         Row: {
           anonymized_at: string | null
+          booking_device_hash: string | null
+          booking_ip_hash: string | null
           cancellation_reason: string | null
           cancelled_at: string | null
           cancelled_by: string | null
@@ -367,6 +404,8 @@ export type Database = {
         }
         Insert: {
           anonymized_at?: string | null
+          booking_device_hash?: string | null
+          booking_ip_hash?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -389,6 +428,8 @@ export type Database = {
         }
         Update: {
           anonymized_at?: string | null
+          booking_device_hash?: string | null
+          booking_ip_hash?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -1061,6 +1102,24 @@ export type Database = {
           available_places: number
           booking_id: string
           reference_code: string
+        }[]
+      }
+      create_event_booking_v2: {
+        Args: {
+          p_device_hash: string | null
+          p_email: string
+          p_event_id: number
+          p_ip_hash: string | null
+          p_lead_name: string
+          p_party_size: number
+          p_reference_code: string
+        }
+        Returns: {
+          available_places: number
+          block_reason: string | null
+          booking_id: string | null
+          outcome: string
+          reference_code: string | null
         }[]
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }

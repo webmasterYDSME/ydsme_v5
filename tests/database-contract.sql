@@ -7,9 +7,17 @@ declare
   workshop_id uuid := gen_random_uuid();
   reservation_id bigint;
   event_id bigint;
+  abuse_event_id bigint;
+  retention_event_id bigint;
   visible_announcement_count integer;
   second_reservation_rejected boolean := false;
   second_booking_rejected boolean := false;
+  oversized_booking_rejected boolean := false;
+  booking_outcome text;
+  booking_count integer;
+  block_count integer;
+  device_hash text := repeat('a', 64);
+  ip_hash text := repeat('b', 64);
 begin
   select id into first_member from public.users where membership_status = 'active' order by id limit 1;
   select id into second_member from public.users where membership_status = 'active' and id <> first_member order by id limit 1;
@@ -100,6 +108,103 @@ begin
     if sqlerrm like '%insufficient_capacity%' then second_booking_rejected := true; else raise; end if;
   end;
   if not second_booking_rejected then raise exception 'Event overbooking was not rejected'; end if;
+
+  begin
+    insert into public.event_bookings (event_id, reference_code, lead_name, email, party_size)
+    values (event_id, 'YME-TOO-LARGE', 'Large group', 'large@example.invalid', 7);
+  exception when others then
+    if sqlerrm like '%invalid_party_size%' then oversized_booking_rejected := true; else raise; end if;
+  end;
+  if not oversized_booking_rejected then raise exception 'Database insert protection accepted more than six visitors'; end if;
+
+  insert into public.events (name, descriptions, start_date, end_date, start_time, end_time, host, event_type, booking_enabled, booking_capacity, booking_mode)
+  values ('Abuse contract event', 'Contract test', current_date + 2, current_date + 2, '10:00', '11:00', first_member, 'public', true, 100, 'website')
+  returning id into abuse_event_id;
+
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'First group', 'group-one@example.invalid', 6, 'YME-ABUSE-1', device_hash, ip_hash
+  );
+  if booking_outcome <> 'accepted' then raise exception 'First six-person group was not accepted'; end if;
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Second group', 'group-two@example.invalid', 6, 'YME-ABUSE-2', device_hash, ip_hash
+  );
+  if booking_outcome <> 'accepted' then raise exception 'Second six-person group was not accepted'; end if;
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Blocked group', 'group-three@example.invalid', 1, 'YME-ABUSE-3', device_hash, ip_hash
+  );
+  if booking_outcome <> 'blocked' then raise exception 'Rapid booking above 12 places was not blocked'; end if;
+
+  select count(*)::integer into booking_count from public.event_bookings eb where eb.event_id = abuse_event_id;
+  if booking_count <> 2 then raise exception 'Blocked booking stored visitor details or consumed capacity'; end if;
+  select browser_blocks + ip_blocks + both_blocks into block_count
+  from public.event_booking_abuse_summary summary where summary.event_id = abuse_event_id;
+  if block_count <> 1 then raise exception 'Blocked booking aggregate was not recorded'; end if;
+
+  update public.event_bookings
+  set status = 'cancelled'
+  where event_bookings.event_id = abuse_event_id and email = 'group-one@example.invalid';
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Replacement group', 'replacement@example.invalid', 6, 'YME-ABUSE-4', device_hash, ip_hash
+  );
+  if booking_outcome <> 'accepted' then raise exception 'Cancelled bookings still counted toward the rapid limit'; end if;
+
+  update public.event_bookings
+  set created_at = now() - interval '11 minutes'
+  where event_bookings.event_id = abuse_event_id and status in ('confirmed', 'checked_in');
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Later group', 'later@example.invalid', 6, 'YME-ABUSE-5', device_hash, ip_hash
+  );
+  if booking_outcome <> 'accepted' then raise exception 'Bookings older than ten minutes still counted toward the rapid limit'; end if;
+
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Same network group', 'same-network@example.invalid', 6, 'YME-ABUSE-IP-1', repeat('c', 64), ip_hash
+  );
+  if booking_outcome <> 'accepted' then raise exception 'The twelfth rapid place from one IP was not accepted'; end if;
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Network blocked group', 'network-blocked@example.invalid', 1, 'YME-ABUSE-IP-2', repeat('d', 64), ip_hash
+  );
+  if booking_outcome <> 'blocked' then raise exception 'IP-only rapid history above 12 places was not blocked'; end if;
+
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Browser group one', 'browser-one@example.invalid', 6, 'YME-ABUSE-BROWSER-1', repeat('e', 64), repeat('f', 64)
+  );
+  if booking_outcome <> 'accepted' then raise exception 'First browser-only group was not accepted'; end if;
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Browser group two', 'browser-two@example.invalid', 6, 'YME-ABUSE-BROWSER-2', repeat('e', 64), repeat('0', 64)
+  );
+  if booking_outcome <> 'accepted' then raise exception 'The twelfth rapid place from one browser was not accepted'; end if;
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Browser blocked group', 'browser-blocked@example.invalid', 1, 'YME-ABUSE-BROWSER-3', repeat('e', 64), repeat('1', 64)
+  );
+  if booking_outcome <> 'blocked' then raise exception 'Browser-only rapid history above 12 places was not blocked'; end if;
+
+  select outcome into booking_outcome from public.create_event_booking_v2(
+    abuse_event_id, 'Different identifiers', 'different@example.invalid', 6, 'YME-ABUSE-6', repeat('2', 64), repeat('3', 64)
+  );
+  if booking_outcome <> 'accepted' then raise exception 'Different browser and IP identifiers were incorrectly blocked'; end if;
+  if not exists (
+    select 1 from public.event_booking_abuse_summary summary
+    where summary.event_id = abuse_event_id
+      and summary.browser_blocks = 1
+      and summary.ip_blocks = 1
+      and summary.both_blocks = 1
+  ) then raise exception 'Booking block reason aggregates are incorrect'; end if;
+
+  insert into public.events (name, descriptions, start_date, end_date, start_time, end_time, host, event_type, booking_enabled, booking_capacity, booking_mode)
+  values ('Retention contract event', 'Contract test', current_date - 100, current_date - 100, '10:00', '11:00', first_member, 'public', false, 10, 'none')
+  returning id into retention_event_id;
+  insert into public.event_bookings (event_id, reference_code, lead_name, email, party_size, booking_device_hash, booking_ip_hash)
+  values (retention_event_id, 'YME-RETENTION', 'Retention visitor', 'retention@example.invalid', 1, device_hash, ip_hash);
+  insert into public.event_booking_abuse_summary (event_id, both_blocks)
+  values (retention_event_id, 1);
+  perform public.run_dashboard_retention();
+  if exists (
+    select 1 from public.event_bookings
+    where event_bookings.event_id = retention_event_id and (booking_device_hash is not null or booking_ip_hash is not null)
+  ) then raise exception 'Expired booking hashes were not removed'; end if;
+  if exists (select 1 from public.event_booking_abuse_summary summary where summary.event_id = retention_event_id) then
+    raise exception 'Expired booking abuse aggregate was not removed';
+  end if;
 
   if not public.consume_rate_limit('contract-test', 'subject', 1, 60) then raise exception 'First throttle attempt was rejected'; end if;
   if public.consume_rate_limit('contract-test', 'subject', 1, 60) then raise exception 'Throttle limit was not enforced'; end if;

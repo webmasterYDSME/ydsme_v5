@@ -189,8 +189,10 @@ test("keeps donation checkout server-side and administrator controlled", async (
 });
 
 test("keeps visitor bookings private, capacity-safe and staff verified", async () => {
-  const [migration, actions, turnstile, form, admin, data, email, ticket] = await Promise.all([
+  const [migration, abuseMigration, abuseHelper, actions, turnstile, form, admin, data, email, ticket, cookieNotice, privacyNotice] = await Promise.all([
     read("supabase/migrations/202608180003_event_bookings.sql"),
+    read("supabase/migrations/202608180020_booking_abuse_controls.sql"),
+    read("lib/booking-abuse.ts"),
     read("lib/actions/bookings.ts"),
     read("lib/turnstile.ts"),
     read("app/components/BookingForm.tsx"),
@@ -198,21 +200,38 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
     read("lib/data.ts"),
     read("lib/booking-email.ts"),
     read("lib/booking-ticket.ts"),
+    read("app/cookie-policy/page.tsx"),
+    read("app/privacy-policy/page.tsx"),
   ]);
   assert.match(migration, /alter table public\.event_bookings enable row level security/);
   assert.match(migration, /revoke all on table public\.event_bookings from public, anon, authenticated/);
   assert.match(migration, /for update/);
   assert.match(migration, /reserved_places \+ p_party_size > selected_event\.booking_capacity/);
   assert.match(migration, /event_bookings_active_email_unique/);
+  assert.match(abuseMigration, /p_party_size > 6/);
+  assert.match(abuseMigration, /create_event_booking_v2/);
+  assert.match(abuseMigration, /now\(\) - interval '10 minutes'/);
+  assert.match(abuseMigration, /recent_device_places \+ p_party_size > 12/);
+  assert.match(abuseMigration, /recent_ip_places \+ p_party_size > 12/);
+  assert.match(abuseMigration, /event_booking_abuse_summary enable row level security/);
+  assert.match(abuseMigration, /booking_device_hash = null/);
+  assert.match(abuseMigration, /booking_ip_hash = null/);
+  assert.match(abuseHelper, /httpOnly: true/);
+  assert.match(abuseHelper, /maxAge: BOOKING_SECURITY_COOKIE_MAX_AGE/);
+  assert.match(abuseHelper, /createHmac\("sha256"/);
   assert.match(turnstile, /TURNSTILE_SECRET_KEY/);
   assert.match(turnstile, /process\.env\.NODE_ENV !== "production"/);
   assert.match(actions, /requireCapability\("bookings\.manage"\)/);
-  assert.match(actions, /create_event_booking/);
+  assert.match(actions, /create_event_booking_v2/);
+  assert.match(actions, /\.max\(6\)/);
   assert.match(actions, /consumeRateLimit\("visitor-booking"/);
   assert.match(actions, /cancelBooking/);
   assert.match(form, /useActionState/);
   assert.match(form, /referenceCode/);
+  assert.match(form, /Math\.min\(6, availablePlaces\)/);
+  assert.match(form, /Please do not make multiple bookings/);
   assert.match(admin, /checkInBooking/);
+  assert.match(admin, /event_booking_abuse_summary/);
   assert.match(admin, /Export CSV/);
   assert.match(data, /available_places/);
   assert.match(email, /Idempotency-Key/);
@@ -224,6 +243,8 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(ticket, /QRCode\.create/);
   assert.match(ticket, /shape-rendering="crispEdges"/);
   assert.match(ticket, /bookingVerificationUrl/);
+  assert.match(cookieNotice, /ydsme-booking-security/);
+  assert.match(privacyNotice, /event-scoped pseudonymous browser identifier/);
   assert.doesNotMatch(email, /NEXT_PUBLIC_RESEND/);
 });
 
