@@ -124,8 +124,13 @@ export default async function AdminSection({ params, searchParams }: { params: P
       cancelled: events.filter(event => event.lifecycle_status === "cancelled").length,
       archived: events.filter(event => event.lifecycle_status === "archived").length,
     };
-    const filteredEvents = events.filter(event => event.lifecycle_status === status);
-    if (status === "published") filteredEvents.sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const filteredEvents = events
+      .filter(event => event.lifecycle_status === status)
+      .sort((a, b) =>
+        b.start_date.localeCompare(a.start_date)
+        || b.start_time.localeCompare(a.start_time)
+        || b.id - a.id
+      );
     const pageCount = Math.max(1, Math.ceil(filteredEvents.length / EVENT_PAGE_SIZE));
     const requestedPage = Number(query.page);
     const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
