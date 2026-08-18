@@ -63,6 +63,15 @@ test("automatically archives workshops after their scheduled date", async () => 
   assert.match(migration, /select public\.archive_past_workshops\(\)/);
 });
 
+test("sorts event and workshop lifecycle tabs by operational priority", async () => {
+  const admin = await read("app/admin/[section]/page.tsx");
+  assert.match(admin, /function compareEvents[\s\S]*status === "published"[\s\S]*a\.start_date\.localeCompare\(b\.start_date\)/);
+  assert.match(admin, /function compareEvents[\s\S]*status === "draft" \|\| status === "cancelled"[\s\S]*b\.updated_at\.localeCompare\(a\.updated_at\)/);
+  assert.match(admin, /function compareEvents[\s\S]*b\.end_date\.localeCompare\(a\.end_date\)/);
+  assert.match(admin, /function compareWorkshops[\s\S]*status === "published"[\s\S]*a\.date\.localeCompare\(b\.date\)/);
+  assert.match(admin, /function compareWorkshops[\s\S]*status === "draft" \|\| status === "cancelled"[\s\S]*b\.updated_at\.localeCompare\(a\.updated_at\)/);
+});
+
 test("keeps scheduled maintenance inside Supabase", async () => {
   const [edgeFunction, config, vercelSource, environment] = await Promise.all([
     read("supabase/functions/cleanup-quarantine/index.ts"),

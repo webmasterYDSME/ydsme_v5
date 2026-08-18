@@ -35,10 +35,46 @@ const ANNOUNCEMENT_PAGE_SIZE = 12;
 const EVENT_PAGE_SIZE = 12;
 const WORKSHOP_PAGE_SIZE = 5;
 
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
+type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
+type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:LifecycleStatus; updated_at:string };
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
-type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:string };
+type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
+
+function compareEvents(a: EventRow, b: EventRow, status: LifecycleStatus) {
+  if (status === "published") {
+    return a.start_date.localeCompare(b.start_date)
+      || a.start_time.localeCompare(b.start_time)
+      || a.id - b.id;
+  }
+  if (status === "draft" || status === "cancelled") {
+    return b.updated_at.localeCompare(a.updated_at)
+      || b.start_date.localeCompare(a.start_date)
+      || b.start_time.localeCompare(a.start_time)
+      || b.id - a.id;
+  }
+  return b.end_date.localeCompare(a.end_date)
+    || b.start_date.localeCompare(a.start_date)
+    || b.start_time.localeCompare(a.start_time)
+    || b.id - a.id;
+}
+
+function compareWorkshops(a: WorkshopRow, b: WorkshopRow, status: LifecycleStatus) {
+  if (status === "published") {
+    return a.date.localeCompare(b.date)
+      || a.start_time.localeCompare(b.start_time)
+      || a.id.localeCompare(b.id);
+  }
+  if (status === "draft" || status === "cancelled") {
+    return b.updated_at.localeCompare(a.updated_at)
+      || b.date.localeCompare(a.date)
+      || b.start_time.localeCompare(a.start_time)
+      || b.id.localeCompare(a.id);
+  }
+  return b.date.localeCompare(a.date)
+    || b.start_time.localeCompare(a.start_time)
+    || b.id.localeCompare(a.id);
+}
 
 function EventForm({ event }: { event?: EventRow }) {
   const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
@@ -118,7 +154,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const { data, error } = await admin.from("events").select("*").order("start_date", { ascending: false });
     if (error) throw new Error("Unable to load events.");
     const events = (data ?? []) as EventRow[];
-    const status = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status! : "published";
+    const status: LifecycleStatus = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status as LifecycleStatus : "published";
     const statusCounts = {
       published: events.filter(event => event.lifecycle_status === "published").length,
       draft: events.filter(event => event.lifecycle_status === "draft").length,
@@ -127,11 +163,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
     const filteredEvents = events
       .filter(event => event.lifecycle_status === status)
-      .sort((a, b) =>
-        b.start_date.localeCompare(a.start_date)
-        || b.start_time.localeCompare(a.start_time)
-        || b.id - a.id
-      );
+      .sort((a, b) => compareEvents(a, b, status));
     const pageCount = Math.max(1, Math.ceil(filteredEvents.length / EVENT_PAGE_SIZE));
     const requestedPage = Number(query.page);
     const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
@@ -174,7 +206,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const memberResult = participantIds.length ? await admin.from("users").select("id,full_name,email,contact_number").in("id", participantIds) : { data: [] };
     const members = new Map((memberResult.data ?? []).map(member => [member.id, member]));
     const workshops = (data ?? []) as WorkshopRow[];
-    const status = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status! : "published";
+    const status: LifecycleStatus = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status as LifecycleStatus : "published";
     const statusCounts = {
       published: workshops.filter(workshop => workshop.lifecycle_status === "published").length,
       draft: workshops.filter(workshop => workshop.lifecycle_status === "draft").length,
@@ -183,7 +215,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
     const filteredWorkshops = workshops
       .filter(workshop => workshop.lifecycle_status === status)
-      .sort((a, b) => status === "published" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+      .sort((a, b) => compareWorkshops(a, b, status));
     const pageCount = Math.max(1, Math.ceil(filteredWorkshops.length / WORKSHOP_PAGE_SIZE));
     const requestedPage = Number(query.page);
     const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
