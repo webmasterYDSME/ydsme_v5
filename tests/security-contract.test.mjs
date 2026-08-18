@@ -55,6 +55,14 @@ test("keeps event management current and uses only the website booking system", 
   assert.match(actions, /booking_mode: z\.enum\(\["none", "website"\]\)/);
 });
 
+test("automatically archives workshops after their scheduled date", async () => {
+  const migration = await read("supabase/migrations/202608180022_workshop_management_lifecycle.sql");
+  assert.match(migration, /date < current_date/);
+  assert.match(migration, /create trigger archive_past_workshop_on_write/);
+  assert.match(migration, /cron\.schedule\([\s\S]*auto-archive-past-workshops/);
+  assert.match(migration, /select public\.archive_past_workshops\(\)/);
+});
+
 test("keeps scheduled maintenance inside Supabase", async () => {
   const [edgeFunction, config, vercelSource, environment] = await Promise.all([
     read("supabase/functions/cleanup-quarantine/index.ts"),

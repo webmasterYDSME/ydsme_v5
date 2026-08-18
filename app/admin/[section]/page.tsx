@@ -33,6 +33,7 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
 const ANNOUNCEMENT_PAGE_SIZE = 12;
 const EVENT_PAGE_SIZE = 12;
+const WORKSHOP_PAGE_SIZE = 5;
 
 type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
@@ -173,11 +174,59 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const memberResult = participantIds.length ? await admin.from("users").select("id,full_name,email,contact_number").in("id", participantIds) : { data: [] };
     const members = new Map((memberResult.data ?? []).map(member => [member.id, member]));
     const workshops = (data ?? []) as WorkshopRow[];
-    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}<details className="manager-panel"><summary><Plus/>Create a workshop</summary><WorkshopForm/></details><div className="admin-list">{workshops.map(workshop => {
+    const status = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status! : "published";
+    const statusCounts = {
+      published: workshops.filter(workshop => workshop.lifecycle_status === "published").length,
+      draft: workshops.filter(workshop => workshop.lifecycle_status === "draft").length,
+      cancelled: workshops.filter(workshop => workshop.lifecycle_status === "cancelled").length,
+      archived: workshops.filter(workshop => workshop.lifecycle_status === "archived").length,
+    };
+    const filteredWorkshops = workshops
+      .filter(workshop => workshop.lifecycle_status === status)
+      .sort((a, b) => status === "published" ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date));
+    const pageCount = Math.max(1, Math.ceil(filteredWorkshops.length / WORKSHOP_PAGE_SIZE));
+    const requestedPage = Number(query.page);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
+    const visibleWorkshops = filteredWorkshops.slice((currentPage - 1) * WORKSHOP_PAGE_SIZE, currentPage * WORKSHOP_PAGE_SIZE);
+    const pageHref = (page: number) => `/admin/workshops?status=${status}&page=${page}`;
+    const emptyCopy: Record<string, string> = {
+      published: "Publish a workshop to add it to the upcoming programme.",
+      draft: "Workshops saved as drafts will appear here.",
+      cancelled: "Cancelled workshops will remain here for reference.",
+      archived: "Archived workshops will appear here.",
+    };
+
+    return <div className="portal-content">
+      <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><span className="count-badge"><Wrench/>{statusCounts.published} upcoming</span></header>
+      {query.error ? <p className="form-message error">{query.error}</p> : null}
+      {notice ? <p className="form-message success">{notice}</p> : null}
+      <details className="manager-panel" open={!workshops.length}><summary><Plus/>Create a workshop</summary><WorkshopForm/></details>
+      <nav className="status-filter event-status-filter" aria-label="Filter workshops by status">
+        <Link href="/admin/workshops?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
+        <Link href="/admin/workshops?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
+        <Link href="/admin/workshops?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
+        <Link href="/admin/workshops?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
+      </nav>
+      <div className="admin-list workshop-admin-list">{visibleWorkshops.map(workshop => {
       const roster = (reservations ?? []).filter(item => item.reference_id === workshop.id && item.reservation_status === "reserved");
       const deliveryIssues = (reservations ?? []).filter(item => item.reference_id === workshop.id && item.notification_email_error);
-      return <article key={workshop.id}><div className="admin-list-icon"><Wrench/></div><div><span>{workshop.host_name} · {workshop.lifecycle_status}</span><h2>{workshop.title}</h2><p>{format(parseISO(workshop.date), "d MMMM yyyy")} · {workshop.venue} · {roster.length}/{workshop.maximum_participants} places</p><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = members.get(reservation.participant_id); return <div key={reservation.id}><span><strong>{member?.full_name || "Member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = members.get(reservation.participant_id); return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span><form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form></div>; })}</div></details> : null}</div><div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>;
-    })}</div></div>;
+      const placesRemaining = Math.max(0, workshop.maximum_participants - roster.length);
+      return <article key={workshop.id} className={`is-${workshop.lifecycle_status}`}>
+        <time className="workshop-admin-date" dateTime={workshop.date}><strong>{format(parseISO(workshop.date), "dd")}</strong><span>{format(parseISO(workshop.date), "MMM")}</span><small>{format(parseISO(workshop.date), "yyyy")}</small></time>
+        <div className="workshop-admin-content">
+          <div className="workshop-admin-kicker"><span>{workshop.lifecycle_status}</span><span>Hosted by {workshop.host_name}</span></div>
+          <h2>{workshop.title}</h2>
+          <p className="workshop-admin-description">{workshop.descriptions}</p>
+          <dl className="workshop-admin-facts"><div><dt>Time</dt><dd>{workshop.start_time.slice(0,5)}–{workshop.end_time.slice(0,5)}</dd></div><div><dt>Venue</dt><dd>{workshop.venue}</dd></div>{workshop.virtual_link ? <div><dt>Format</dt><dd>In person + online</dd></div> : null}</dl>
+          <div className="workshop-capacity"><div><span><UsersRound/>{roster.length}/{workshop.maximum_participants} places reserved</span><strong>{placesRemaining ? `${placesRemaining} remaining` : "Workshop full"}</strong></div><progress aria-label={`${roster.length} of ${workshop.maximum_participants} workshop places reserved`} max={workshop.maximum_participants} value={roster.length}/></div>
+          <div className="workshop-roster-tools"><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = members.get(reservation.participant_id); return <div key={reservation.id}><span><strong>{member?.full_name || "Member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = members.get(reservation.participant_id); return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span><form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form></div>; })}</div></details> : null}</div>
+        </div>
+        <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
+      </article>;
+      })}</div>
+      {!visibleWorkshops.length ? <div className="empty-state"><Wrench/><h2>No {status === "published" ? "upcoming" : status} workshops</h2><p>{emptyCopy[status]}</p></div> : null}
+      {pageCount > 1 ? <nav className="pagination" aria-label="Workshop pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+    </div>;
   }
 
   const search = safeSearchTerm(query.q);
