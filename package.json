@@ -13,7 +13,8 @@
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern supabase/.temp --ignore-pattern supabase/.branches"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern supabase/.temp --ignore-pattern supabase/.branches",
+    "verify": "npm run lint && npm test"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
