@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Download, HeartHandshake, Settings } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PortalPagination } from "@/app/components/PortalPagination";
+import { PortalTabs } from "@/app/components/PortalTabs";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
@@ -44,19 +46,28 @@ export default async function DonationsPage({ searchParams }: { searchParams: Pr
     result.gross += item.amount_pence;
     result.refunds += item.refunded_pence;
     result[item.campaign === "target" ? "target" : "generic"] += item.amount_pence - item.refunded_pence;
+    result[item.campaign === "target" ? "targetCount" : "genericCount"] += 1;
     return result;
-  }, { gross: 0, refunds: 0, generic: 0, target: 0 });
+  }, { gross: 0, refunds: 0, generic: 0, target: 0, genericCount: 0, targetCount: 0 });
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const exportParams = new URLSearchParams();
   if (campaign) exportParams.set("campaign", campaign);
   if (from) exportParams.set("from", from);
   if (to) exportParams.set("to", to);
 
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Donation ledger</h1><p>Verified Stripe payments and refunds. Refunds remain controlled in Stripe and are reconciled by webhook.</p></div><HeartHandshake/></header>
+  const campaignHref = (value?: "generic" | "target") => `/admin/donations?${new URLSearchParams({ ...(value ? { campaign: value } : {}), ...(from ? { from } : {}), ...(to ? { to } : {}) })}`;
+  const hasDateFilters = Boolean(from || to);
+
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Donations</h1><p>Reconcile verified Stripe payments and refunds across the Society’s active appeals.</p></div><span className="count-badge"><HeartHandshake/>{count ?? 0} matching</span></header>
     <div className="stat-grid"><article><span>Gross</span><strong>{money.format(aggregate.gross / 100)}</strong></article><article><span>Refunds</span><strong>{money.format(aggregate.refunds / 100)}</strong></article><article><span>Net</span><strong>{money.format((aggregate.gross - aggregate.refunds) / 100)}</strong></article><article><span>Target campaign</span><strong>{money.format(aggregate.target / 100)}</strong></article></div>
-    <form className="booking-search" method="get"><div className="form-grid three"><label>Campaign<select name="campaign" defaultValue={campaign || ""}><option value="">All campaigns</option><option value="generic">General</option><option value="target">Target</option></select></label><label>From<input type="date" name="from" defaultValue={from || ""}/></label><label>To<input type="date" name="to" defaultValue={to || ""}/></label></div><button className="button dark" type="submit">Apply filters</button> <Link className="button secondary" href={`/admin/donations/export?${exportParams}`}><Download/>Export CSV</Link> <Link className="button secondary" href="/settings"><Settings/>Configure campaigns</Link></form>
-    <div className="member-table"><div className="member-row table-head"><span>Date / campaign</span><span>Gross / refunds</span><span>Net / status</span><span>Stripe references</span></div>{(payments ?? []).map((payment) => <div className="member-row" key={payment.id}><div><strong>{new Date(payment.paid_at).toLocaleDateString("en-GB")}</strong><small>{payment.campaign === "target" ? "Target campaign" : "General donation"}</small></div><div><span>{money.format(payment.amount_pence / 100)}</span><small>Refunded {money.format(payment.refunded_pence / 100)}</small></div><div><strong>{money.format((payment.amount_pence - payment.refunded_pence) / 100)}</strong><small>{payment.payment_status}</small></div><div><code>{payment.stripe_checkout_session_id}</code><small>{payment.stripe_payment_intent_id || "No PaymentIntent ID"}</small></div></div>)}</div>
+    <PortalTabs label="Donation campaign" tabs={[
+      { href: campaignHref(), label: "All campaigns", count: aggregate.genericCount + aggregate.targetCount, current: campaign === null },
+      { href: campaignHref("generic"), label: "General", count: aggregate.genericCount, current: campaign === "generic" },
+      { href: campaignHref("target"), label: "Target", count: aggregate.targetCount, current: campaign === "target" },
+    ]}/>
+    <form className="portal-filter-panel" method="get"><input type="hidden" name="campaign" value={campaign || ""}/><div className="portal-filter-heading"><div><h2>Filter the ledger</h2><p>Choose a payment period, then export the same filtered view.</p></div><div className="portal-filter-actions"><Link className="button secondary" href={`/admin/donations/export?${exportParams}`}><Download/>Export CSV</Link><Link className="button secondary" href="/settings?tab=donations"><Settings/>Configure appeals</Link></div></div><div className="portal-filter-grid date-filter-grid"><label>From date<input type="date" name="from" defaultValue={from || ""}/></label><label>To date<input type="date" name="to" defaultValue={to || ""}/></label><button className="button dark" type="submit">Apply dates</button>{hasDateFilters ? <Link className="portal-filter-clear" href={campaign ? `/admin/donations?campaign=${campaign}` : "/admin/donations"}>Clear dates</Link> : null}</div></form>
+    <div className="member-table donation-table"><div className="member-row table-head"><span>Payment</span><span>Gross / refunds</span><span>Net / status</span><span>Stripe references</span></div>{(payments ?? []).map((payment) => <div className="member-row" key={payment.id}><div><strong>{new Date(payment.paid_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</strong><small>{new Date(payment.paid_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</small><span className={`campaign-chip is-${payment.campaign}`}>{payment.campaign === "target" ? "Target campaign" : "General donation"}</span></div><div><strong>{money.format(payment.amount_pence / 100)}</strong><small>Refunded {money.format(payment.refunded_pence / 100)}</small></div><div><strong>{money.format((payment.amount_pence - payment.refunded_pence) / 100)}</strong><span className={`payment-status is-${payment.payment_status}`}>{payment.payment_status.replaceAll("_", " ")}</span></div><div className="stripe-references"><code title={payment.stripe_checkout_session_id}>{payment.stripe_checkout_session_id}</code><small title={payment.stripe_payment_intent_id || undefined}>{payment.stripe_payment_intent_id || "No PaymentIntent ID"}</small></div></div>)}</div>
     {!payments?.length ? <div className="empty-state"><h2>No donations in this period</h2><p>Verified payments will appear after Stripe delivers the webhook.</p></div> : null}
-    {pages > 1 ? <nav className="pagination" aria-label="Donation pages">{page > 1 ? <Link href={pageLink(query, page - 1)}>Previous</Link> : <span/>}<span>Page {page} of {pages} · {count} records</span>{page < pages ? <Link href={pageLink(query, page + 1)}>Next</Link> : <span/>}</nav> : null}
+    <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="payments" href={(value) => pageLink({ campaign: campaign || undefined, from: from || undefined, to: to || undefined }, value)} ariaLabel="Donation pages"/>
   </div>;
 }

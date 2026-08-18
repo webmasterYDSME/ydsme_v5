@@ -1,4 +1,4 @@
-import { HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2 } from "lucide-react";
+import { HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   deleteCommittee,
@@ -10,6 +10,8 @@ import { defaultDonationSettings } from "@/lib/donations";
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { PortalPagination } from "@/app/components/PortalPagination";
+import { PortalTabs } from "@/app/components/PortalTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +40,7 @@ function CommitteeForm({ person }: { person?: Committee }) {
 export default async function Settings({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; tab?: string; page?: string }>;
 }) {
   const query = await searchParams;
   const admin = createAdminClient();
@@ -66,23 +68,36 @@ export default async function Settings({
     generic: generic ? { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label } : defaultDonationSettings.generic,
     target: target ? { enabled: target.enabled, title: target.title, description: target.description, buttonLabel: target.button_label, targetPence: Number(target.target_pence), raisedPence: 0 } : defaultDonationSettings.target,
   };
+  const requestedTab = ["committee", "donations", "site"].includes(query.tab || "") ? query.tab! : "committee";
+  const tab = query.notice === "donations-saved" ? "donations" : query.notice === "config-saved" ? "site" : requestedTab;
+  const committeePageSize = 8;
+  const committeePages = Math.max(1, Math.ceil(people.length / committeePageSize));
+  const requestedPage = Number.parseInt(query.page || "1", 10);
+  const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, committeePages) : 1;
+  const visiblePeople = people.slice((currentPage - 1) * committeePageSize, currentPage * committeePageSize);
 
   return (
     <div className="portal-content">
       <header className="portal-heading">
         <div>
           <p className="eyebrow dark">Administrator only</p>
-          <h1>Committee &amp; site settings</h1>
-          <p>Maintain the Society record, public links, donation appeals and committee roster from one secure screen.</p>
+          <h1>Committee &amp; site</h1>
+          <p>Maintain the Society record, public links, donation appeals and committee roster in focused workspaces.</p>
         </div>
-        <SettingsIcon />
+        <span className="count-badge"><SettingsIcon />Site administration</span>
       </header>
 
       {query.error ? <p className="form-message error">{query.error}</p> : null}
-      {query.notice ? <p className="form-message success">Settings saved.</p> : null}
+      {query.notice ? <p className="form-message success">{query.notice === "donations-saved" ? "Donation appeals saved." : "Society settings saved."}</p> : null}
 
-      <details className="manager-panel">
-        <summary><SettingsIcon />Society information &amp; links</summary>
+      <PortalTabs label="Committee and site settings" tabs={[
+        { href: "/settings?tab=committee", label: "Committee roster", count: people.length, current: tab === "committee" },
+        { href: "/settings?tab=donations", label: "Donation appeals", current: tab === "donations" },
+        { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
+      ]}/>
+
+      {tab === "site" ? <section className="settings-tab-panel">
+        <header className="settings-panel-heading"><div><span>Public Society record</span><h2>Society information &amp; links</h2><p>Details saved here are used across the public website and legal information.</p></div><SettingsIcon/></header>
         <form action={saveSiteConfig} className="editor-form">
           <input type="hidden" name="id" value={config.id} />
           <label>Short name<input name="short_name" defaultValue={config.short_name} required /></label>
@@ -117,10 +132,10 @@ export default async function Settings({
           <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
           <PendingSubmitButton className="button dark">Save Society settings</PendingSubmitButton>
         </form>
-      </details>
+      </section> : null}
 
-      <details className="manager-panel donation-manager" open={query.notice === "donations-saved"}>
-        <summary><HeartHandshake />Donation components</summary>
+      {tab === "donations" ? <section className="settings-tab-panel donation-manager">
+        <header className="settings-panel-heading"><div><span>Public fundraising</span><h2>Donation appeals</h2><p>Control which appeals visitors see and the message used for each one.</p></div><HeartHandshake/></header>
         <form action={saveDonationSettings} className="editor-form">
           <input type="hidden" name="id" value={config.id} />
           <p className="wide form-help donation-manager-help">
@@ -157,15 +172,17 @@ export default async function Settings({
 
           <PendingSubmitButton className="button dark">Save donation components</PendingSubmitButton>
         </form>
-      </details>
+      </section> : null}
 
-      <details className="manager-panel">
-        <summary><Plus />Add a committee position</summary>
-        <CommitteeForm />
-      </details>
+      {tab === "committee" ? <section className="committee-settings-panel">
+        <div className="settings-panel-heading committee-panel-heading"><div><span>Public officers</span><h2>Committee roster</h2><p>Maintain the people and vacant positions shown on the public committee page.</p></div><span className="count-badge"><UsersRound/>{people.length} positions</span></div>
+        <details className="manager-panel">
+          <summary><Plus />Add a committee position</summary>
+          <CommitteeForm />
+        </details>
 
-      <div className="admin-list">
-        {people.map((person) => (
+        <div className="admin-list committee-admin-list">
+        {visiblePeople.map((person) => (
           <article key={person.id}>
             <div>
               <span>{person.title}</span>
@@ -184,7 +201,10 @@ export default async function Settings({
             </div>
           </article>
         ))}
-      </div>
+        </div>
+        {!visiblePeople.length ? <div className="empty-state"><UsersRound/><h2>No committee positions</h2><p>Add the first public Society position above.</p></div> : null}
+        <PortalPagination currentPage={currentPage} totalPages={committeePages} totalItems={people.length} itemLabel="positions" href={(page) => `/settings?tab=committee&page=${page}`} ariaLabel="Committee roster pages"/>
+      </section> : null}
     </div>
   );
 }

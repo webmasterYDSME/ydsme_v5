@@ -449,18 +449,18 @@ export async function purgeDocument(formData: FormData) {
 export async function saveCommittee(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
   const parsed = z.object({ id: z.coerce.number().int().positive().optional(), name: z.string().trim().max(180), title: text(2, 180), email: z.string().email().max(254), file_url: z.string().trim().max(2048) }).safeParse({ ...Object.fromEntries(formData), id: formData.get("id") || undefined });
-  if (!parsed.success) redirect("/settings?error=Please+check+the+committee+details.");
+  if (!parsed.success) redirect("/settings?tab=committee&error=Please+check+the+committee+details.");
   const { id, ...values } = parsed.data;
   const admin = createAdminClient();
   const { data: before } = id ? await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle() : { data: null };
   const quarantinePath = String(formData.get("quarantine_path") || "");
   if (quarantinePath) {
     try { values.file_url = (await finalizeQuarantinedUpload("committee-image", quarantinePath, user.id)).canonicalPath; }
-    catch { redirect("/settings?error=The+portrait+failed+security+validation."); }
+    catch { redirect("/settings?tab=committee&error=The+portrait+failed+security+validation."); }
   }
   const query = id ? admin.from("committees").update(values).eq("id", id).select("id").single() : admin.from("committees").insert({ ...values, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
-  if (error || !saved) redirect("/settings?error=The+committee+record+could+not+be+saved.");
+  if (error || !saved) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+saved.");
   if (quarantinePath) {
     const oldPath = storagePath(before?.file_url, "images");
     if (oldPath && oldPath !== storagePath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
@@ -474,14 +474,14 @@ export async function deleteCommittee(formData: FormData) {
   const id = z.coerce.number().int().positive().parse(formData.get("id"));
   const admin = createAdminClient();
   const { data: before } = await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle();
-  if (!before) redirect("/settings?error=The+committee+record+was+not+found.");
+  if (!before) redirect("/settings?tab=committee&error=The+committee+record+was+not+found.");
   const path = storagePath(before.file_url, "images");
   if (path) {
     const { error: storageError } = await admin.storage.from("images").remove([path]);
-    if (storageError) redirect("/settings?error=The+committee+portrait+could+not+be+removed.");
+    if (storageError) redirect("/settings?tab=committee&error=The+committee+portrait+could+not+be+removed.");
   }
   const { data, error } = await admin.from("committees").delete().eq("id", id).select("id").maybeSingle();
-  if (error || !data) redirect("/settings?error=The+committee+record+could+not+be+deleted.");
+  if (error || !data) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+deleted.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "committee-record.deleted", entityType: "committee-record", entityId: id, before });
   revalidatePath("/committees"); revalidatePath("/settings");
 }
@@ -607,7 +607,7 @@ export async function saveSiteConfig(formData: FormData) {
     registered_address_line_one: text(1, 180), registered_address_line_two: z.string().trim().max(180),
     registered_city: text(1, 100), registered_postcode: text(1, 20), registered_country: text(1, 100),
   }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/settings?error=Please+check+the+Society+details.");
+  if (!parsed.success) redirect("/settings?tab=site&error=Please+check+the+Society+details.");
   const socialNames = formData.getAll("social_name").map(String);
   const socialLinks = formData.getAll("social_link").map(String);
   const affiliateNames = formData.getAll("affiliate_name").map(String);
@@ -615,7 +615,7 @@ export async function saveSiteConfig(formData: FormData) {
   const affiliateLogos = formData.getAll("affiliate_logo").map(String);
   const socials = z.array(z.object({ name: text(1, 60), link: optionalUrl })).safeParse(socialNames.map((name, index) => ({ name, link: socialLinks[index] || "" })));
   const affiliates = z.array(z.object({ name: text(1, 120), website: optionalUrl, logo: z.string().max(2048) })).safeParse(affiliateNames.map((name, index) => ({ name, website: affiliateLinks[index] || "", logo: affiliateLogos[index] || "" })));
-  if (!socials.success || !affiliates.success) redirect("/settings?error=Social+or+affiliate+links+are+invalid.");
+  if (!socials.success || !affiliates.success) redirect("/settings?tab=site&error=Social+or+affiliate+links+are+invalid.");
   const {
     id,
     club_address_line_one,
@@ -652,13 +652,13 @@ export async function saveSiteConfig(formData: FormData) {
     affiliates: affiliates.data,
   };
   const { data: saved, error } = await admin.from("configs").update(after).eq("id", id).select("id").maybeSingle();
-  if (error || !saved) redirect("/settings?error=Society+settings+could+not+be+saved.");
+  if (error || !saved) redirect("/settings?tab=site&error=Society+settings+could+not+be+saved.");
   const { error: linkError } = await admin.rpc("replace_public_site_links", { p_socials: socials.data, p_affiliates: affiliates.data });
-  if (linkError) redirect("/settings?error=Society+details+were+saved,+but+public+links+could+not+be+updated.");
+  if (linkError) redirect("/settings?tab=site&error=Society+details+were+saved,+but+public+links+could+not+be+updated.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "site-settings.updated", entityType: "site-config", entityId: id, before, after });
   revalidatePath("/", "layout");
   revalidatePath("/settings");
-  redirect("/settings?notice=config-saved");
+  redirect("/settings?tab=site&notice=config-saved");
 }
 
 export async function saveDonationSettings(formData: FormData) {
@@ -675,13 +675,13 @@ export async function saveDonationSettings(formData: FormData) {
   }).safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
-    redirect("/settings?error=Please+check+the+donation+content+and+campaign+amounts.");
+    redirect("/settings?tab=donations&error=Please+check+the+donation+content+and+campaign+amounts.");
   }
 
   const genericEnabled = bool(formData, "generic_enabled");
   const targetEnabled = bool(formData, "target_enabled");
   if ((genericEnabled || targetEnabled) && !process.env.STRIPE_SECRET_KEY) {
-    redirect("/settings?error=Add+the+Stripe+secret+key+before+enabling+donations.");
+    redirect("/settings?tab=donations&error=Add+the+Stripe+secret+key+before+enabling+donations.");
   }
 
   const admin = createAdminClient();
@@ -690,7 +690,7 @@ export async function saveDonationSettings(formData: FormData) {
     .select("settings")
     .eq("id", parsed.data.id)
     .single();
-  if (readError) redirect("/settings?error=Donation+settings+could+not+be+loaded.");
+  if (readError) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+loaded.");
 
   const currentSettings = config.settings && typeof config.settings === "object" && !Array.isArray(config.settings)
     ? config.settings
@@ -715,14 +715,14 @@ export async function saveDonationSettings(formData: FormData) {
   };
 
   const { error } = await admin.from("configs").update({ settings }).eq("id", parsed.data.id);
-  if (error) redirect("/settings?error=Donation+settings+could+not+be+saved.");
+  if (error) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+saved.");
   const { error: campaignError } = await admin.rpc("replace_donation_campaigns", { p_generic: settings.donations.generic, p_target: settings.donations.target });
-  if (campaignError) redirect("/settings?error=Donation+campaigns+could+not+be+saved.");
+  if (campaignError) redirect("/settings?tab=donations&error=Donation+campaigns+could+not+be+saved.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "donation-campaigns.updated", entityType: "site-config", entityId: parsed.data.id, before: { donations: currentSettings.donations }, after: { donations: settings.donations } });
   revalidatePath("/");
   revalidatePath("/visitors");
   revalidatePath("/settings");
-  redirect("/settings?notice=donations-saved");
+  redirect("/settings?tab=donations&notice=donations-saved");
 }
 
 function parseCsv(file: File) {
