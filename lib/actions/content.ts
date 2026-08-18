@@ -249,10 +249,10 @@ export async function cancelWorkshopReservation(formData: FormData) {
   const { data, error } = await createAdminClient().from("participants").update({ reservation_status: "cancelled", cancelled_at: now, updated_at: now }).eq("id", id).eq("reservation_status", "reserved").select("id,reference_id,participant_id").maybeSingle();
   if (error || !data) redirect("/admin/workshops?error=The+reservation+could+not+be+cancelled.");
   const admin = createAdminClient();
-  const [{ data: workshop }, { data: member }] = await Promise.all([
-    admin.from("workshops").select("title,date").eq("id", data.reference_id).maybeSingle(),
-    admin.from("users").select("full_name,email").eq("id", data.participant_id).maybeSingle(),
-  ]);
+  const { data: workshop } = await admin.from("workshops").select("title,date").eq("id", data.reference_id).maybeSingle();
+  const { data: member } = data.participant_id
+    ? await admin.from("users").select("full_name,email").eq("id", data.participant_id).maybeSingle()
+    : { data: null };
   const mail = workshop && member?.email ? await sendWorkshopReservationUpdate({ email: member.email, memberName: member.full_name || member.email, workshopTitle: workshop.title, workshopDate: workshop.date, reserved: false }) : { sent: false };
   await admin.rpc("record_workshop_email_attempt", { p_reservation_id: id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.reservation-cancelled", entityType: "workshop-reservation", entityId: id, after: { workshop_id: data.reference_id, participant_id: data.participant_id, status: "cancelled", email_sent: mail.sent } });
@@ -305,6 +305,7 @@ export async function retryWorkshopReservationEmail(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
   if (error || !reservation) redirect("/admin/workshops?error=The+reservation+was+not+found.");
+  if (!reservation.participant_id) redirect("/admin/workshops?error=The+former+member%27s+delivery+details+have+been+removed.");
   const [{ data: workshop }, { data: member }] = await Promise.all([
     admin.from("workshops").select("title,date").eq("id", reservation.reference_id).maybeSingle(),
     admin.from("users").select("full_name,email").eq("id", reservation.participant_id).maybeSingle(),
@@ -551,9 +552,9 @@ export async function restoreMember(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
   const userId = idString.parse(formData.get("user_id"));
   const now = new Date().toISOString();
-  const { data, error } = await createAdminClient().from("users").update({ membership_status: "active", archived_at: null, archived_by: null, retention_until: null, updated_at: now }).eq("id", userId).neq("membership_status", "active").select("id,email").maybeSingle();
-  if (error) redirect("/admin/members?error=The+member+could+not+be+restored.");
-  if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.restored", entityType: "member", entityId: userId, summary: data.email });
+  const { data, error } = await createAdminClient().from("users").update({ membership_status: "active", archived_at: null, archived_by: null, retention_until: null, updated_at: now }).eq("id", userId).neq("membership_status", "active").is("retention_purge_claimed_at", null).select("id,email").maybeSingle();
+  if (error || !data) redirect("/admin/members?error=The+member+could+not+be+restored.+An+automatic+retention+operation+may+be+in+progress.");
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.restored", entityType: "member", entityId: userId, summary: data.email });
   revalidatePath("/admin/members");
   redirect("/admin/members?notice=member-restored");
 }
@@ -581,7 +582,7 @@ export async function purgeMember(formData: FormData) {
   }).safeParse(Object.fromEntries(formData));
   if (!parsed.success || parsed.data.user_id === user.id) redirect("/admin/members?error=Invalid+permanent+deletion+request.");
   const admin = createAdminClient();
-  const { data: target } = await admin.from("users").select("id,email,full_name,membership_status,legal_hold").eq("id", parsed.data.user_id).maybeSingle();
+  const { data: target } = await admin.from("users").select("id,email,membership_status,legal_hold").eq("id", parsed.data.user_id).maybeSingle();
   if (!target || target.membership_status !== "archived") redirect("/admin/members?error=Only+archived+members+can+be+permanently+deleted.");
   if (target.legal_hold) redirect("/admin/members?error=This+member+is+under+legal+hold+and+cannot+be+deleted.");
   if (parsed.data.confirmation !== `DELETE ${target.email}`) redirect("/admin/members?error=The+typed+confirmation+did+not+match.");
@@ -589,9 +590,17 @@ export async function purgeMember(formData: FormData) {
   const supabase = await createClient();
   const { error: reauthError } = await supabase.auth.signInWithPassword({ email: user.email || "", password: parsed.data.password });
   if (reauthError) redirect("/admin/members?error=Reauthentication+failed.");
+  const { data: anonymized, error: anonymizeError } = await admin.rpc("anonymize_member_content_for_purge", {
+    p_actor_id: user.id,
+    p_user_id: target.id,
+  });
+  if (anonymizeError?.message.includes("member_purge_privileged_role")) {
+    redirect("/admin/members?error=Remove+the+member%27s+privileged+role+and+committee+listing+before+deletion.");
+  }
+  if (anonymizeError || !anonymized) redirect("/admin/members?error=Member+content+could+not+be+anonymised.");
   const { error: deleteError } = await admin.auth.admin.deleteUser(target.id, false);
   if (deleteError) redirect("/admin/members?error=Permanent+deletion+failed.");
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.purged", entityType: "member", entityId: target.id, summary: target.email, before: { membership_status: target.membership_status, full_name: target.full_name } });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.purged", entityType: "member", entityId: target.id, summary: "Permanently deleted member account.", before: { membership_status: target.membership_status } });
   revalidatePath("/admin/members");
   redirect("/admin/members?notice=member-purged");
 }

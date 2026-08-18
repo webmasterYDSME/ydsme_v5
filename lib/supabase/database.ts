@@ -40,7 +40,7 @@ export type Database = {
           archived_by: string | null
           body: string
           created_at: string
-          created_by: string
+          created_by: string | null
           id: number
           lifecycle_status: string
           published_at: string | null
@@ -52,7 +52,7 @@ export type Database = {
           archived_by?: string | null
           body: string
           created_at?: string
-          created_by: string
+          created_by?: string | null
           id?: number
           lifecycle_status?: string
           published_at?: string | null
@@ -64,7 +64,7 @@ export type Database = {
           archived_by?: string | null
           body?: string
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           id?: number
           lifecycle_status?: string
           published_at?: string | null
@@ -115,7 +115,7 @@ export type Database = {
       committees: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           email: string
           file_url: string
           id: number
@@ -125,7 +125,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           email: string
           file_url?: string
           id?: number
@@ -135,7 +135,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           email?: string
           file_url?: string
           id?: number
@@ -577,6 +577,152 @@ export type Database = {
         }
         Relationships: []
       }
+      membership_imports: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          file_sha256: string
+          id: string
+          import_mode: string
+          row_count: number
+          source: string
+          source_encoding: string
+          status: string
+          summary: Json
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          file_sha256: string
+          id?: string
+          import_mode: string
+          row_count: number
+          source?: string
+          source_encoding: string
+          status?: string
+          summary?: Json
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          file_sha256?: string
+          id?: string
+          import_mode?: string
+          row_count?: number
+          source?: string
+          source_encoding?: string
+          status?: string
+          summary?: Json
+        }
+        Relationships: []
+      }
+      membership_records: {
+        Row: {
+          auth_user_id: string | null
+          contact_email: string | null
+          created_at: string
+          external_id: string
+          first_name: string
+          id: string
+          last_name: string
+          last_seen_at: string | null
+          last_seen_import_id: string | null
+          legal_hold: boolean
+          legal_hold_reason: string | null
+          legal_hold_review_at: string | null
+          membership_ended_at: string | null
+          membership_type: string
+          portal_access_review_decision: string | null
+          portal_access_review_reason: string | null
+          portal_access_review_required: boolean
+          portal_access_reviewed_at: string | null
+          portal_access_reviewed_by: string | null
+          retention_until: string | null
+          source: string
+          source_expires_on: string | null
+          source_member_since: string | null
+          source_renewed_on: string | null
+          source_rules_agreement: boolean | null
+          source_state: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          contact_email?: string | null
+          created_at?: string
+          external_id: string
+          first_name: string
+          id?: string
+          last_name: string
+          last_seen_at?: string | null
+          last_seen_import_id?: string | null
+          legal_hold?: boolean
+          legal_hold_reason?: string | null
+          legal_hold_review_at?: string | null
+          membership_ended_at?: string | null
+          membership_type: string
+          portal_access_review_decision?: string | null
+          portal_access_review_reason?: string | null
+          portal_access_review_required?: boolean
+          portal_access_reviewed_at?: string | null
+          portal_access_reviewed_by?: string | null
+          retention_until?: string | null
+          source?: string
+          source_expires_on?: string | null
+          source_member_since?: string | null
+          source_renewed_on?: string | null
+          source_rules_agreement?: boolean | null
+          source_state: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          contact_email?: string | null
+          created_at?: string
+          external_id?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          last_seen_at?: string | null
+          last_seen_import_id?: string | null
+          legal_hold?: boolean
+          legal_hold_reason?: string | null
+          legal_hold_review_at?: string | null
+          membership_ended_at?: string | null
+          membership_type?: string
+          portal_access_review_decision?: string | null
+          portal_access_review_reason?: string | null
+          portal_access_review_required?: boolean
+          portal_access_reviewed_at?: string | null
+          portal_access_reviewed_by?: string | null
+          retention_until?: string | null
+          source?: string
+          source_expires_on?: string | null
+          source_member_since?: string | null
+          source_renewed_on?: string | null
+          source_rules_agreement?: boolean | null
+          source_state?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_records_last_seen_import_id_fkey"
+            columns: ["last_seen_import_id"]
+            isOneToOne: false
+            referencedRelation: "membership_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           cancelled_at: string | null
@@ -586,7 +732,7 @@ export type Database = {
           notification_email_error: string | null
           notification_email_last_attempt_at: string | null
           notification_email_sent_at: string | null
-          participant_id: string
+          participant_id: string | null
           reference_id: string
           reservation_status: string
           updated_at: string
@@ -599,7 +745,7 @@ export type Database = {
           notification_email_error?: string | null
           notification_email_last_attempt_at?: string | null
           notification_email_sent_at?: string | null
-          participant_id?: string
+          participant_id?: string | null
           reference_id?: string
           reservation_status?: string
           updated_at?: string
@@ -612,7 +758,7 @@ export type Database = {
           notification_email_error?: string | null
           notification_email_last_attempt_at?: string | null
           notification_email_sent_at?: string | null
-          participant_id?: string
+          participant_id?: string | null
           reference_id?: string
           reservation_status?: string
           updated_at?: string
@@ -906,6 +1052,11 @@ export type Database = {
           legal_hold: boolean
           membership_status: string
           payment_method: Json | null
+          retention_purge_attempts: number
+          retention_purge_claim_token: string | null
+          retention_purge_claimed_at: string | null
+          retention_purge_last_attempt_at: string | null
+          retention_purge_last_error: string | null
           retention_until: string | null
           title: string
           updated_at: string
@@ -924,6 +1075,11 @@ export type Database = {
           legal_hold?: boolean
           membership_status?: string
           payment_method?: Json | null
+          retention_purge_attempts?: number
+          retention_purge_claim_token?: string | null
+          retention_purge_claimed_at?: string | null
+          retention_purge_last_attempt_at?: string | null
+          retention_purge_last_error?: string | null
           retention_until?: string | null
           title?: string
           updated_at?: string
@@ -942,6 +1098,11 @@ export type Database = {
           legal_hold?: boolean
           membership_status?: string
           payment_method?: Json | null
+          retention_purge_attempts?: number
+          retention_purge_claim_token?: string | null
+          retention_purge_claimed_at?: string | null
+          retention_purge_last_attempt_at?: string | null
+          retention_purge_last_error?: string | null
           retention_until?: string | null
           title?: string
           updated_at?: string
@@ -953,7 +1114,7 @@ export type Database = {
           archived_at: string | null
           archived_by: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           date: string
           descriptions: string
           end_time: string
@@ -972,7 +1133,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           date: string
           descriptions: string
           end_time: string
@@ -991,7 +1152,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           date?: string
           descriptions?: string
           end_time?: string
@@ -1077,6 +1238,46 @@ export type Database = {
       }
     }
     Functions: {
+      anonymize_member_content_for_purge: {
+        Args: { p_actor_id?: string; p_claim_token?: string; p_user_id: string }
+        Returns: boolean
+      }
+      claim_expired_portal_accounts: {
+        Args: { p_limit?: number }
+        Returns: {
+          claim_token: string
+          user_id: string
+        }[]
+      }
+      apply_membermojo_membership_import: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_id: string
+          p_records: Json
+        }
+        Returns: {
+          created_count: number
+          processed_count: number
+          refreshed_count: number
+        }[]
+      }
+      apply_membermojo_membership_import_v2: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_id: string
+          p_records: Json
+        }
+        Returns: {
+          created_count: number
+          ended_count: number
+          portal_access_review_count: number
+          processed_count: number
+          refreshed_count: number
+          restored_count: number
+        }[]
+      }
       cancel_workshop_place: {
         Args: { p_workshop_id: string }
         Returns: boolean
@@ -1147,6 +1348,39 @@ export type Database = {
         Args: { p_booking_id: string; p_error: string; p_sent: boolean }
         Returns: boolean
       }
+      register_membermojo_import_preview: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_mode: string
+          p_row_count: number
+          p_source_encoding: string
+          p_summary: Json
+        }
+        Returns: {
+          import_expires_at: string
+          import_id: string
+          import_status: string
+        }[]
+      }
+      release_expired_portal_account_claim: {
+        Args: { p_claim_token: string; p_error: string; p_user_id: string }
+        Returns: boolean
+      }
+      resolve_membermojo_portal_access_review: {
+        Args: {
+          p_actor_id: string
+          p_decision: string
+          p_membership_record_id: string
+          p_reason: string
+        }
+        Returns: {
+          membership_record_id: string
+          portal_membership_status: string
+          portal_user_id: string
+          review_decision: string
+        }[]
+      }
       record_workshop_email_attempt: {
         Args: { p_error?: string; p_reservation_id: number; p_sent: boolean }
         Returns: boolean
@@ -1168,6 +1402,7 @@ export type Database = {
         }[]
       }
       run_dashboard_retention: { Args: never; Returns: Json }
+      run_dashboard_retention_core: { Args: never; Returns: Json }
       target_donation_total_pence: { Args: never; Returns: number }
       update_users: {
         Args: {

@@ -74,8 +74,11 @@ test("sorts event and workshop lifecycle tabs by operational priority", async ()
 });
 
 test("keeps scheduled maintenance inside Supabase", async () => {
-  const [edgeFunction, config, vercelSource, environment] = await Promise.all([
+  const [edgeFunction, purgeFunction, purgeMigration, anonymizeMigration, config, vercelSource, environment] = await Promise.all([
     read("supabase/functions/cleanup-quarantine/index.ts"),
+    read("supabase/functions/purge-expired-members/index.ts"),
+    read("supabase/migrations/202608180030_expired_member_purge.sql"),
+    read("supabase/migrations/202608180031_member_purge_anonymisation.sql"),
     read("supabase/config.toml"),
     read("vercel.json"),
     read(".env.example"),
@@ -84,7 +87,16 @@ test("keeps scheduled maintenance inside Supabase", async () => {
   assert.match(edgeFunction, /withSupabase\(\{ auth: "secret" \}/);
   assert.match(edgeFunction, /storage\.from\(bucket\)\.remove/);
   assert.match(edgeFunction, /quarantine\.cleanup\.completed/);
+  assert.match(purgeFunction, /withSupabase\(\{ auth: "secret" \}/);
+  assert.match(purgeFunction, /auth\.admin\.deleteUser/);
+  assert.match(purgeMigration, /purge-expired-portal-accounts[\s\S]*net\.http_post/);
+  assert.match(purgeMigration, /not u\.legal_hold/);
+  assert.match(purgeMigration, /ur\.role = 'administrator'/);
+  assert.match(anonymizeMigration, /anonymize_member_content_for_purge/);
+  assert.match(anonymizeMigration, /author_name = 'Former member'/);
+  assert.match(anonymizeMigration, /role in \('administrator', 'committee'\)/);
   assert.match(config, /\[functions\.cleanup-quarantine\][\s\S]*verify_jwt = false/);
+  assert.match(config, /\[functions\.purge-expired-members\][\s\S]*verify_jwt = false/);
   assert.equal(vercel.crons, undefined);
   assert.doesNotMatch(environment, /CRON_SECRET/);
 });

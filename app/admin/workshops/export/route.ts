@@ -19,9 +19,9 @@ export async function GET(request: Request) {
     admin.from("participants").select("participant_id,created_at").eq("reference_id", workshopId).eq("reservation_status", "reserved").order("created_at"),
   ]);
   if (error || !workshop) return new Response("Workshop not found", { status: 404 });
-  const ids = (reservations ?? []).map(item => item.participant_id);
+  const ids = (reservations ?? []).flatMap(item => item.participant_id ? [item.participant_id] : []);
   const memberResult = ids.length ? await admin.from("users").select("id,full_name,email,contact_number").in("id", ids) : { data: [] };
   const members = new Map((memberResult.data ?? []).map(member => [member.id, member]));
-  const rows = [["Workshop", "Date", "Time", "Venue", "Member", "Email", "Contact", "Reserved at"], ...(reservations ?? []).map(item => { const member = members.get(item.participant_id); return [workshop.title, workshop.date, workshop.start_time.slice(0, 5), workshop.venue, member?.full_name, member?.email, member?.contact_number, item.created_at]; })];
+  const rows = [["Workshop", "Date", "Time", "Venue", "Member", "Email", "Contact", "Reserved at"], ...(reservations ?? []).map(item => { const member = item.participant_id ? members.get(item.participant_id) : undefined; return [workshop.title, workshop.date, workshop.start_time.slice(0, 5), workshop.venue, member?.full_name || "Former member", member?.email, member?.contact_number, item.created_at]; })];
   return new Response(rows.map(row => row.map(csv).join(",")).join("\r\n"), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="workshop-roster-${workshop.date}.csv"`, "Cache-Control": "private, no-store" } });
 }

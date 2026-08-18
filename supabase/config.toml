@@ -413,6 +413,11 @@ deno_version = 2
 # Authentication is enforced inside the function by @supabase/server.
 verify_jwt = false
 
+[functions.purge-expired-members]
+# Supabase Cron calls this service-to-service with a secret key in `apikey`.
+# Authentication is enforced inside the function by @supabase/server.
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
