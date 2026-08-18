@@ -80,13 +80,13 @@ test("flags shared and missing emails without treating MemberMojo roles as permi
 test("rejects duplicate MemberMojo IDs and missing required columns", () => {
   assert.throws(
     () => parseMemberMojoCsv(Buffer.from(makeCsv([member(401), member(401)]))),
-    error => error instanceof MemberMojoCsvError && /repeats MemberMojo IDs/.test(error.message),
+    error => error instanceof MemberMojoCsvError && /same MemberMojo ID appears more than once/.test(error.message),
   );
 
   const incomplete = "First name,Last name,Email\r\nAda,Lovelace,ada@example.test\r\n";
   assert.throws(
     () => parseMemberMojoCsv(Buffer.from(incomplete)),
-    error => error instanceof MemberMojoCsvError && /missing required MemberMojo columns/.test(error.message),
+    error => error instanceof MemberMojoCsvError && /expected column headings/.test(error.message),
   );
 });
 
@@ -115,10 +115,15 @@ test("preview and apply are administrator-gated, same-file, atomic and service-r
   assert.doesNotMatch(comparison, /\.(?:insert|update|upsert|delete)\(\{/);
   assert.match(comparison, /p_file_sha256: fileSha256/);
   assert.doesNotMatch(comparison.match(/const records = parsed\.records[\s\S]*?as Json;/)?.[0] ?? "", /sourceSiteRole/);
-  assert.match(component, /select the exact CSV used for preview/);
-  assert.match(component, /Apply membership records/);
-  assert.match(component, /Retain ended records for 12 months/);
-  assert.match(page, /Portal access reviews/);
+  assert.match(component, /Choose the same file again/);
+  assert.match(component, /Save these member changes/);
+  assert.match(component, /Keep former-member details for 12 months/);
+  assert.match(component, /This is the full list of current members/);
+  assert.doesNotMatch(component, /fingerprint|aggregate review counts|Applying atomically|Snapshot coverage/);
+  assert.match(page, /Check who can still sign in/);
+  assert.match(page, /Turn off website sign-in/);
+  assert.match(page, /Keep website sign-in/);
+  assert.doesNotMatch(page, /reconcile membership lifecycle|Retention review|Human decision required/);
   assert.match(page, /ARCHIVE PORTAL ACCESS/);
   assert.match(page, /RETAIN PORTAL ACCESS/);
   assert.match(action, /resolve_membermojo_portal_access_review/);

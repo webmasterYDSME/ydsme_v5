@@ -41,28 +41,28 @@ export async function previewMemberMojoImport(
   const { user } = await requireCapability("members.manage");
   const mode = modeSchema.safeParse(formData.get("mode"));
   const file = formData.get("file");
-  if (!mode.success) return { status: "error", message: "Choose a valid import mode." };
+  if (!mode.success) return { status: "error", message: "Choose whether this file contains some members or every current member." };
   if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".csv")) {
-    return { status: "error", message: "Choose a MemberMojo CSV file." };
+    return { status: "error", message: "Choose the member-list CSV file downloaded from MemberMojo." };
   }
   if (!file.size || file.size > MEMBERMOJO_MAX_FILE_BYTES) {
-    return { status: "error", message: "The MemberMojo CSV must be non-empty and smaller than 750 KB." };
+    return { status: "error", message: "This file is empty or too large. Choose a MemberMojo file with no more than 1,000 people." };
   }
   if (!await consumeRateLimit("membermojo-import-preview", 12, 60 * 60, user.id)) {
-    return { status: "error", message: "Too many import previews. Wait before trying again." };
+    return { status: "error", message: "This has been tried several times. Please wait before checking another file." };
   }
 
   try {
     const preview = await buildMemberMojoPreview(new Uint8Array(await file.arrayBuffer()), mode.data, user.id);
     return {
       status: "success",
-      message: "Preview complete. No membership record or portal account has been changed.",
+      message: "The check is ready. Nothing has been changed or saved yet.",
       preview,
     };
   } catch (error) {
     if (error instanceof MemberMojoCsvError) return { status: "error", message: error.message };
     console.error("MemberMojo preview failed", { error: error instanceof Error ? error.message : "unknown" });
-    return { status: "error", message: "The file could not be compared. Please try again." };
+    return { status: "error", message: "We could not check this file. Please download a fresh copy from MemberMojo and try again." };
   }
 }
 
@@ -84,16 +84,16 @@ export async function applyMemberMojoImport(
   });
   const file = formData.get("file");
   if (!confirmation.success) {
-    return { status: "error", message: "Review the exceptions and enter the exact confirmation phrase." };
+    return { status: "error", message: "Check the warnings, tick the box, and type the words exactly as shown." };
   }
   if (!(file instanceof File) || !file.name.toLowerCase().endsWith(".csv")) {
-    return { status: "error", message: "Choose the same MemberMojo CSV used for this preview." };
+    return { status: "error", message: "Choose the same MemberMojo file that you checked above." };
   }
   if (!file.size || file.size > MEMBERMOJO_MAX_FILE_BYTES) {
-    return { status: "error", message: "The MemberMojo CSV must be non-empty and smaller than 750 KB." };
+    return { status: "error", message: "This file is empty or too large. Choose the same MemberMojo file you checked above." };
   }
   if (!await consumeRateLimit("membermojo-import-apply", 6, 60 * 60, user.id)) {
-    return { status: "error", message: "Too many import attempts. Wait before trying again." };
+    return { status: "error", message: "This has been tried several times. Please wait before saving again." };
   }
 
   try {
@@ -106,7 +106,7 @@ export async function applyMemberMojoImport(
     revalidatePath("/admin/members");
     return {
       status: "success",
-      message: "Membership records were imported. Portal accounts, Auth emails and website roles were unchanged.",
+      message: "The member list was updated. Nobody’s sign-in, login email, or website access level was changed.",
       ...result,
     };
   } catch (error) {
@@ -114,7 +114,7 @@ export async function applyMemberMojoImport(
       return { status: "error", message: error.message };
     }
     console.error("MemberMojo apply failed", { error: error instanceof Error ? error.message : "unknown" });
-    return { status: "error", message: "The import could not be applied. No membership records were changed." };
+    return { status: "error", message: "We could not save the member changes. Nothing was changed." };
   }
 }
 
@@ -126,10 +126,10 @@ const portalReviewSchema = z.object({
 });
 
 function portalReviewError(message: string) {
-  if (message.includes("membermojo_portal_review_self")) return "You cannot archive your own portal access.";
-  if (message.includes("membermojo_portal_review_administrator")) return "Demote the administrator account before archiving its access.";
-  if (message.includes("membermojo_portal_review_unavailable")) return "That portal-access review is no longer available.";
-  return "The portal-access review could not be saved.";
+  if (message.includes("membermojo_portal_review_self")) return "You cannot turn off your own sign-in.";
+  if (message.includes("membermojo_portal_review_administrator")) return "Change this administrator to a normal member before turning off sign-in.";
+  if (message.includes("membermojo_portal_review_unavailable")) return "This check has already been completed or is no longer available.";
+  return "We could not save your choice. Please try again.";
 }
 
 export async function resolveMemberMojoPortalAccessReview(formData: FormData) {
@@ -140,13 +140,13 @@ export async function resolveMemberMojoPortalAccessReview(formData: FormData) {
     reason: formData.get("reason"),
     confirmation: formData.get("confirmation"),
   });
-  if (!parsed.success) redirect("/administrator/member-import?error=Enter+a+review+reason+and+the+exact+confirmation+phrase.");
+  if (!parsed.success) redirect("/administrator/member-import?error=Write+a+short+reason+and+type+the+words+exactly+as+shown.");
   const expectedConfirmation = parsed.data.decision === "archive_access" ? "ARCHIVE PORTAL ACCESS" : "RETAIN PORTAL ACCESS";
   if (parsed.data.confirmation !== expectedConfirmation) {
-    redirect("/administrator/member-import?error=The+typed+confirmation+did+not+match.");
+    redirect("/administrator/member-import?error=The+words+you+typed+do+not+match+the+highlighted+words.");
   }
   if (!await consumeRateLimit("membermojo-portal-review", 30, 60 * 60, user.id)) {
-    redirect("/administrator/member-import?error=Too+many+portal-access+reviews.+Wait+before+trying+again.");
+    redirect("/administrator/member-import?error=You+have+saved+many+choices+in+a+short+time.+Please+wait+before+trying+again.");
   }
 
   const { data, error } = await createAdminClient().rpc("resolve_membermojo_portal_access_review", {

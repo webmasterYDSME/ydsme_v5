@@ -239,11 +239,11 @@ export async function buildMemberMojoPreview(
 }
 
 function safeApplyMessage(message: string) {
-  if (message.includes("membermojo_import_already_applied")) return "This MemberMojo file has already been applied.";
-  if (message.includes("membermojo_preview_expired")) return "This preview has expired. Create a new preview before applying the file.";
-  if (message.includes("membermojo_file_changed")) return "The selected file is not the file used for this preview.";
-  if (message.includes("membermojo_preview_not_found")) return "This preview is unavailable or belongs to another administrator.";
-  return "The membership import could not be applied. No membership records were changed.";
+  if (message.includes("membermojo_import_already_applied")) return "This file was used before, so there is nothing more to save.";
+  if (message.includes("membermojo_preview_expired")) return "This check has closed. Upload the file again to make a new check.";
+  if (message.includes("membermojo_file_changed")) return "This is not the same file you checked. Choose the original file or start again.";
+  if (message.includes("membermojo_preview_not_found")) return "This check is no longer available. Upload the file again.";
+  return "We could not save the member changes. Nothing was changed.";
 }
 
 export async function applyMemberMojoMembershipImport(
