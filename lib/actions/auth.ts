@@ -1,10 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
+import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 
 const emailSchema = z.string().trim().email().max(254);
 const existingPasswordSchema = z.string().min(6).max(128);
@@ -34,7 +34,7 @@ export async function signInWithPassword(formData: FormData) {
 export async function sendMagicLink(formData: FormData) {
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) authError("Enter a valid email address.");
-  const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const origin = getTrustedAppOrigin();
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data,
@@ -47,7 +47,7 @@ export async function sendMagicLink(formData: FormData) {
 export async function sendPasswordReset(formData: FormData) {
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) authError("Enter a valid email address.");
-  const origin = (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const origin = getTrustedAppOrigin();
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
@@ -79,6 +79,6 @@ export async function updateLoginEmail(formData: FormData) {
   if (!parsed.success) redirect("/account?error=Enter+a+valid+email+address.");
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ email: parsed.data });
-  if (error) redirect(`/account?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect("/account?error=The+login+email+could+not+be+updated.");
   redirect("/account?notice=email-confirmation-sent");
 }

@@ -1,12 +1,15 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireRole } from "@/lib/auth";
-import { sendBookingConfirmation } from "@/lib/booking-email";
+import { writeAudit } from "@/lib/audit";
+import { requireCapability } from "@/lib/auth";
+import { sendBookingCancellation, sendBookingConfirmation } from "@/lib/booking-email";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifyTurnstile } from "@/lib/turnstile";
+import { visitorBookingsEnabled } from "@/lib/features";
 
 export type BookingActionState = {
   status: "idle" | "error" | "success";
@@ -32,29 +35,6 @@ function bookingReference() {
   return `YME-${token.slice(0, 5)}-${token.slice(5)}`;
 }
 
-async function verifyTurnstile(token: string) {
-  const secret = process.env.TURNSTILE_SECRET_KEY;
-  if (!secret) return true;
-  if (!token) return false;
-
-  const headerList = await headers();
-  const forwarded = headerList.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const body = new URLSearchParams({ secret, response: token });
-  if (forwarded) body.set("remoteip", forwarded);
-
-  try {
-    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      body,
-      cache: "no-store",
-    });
-    const result = await response.json() as { success?: boolean };
-    return response.ok && result.success === true;
-  } catch {
-    return false;
-  }
-}
-
 function bookingError(message?: string): BookingActionState {
   if (message?.includes("booking_exists")) {
     return { status: "error", message: "That email address already has a booking for this event. Please check your confirmation email or contact the Society." };
@@ -72,6 +52,7 @@ export async function createVisitorBooking(
   _previousState: BookingActionState,
   formData: FormData,
 ): Promise<BookingActionState> {
+  if (!visitorBookingsEnabled()) return { status: "error", message: "Online booking is temporarily unavailable. Please contact the Society." };
   const parsed = bookingSchema.safeParse({
     eventId: formData.get("eventId"),
     leadName: formData.get("leadName"),
@@ -86,6 +67,10 @@ export async function createVisitorBooking(
   const captchaValid = await verifyTurnstile(String(formData.get("captchaToken") || ""));
   if (!captchaValid) {
     return { status: "error", message: "Please complete the security check and try again." };
+  }
+  const permitted = await consumeRateLimit("visitor-booking", 6, 15 * 60, parsed.data.email);
+  if (!permitted) {
+    return { status: "error", message: "Too many booking attempts. Please wait and try again." };
   }
 
   const admin = createAdminClient();
@@ -127,11 +112,7 @@ export async function createVisitorBooking(
     startTime: event.start_time,
   });
 
-  await admin.from("event_bookings").update({
-    confirmation_email_sent_at: email.sent ? new Date().toISOString() : null,
-    confirmation_email_error: email.sent ? null : email.error.slice(0, 500),
-    updated_at: new Date().toISOString(),
-  }).eq("id", booking.booking_id);
+  await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.booking_id, p_sent: email.sent, p_error: email.sent ? "" : "Delivery failed." });
 
   revalidatePath("/events");
   revalidatePath(`/events/${event.id}/book`);
@@ -149,35 +130,38 @@ export async function createVisitorBooking(
 }
 
 export async function checkInBooking(formData: FormData) {
-  const { user } = await requireRole(["administrator", "committee"]);
+  const { user, role } = await requireCapability("bookings.manage");
   const id = z.string().uuid().parse(formData.get("id"));
-  const { error } = await createAdminClient().from("event_bookings").update({
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("event_bookings").update({
     status: "checked_in",
     checked_in_at: new Date().toISOString(),
     checked_in_by: user.id,
     updated_at: new Date().toISOString(),
-  }).eq("id", id).eq("status", "confirmed");
-  if (error) redirect(`/admin/bookings?error=${encodeURIComponent(error.message)}`);
+  }).eq("id", id).eq("status", "confirmed").select("id,event_id,reference_code").maybeSingle();
+  if (error || !data) redirect("/admin/bookings?error=Booking+could+not+be+checked+in.");
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.check-in", entityType: "event_booking", entityId: id, after: { status: "checked_in", reference_code: data.reference_code } });
   revalidatePath("/admin/bookings");
   redirect("/admin/bookings?notice=checked-in");
 }
 
 export async function undoBookingCheckIn(formData: FormData) {
-  await requireRole(["administrator", "committee"]);
+  const { user, role } = await requireCapability("bookings.manage");
   const id = z.string().uuid().parse(formData.get("id"));
-  const { error } = await createAdminClient().from("event_bookings").update({
+  const { data, error } = await createAdminClient().from("event_bookings").update({
     status: "confirmed",
     checked_in_at: null,
     checked_in_by: null,
     updated_at: new Date().toISOString(),
-  }).eq("id", id).eq("status", "checked_in");
-  if (error) redirect(`/admin/bookings?error=${encodeURIComponent(error.message)}`);
+  }).eq("id", id).eq("status", "checked_in").select("id,reference_code").maybeSingle();
+  if (error || !data) redirect("/admin/bookings?error=Check-in+could+not+be+reversed.");
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.undo-check-in", entityType: "event_booking", entityId: id, after: { status: "confirmed", reference_code: data.reference_code } });
   revalidatePath("/admin/bookings");
   redirect("/admin/bookings?notice=check-in-undone");
 }
 
 export async function resendBookingConfirmation(formData: FormData) {
-  await requireRole(["administrator", "committee"]);
+  const { user, role } = await requireCapability("bookings.manage");
   const id = z.string().uuid().parse(formData.get("id"));
   const admin = createAdminClient();
   const { data: booking, error } = await admin.from("event_bookings")
@@ -202,12 +186,91 @@ export async function resendBookingConfirmation(formData: FormData) {
     eventDate: event.start_date,
     startTime: event.start_time,
   }, { resend: true });
-  await admin.from("event_bookings").update({
-    confirmation_email_sent_at: result.sent ? new Date().toISOString() : null,
-    confirmation_email_error: result.sent ? null : result.error.slice(0, 500),
-    updated_at: new Date().toISOString(),
-  }).eq("id", booking.id);
+  await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.id, p_sent: result.sent, p_error: result.sent ? "" : "Delivery failed." });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.resend-confirmation", entityType: "event_booking", entityId: booking.id, after: { sent: result.sent, reference_code: booking.reference_code } });
   revalidatePath("/admin/bookings");
-  if (!result.sent) redirect(`/admin/bookings?error=${encodeURIComponent(result.error)}`);
+  if (!result.sent) redirect("/admin/bookings?error=Email+delivery+failed.+The+booking+is+unchanged.");
   redirect("/admin/bookings?notice=email-sent");
+}
+
+export async function cancelBooking(formData: FormData) {
+  const { user, role } = await requireCapability("bookings.manage");
+  const parsed = z.object({
+    id: z.string().uuid(),
+    reason: z.string().trim().max(500).default(""),
+  }).safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect("/admin/bookings?error=Invalid+cancellation+request.");
+
+  const admin = createAdminClient();
+  const { data: booking, error } = await admin.from("event_bookings")
+    .select("id,event_id,reference_code,lead_name,email,party_size,status")
+    .eq("id", parsed.data.id)
+    .in("status", ["confirmed", "checked_in"])
+    .maybeSingle();
+  if (error || !booking) redirect("/admin/bookings?error=Active+booking+not+found.");
+  const { data: event, error: eventError } = await admin.from("events")
+    .select("name,start_date,start_time")
+    .eq("id", booking.event_id)
+    .single();
+  if (eventError || !event) redirect("/admin/bookings?error=Event+not+found.");
+
+  const now = new Date().toISOString();
+  const { data: changed, error: changeError } = await admin.from("event_bookings").update({
+    status: "cancelled",
+    cancelled_at: now,
+    cancelled_by: user.id,
+    cancellation_reason: parsed.data.reason || null,
+    checked_in_at: null,
+    checked_in_by: null,
+    updated_at: now,
+  }).eq("id", booking.id).eq("status", booking.status).select("id").maybeSingle();
+  if (changeError || !changed) redirect("/admin/bookings?error=Booking+state+changed.+Refresh+and+try+again.");
+
+  const mail = await sendBookingCancellation({
+    bookingId: booking.id,
+    eventId: booking.event_id,
+    referenceCode: booking.reference_code,
+    leadName: booking.lead_name,
+    email: booking.email,
+    partySize: booking.party_size,
+    eventName: event.name,
+    eventDate: event.start_date,
+    startTime: event.start_time,
+  }, parsed.data.reason);
+  await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.cancel", entityType: "event_booking", entityId: booking.id, before: { status: booking.status }, after: { status: "cancelled", reason: parsed.data.reason, email_sent: mail.sent } });
+  revalidatePath("/admin/bookings");
+  redirect(mail.sent ? "/admin/bookings?notice=cancelled" : "/admin/bookings?notice=cancelled-email-failed");
+}
+
+export async function resendBookingCancellation(formData: FormData) {
+  const { user, role } = await requireCapability("bookings.manage");
+  const id = z.string().uuid().parse(formData.get("id"));
+  const admin = createAdminClient();
+  const { data: booking, error } = await admin.from("event_bookings")
+    .select("id,event_id,reference_code,lead_name,email,party_size,cancellation_reason,status")
+    .eq("id", id)
+    .eq("status", "cancelled")
+    .maybeSingle();
+  if (error || !booking) redirect("/admin/bookings?error=Cancelled+booking+not+found.");
+  const { data: event, error: eventError } = await admin.from("events")
+    .select("name,start_date,start_time")
+    .eq("id", booking.event_id)
+    .single();
+  if (eventError || !event) redirect("/admin/bookings?error=Event+not+found.");
+  const mail = await sendBookingCancellation({
+    bookingId: booking.id,
+    eventId: booking.event_id,
+    referenceCode: booking.reference_code,
+    leadName: booking.lead_name,
+    email: booking.email,
+    partySize: booking.party_size,
+    eventName: event.name,
+    eventDate: event.start_date,
+    startTime: event.start_time,
+  }, booking.cancellation_reason || undefined);
+  await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.resend-cancellation", entityType: "event_booking", entityId: booking.id, after: { sent: mail.sent, reference_code: booking.reference_code } });
+  revalidatePath("/admin/bookings");
+  redirect(mail.sent ? "/admin/bookings?notice=cancellation-email-sent" : "/admin/bookings?error=Cancellation+email+delivery+failed.+Try+again+later.");
 }

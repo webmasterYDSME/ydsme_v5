@@ -33,7 +33,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (request.nextUrl.pathname === "/signin" && data?.claims?.sub) {
+  if (
+    request.nextUrl.pathname === "/signin"
+    && data?.claims?.sub
+    && !request.nextUrl.searchParams.has("error")
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";

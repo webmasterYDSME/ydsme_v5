@@ -114,3 +114,80 @@ export async function sendBookingConfirmation(
     return { sent: false, error: error instanceof Error ? error.message : "Email delivery failed." };
   }
 }
+
+export async function sendBookingCancellation(
+  details: BookingEmailDetails,
+  reason?: string,
+): Promise<EmailResult> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.BOOKINGS_FROM_EMAIL;
+  if (!apiKey || !from) return { sent: false, error: "Booking email is not configured." };
+
+  const eventDate = readableDate(details.eventDate);
+  const replyTo = process.env.BOOKINGS_REPLY_TO;
+  const safeReason = reason?.trim().slice(0, 500);
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": `booking-${details.bookingId}-cancellation`,
+      },
+      body: JSON.stringify({
+        from,
+        to: [details.email],
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        subject: `Booking cancelled: ${details.eventName}`,
+        text: [
+          `Hello ${details.leadName},`,
+          "",
+          `Your booking for ${details.eventName} on ${eventDate} has been cancelled.`,
+          `Booking reference: ${details.referenceCode}`,
+          safeReason ? `Reason: ${safeReason}` : "",
+          "",
+          "If you believe this is a mistake, please contact the Society.",
+          "",
+          "York City & District Society of Model Engineers",
+        ].filter(Boolean).join("\n"),
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null) as { message?: string } | null;
+      return { sent: false, error: body?.message || `Email provider returned ${response.status}.` };
+    }
+    return { sent: true };
+  } catch (error) {
+    return { sent: false, error: error instanceof Error ? error.message : "Email delivery failed." };
+  }
+}
+
+export async function sendWorkshopReservationUpdate(details: {
+  email: string;
+  memberName: string;
+  workshopTitle: string;
+  workshopDate: string;
+  reserved: boolean;
+}): Promise<EmailResult> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.WORKSHOPS_FROM_EMAIL || process.env.BOOKINGS_FROM_EMAIL;
+  if (!apiKey || !from) return { sent: false, error: "Workshop email is not configured." };
+  const state = details.reserved ? "reserved" : "cancelled";
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [details.email],
+        ...(process.env.BOOKINGS_REPLY_TO ? { reply_to: process.env.BOOKINGS_REPLY_TO } : {}),
+        subject: `Workshop place ${state}: ${details.workshopTitle}`,
+        text: [`Hello ${details.memberName},`, "", `Your place at ${details.workshopTitle} on ${readableDate(details.workshopDate)} has been ${state}.`, "", "York City & District Society of Model Engineers"].join("\n"),
+      }),
+    });
+    if (!response.ok) return { sent: false, error: `Email provider returned ${response.status}.` };
+    return { sent: true };
+  } catch {
+    return { sent: false, error: "Email delivery failed." };
+  }
+}

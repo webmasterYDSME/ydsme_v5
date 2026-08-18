@@ -14,6 +14,7 @@ test("protects member routes with verified Supabase claims", async () => {
   assert.match(proxy, /\/dashboard/);
   assert.match(proxy, /\/administrator/);
   assert.doesNotMatch(proxy, /auth\.getSession\(\)/);
+  assert.match(proxy, /!request\.nextUrl\.searchParams\.has\("error"\)/);
   assert.match(session, /auth\.getUser\(\)/);
   assert.match(session, /from\("user_roles"\)/);
 });
@@ -31,17 +32,39 @@ test("keeps private events off public pages", async () => {
 });
 
 test("requires action-level roles before privileged writes", async () => {
-  const actions = await read("lib/actions/content.ts");
+  const [actions, uploads, uploadField] = await Promise.all([
+    read("lib/actions/content.ts"),
+    read("lib/actions/uploads.ts"),
+    read("app/components/SignedUploadField.tsx"),
+  ]);
   assert.match(actions, /requireRole\(\["administrator", "committee"\]\)/);
   assert.match(actions, /requireRole\(\["administrator"\]\)/);
-  assert.match(actions, /image\.size > 8 \* 1024 \* 1024/);
-  assert.match(actions, /file\.type !== "application\/pdf"/);
+  assert.match(actions, /finalizeQuarantinedUpload/);
+  assert.match(uploads, /createSignedUploadUrl/);
+  assert.match(uploadField, /uploadToSignedUrl/);
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
 });
 
+test("uses exactly three database-backed application roles", async () => {
+  const [auth, migration, admin] = await Promise.all([
+    read("lib/auth.ts"),
+    read("supabase/migrations/202608180004_secure_dashboard.sql"),
+    read("app/admin/[section]/page.tsx"),
+  ]);
+  assert.match(auth, /appRoles = \["member", "committee", "administrator"\] as const/);
+  assert.doesNotMatch(auth, /read-only-committee|moderator/);
+  assert.doesNotMatch(admin, /read-only-committee|moderator/);
+  assert.match(migration, /membership_status in \('active', 'suspended', 'archived'\)/);
+  assert.match(migration, /role in \('member', 'committee', 'administrator'\)/);
+  assert.match(migration, /where role::text in \('moderator', 'read-only-committee'\)/);
+  assert.match(migration, /drop type if exists public\.app_permission/);
+  assert.match(migration, /Expected at least three active administrators/);
+});
+
 test("ships database and HTTP defence in depth", async () => {
-  const [migration, config] = await Promise.all([
+  const [migration, secureMigration, config] = await Promise.all([
     read("supabase/migrations/202608170001_security_hardening.sql"),
+    read("supabase/migrations/202608180004_secure_dashboard.sql"),
     read("next.config.ts"),
   ]);
   assert.match(migration, /ydsme_events_public_read/);
@@ -50,6 +73,11 @@ test("ships database and HTTP defence in depth", async () => {
   assert.match(migration, /revoke all on public\.user_roles from anon, authenticated/);
   assert.match(migration, /grant select, insert, update, delete on public\.user_roles to service_role/);
   assert.match(migration, /drop policy if exists "Enable update for committee and administrator"/);
+  assert.match(secureMigration, /reserve_workshop_place/);
+  assert.match(secureMigration, /for update/);
+  assert.match(secureMigration, /revoke insert, update, delete on public\.participants from authenticated/);
+  assert.match(secureMigration, /audit_logs/);
+  assert.match(secureMigration, /run_dashboard_retention/);
   assert.match(config, /Content-Security-Policy/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /Permissions-Policy/);
@@ -120,9 +148,10 @@ test("keeps donation checkout server-side and administrator controlled", async (
 });
 
 test("keeps visitor bookings private, capacity-safe and staff verified", async () => {
-  const [migration, actions, form, admin, data, email, ticket] = await Promise.all([
+  const [migration, actions, turnstile, form, admin, data, email, ticket] = await Promise.all([
     read("supabase/migrations/202608180003_event_bookings.sql"),
     read("lib/actions/bookings.ts"),
+    read("lib/turnstile.ts"),
     read("app/components/BookingForm.tsx"),
     read("app/admin/bookings/page.tsx"),
     read("lib/data.ts"),
@@ -134,12 +163,16 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(migration, /for update/);
   assert.match(migration, /reserved_places \+ p_party_size > selected_event\.booking_capacity/);
   assert.match(migration, /event_bookings_active_email_unique/);
-  assert.match(actions, /TURNSTILE_SECRET_KEY/);
-  assert.match(actions, /requireRole\(\["administrator", "committee"\]\)/);
+  assert.match(turnstile, /TURNSTILE_SECRET_KEY/);
+  assert.match(turnstile, /process\.env\.NODE_ENV !== "production"/);
+  assert.match(actions, /requireCapability\("bookings\.manage"\)/);
   assert.match(actions, /create_event_booking/);
+  assert.match(actions, /consumeRateLimit\("visitor-booking"/);
+  assert.match(actions, /cancelBooking/);
   assert.match(form, /useActionState/);
   assert.match(form, /referenceCode/);
   assert.match(admin, /checkInBooking/);
+  assert.match(admin, /Export CSV/);
   assert.match(data, /available_places/);
   assert.match(email, /Idempotency-Key/);
   assert.match(email, /attachments/);
@@ -151,4 +184,110 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(ticket, /shape-rendering="crispEdges"/);
   assert.match(ticket, /bookingVerificationUrl/);
   assert.doesNotMatch(email, /NEXT_PUBLIC_RESEND/);
+});
+
+test("makes Stripe webhooks replay-safe and keeps finance private", async () => {
+  const [webhook, migration, processingMigration, ledger] = await Promise.all([
+    read("app/api/stripe/webhook/route.ts"),
+    read("supabase/migrations/202608180004_secure_dashboard.sql"),
+    read("supabase/migrations/202608180009_webhook_processing_state.sql"),
+    read("app/admin/donations/page.tsx"),
+  ]);
+  assert.match(webhook, /stripe_webhook_events/);
+  assert.match(webhook, /claimError\?\.code === "23505"/);
+  assert.match(webhook, /existing\.processing_status === "processed"/);
+  assert.match(webhook, /processing_status: "failed"/);
+  assert.match(processingMigration, /processing_status in \('processing', 'processed', 'failed'\)/);
+  assert.match(migration, /revoke all on public\.stripe_webhook_events from public, anon, authenticated/);
+  assert.match(ledger, /requireCapability\("donations\.view"\)/);
+});
+
+test("uses trusted origins and accepts only safe external URLs", async () => {
+  const [origin, authActions, callback, donationActions, inputs, content] = await Promise.all([
+    read("lib/trusted-origin.ts"),
+    read("lib/actions/auth.ts"),
+    read("app/auth/callback/route.ts"),
+    read("lib/actions/donations.ts"),
+    read("lib/security-input.ts"),
+    read("lib/actions/content.ts"),
+  ]);
+  assert.match(origin, /NEXT_PUBLIC_SITE_URL/);
+  assert.match(origin, /url\.protocol !== "https:"/);
+  assert.doesNotMatch(authActions, /headers\(\).*origin/s);
+  assert.doesNotMatch(donationActions, /headers\(\).*origin/s);
+  assert.match(callback, /getTrustedAppOrigin/);
+  assert.match(inputs, /HTTP_PROTOCOLS\.has\(url\.protocol\)/);
+  assert.match(content, /refine\(\(value\) => Boolean\(safeHttpUrl\(value\)\)/);
+});
+
+test("blocks inactive members, public quarantine reads and direct mutations", async () => {
+  const [authorizationMigration, mutationMigration] = await Promise.all([
+    read("supabase/migrations/202608180010_effective_authorization_hardening.sql"),
+    read("supabase/migrations/202608180011_server_mutation_boundary.sql"),
+  ]);
+  assert.match(authorizationMigration, /create or replace function public\.is_active_member/);
+  assert.match(authorizationMigration, /name not like 'quarantine\/%'/);
+  assert.match(authorizationMigration, /revoke execute on all functions in schema public/);
+  assert.match(authorizationMigration, /revoke truncate, references, trigger on all tables/);
+  assert.match(mutationMigration, /revoke insert, update, delete on all tables in schema public/);
+});
+
+test("owns file lifecycle through Storage API instead of blocked SQL triggers", async () => {
+  const [migration, actions] = await Promise.all([
+    read("supabase/migrations/202608180014_storage_lifecycle_ownership.sql"),
+    read("lib/actions/content.ts"),
+  ]);
+  assert.match(migration, /drop trigger if exists on_delete_document/);
+  assert.match(migration, /drop trigger if exists on_delete_event/);
+  assert.match(actions, /storage\.from\("documents"\)\.remove/);
+  assert.match(actions, /storage\.from\("images"\)\.remove/);
+});
+
+test("records retention and delivery retry state without changing Auth", async () => {
+  const [migration, workshopMigration, bookingActions, contentActions, authActions, bookingsPage, workshopsPage] = await Promise.all([
+    read("supabase/migrations/202608180005_retention_and_delivery.sql"),
+    read("supabase/migrations/202608180015_workshop_delivery_state.sql"),
+    read("lib/actions/bookings.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/actions/auth.ts"),
+    read("app/admin/bookings/page.tsx"),
+    read("app/admin/[section]/page.tsx"),
+  ]);
+  assert.match(migration, /legal_hold boolean not null default false/);
+  assert.match(migration, /archived_at \+ interval '12 months'/);
+  assert.match(migration, /record_event_booking_email_attempt/);
+  assert.match(bookingActions, /record_event_booking_email_attempt/);
+  assert.match(bookingActions, /resendBookingCancellation/);
+  assert.match(bookingsPage, /Retry cancellation email/);
+  assert.match(workshopMigration, /notification_email_attempts integer not null default 0/);
+  assert.match(workshopMigration, /record_workshop_email_attempt/);
+  assert.match(contentActions, /retryWorkshopReservationEmail/);
+  assert.match(workshopsPage, /Email delivery issues/);
+  assert.match(authActions, /auth\.signInWithPassword/);
+  assert.match(authActions, /auth\.signInWithOtp/);
+  assert.match(authActions, /auth\.resetPasswordForEmail/);
+});
+
+test("exposes normalized public configuration through a limited view", async () => {
+  const [migration, writers, data] = await Promise.all([
+    read("supabase/migrations/202608180006_normalized_public_configuration.sql"),
+    read("supabase/migrations/202608180007_configuration_write_functions.sql"),
+    read("lib/data.ts"),
+  ]);
+  assert.match(migration, /create table if not exists public\.site_social_links/);
+  assert.match(migration, /create table if not exists public\.site_affiliates/);
+  assert.match(migration, /create table if not exists public\.donation_campaigns/);
+  assert.match(migration, /view public\.public_site_links/);
+  assert.match(writers, /replace_public_site_links/);
+  assert.match(data, /from\("donation_campaigns"\)/);
+  assert.doesNotMatch(data, /createPublicClient\(\)[\s\S]*from\("configs"\)/);
+});
+
+test("keeps public reads available during the additive projection rollout", async () => {
+  const data = await read("lib/data.ts");
+  assert.match(data, /error\?\.code === "PGRST205"/);
+  assert.match(data, /from\("public_events"\)/);
+  assert.match(data, /from\("public_committee_roster"\)/);
+  assert.match(data, /Permission or policy failures[\s\S]*must never fall through/);
+  assert.doesNotMatch(data, /isMissingProjection[\s\S]*42501/);
 });

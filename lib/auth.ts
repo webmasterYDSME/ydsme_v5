@@ -4,8 +4,38 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
-export const appRoles = ["administrator", "committee", "read-only-committee", "member"] as const;
+export const appRoles = ["member", "committee", "administrator"] as const;
 export type AppRole = (typeof appRoles)[number];
+
+export const capabilities = [
+  "portal.view",
+  "profile.manage-own",
+  "workshops.reserve-own",
+  "notices.create-own",
+  "notices.moderate",
+  "events.manage",
+  "bookings.manage",
+  "workshops.manage",
+  "documents.manage",
+  "members.manage",
+  "settings.manage",
+  "donations.view",
+  "audit.view",
+] as const;
+export type Capability = (typeof capabilities)[number];
+
+const roleCapabilities: Record<AppRole, ReadonlySet<Capability>> = {
+  member: new Set(["portal.view", "profile.manage-own", "workshops.reserve-own", "notices.create-own"]),
+  committee: new Set([
+    "portal.view", "profile.manage-own", "workshops.reserve-own", "notices.create-own",
+    "notices.moderate", "events.manage", "bookings.manage", "workshops.manage", "documents.manage",
+  ]),
+  administrator: new Set(capabilities),
+};
+
+export function hasCapability(role: AppRole, capability: Capability) {
+  return roleCapabilities[role].has(capability);
+}
 
 export async function getCurrentUser() {
   const supabase = await createClient();
@@ -23,7 +53,13 @@ export async function getRole(userId: string): Promise<AppRole> {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/signin");
-  return { user, role: await getRole(user.id) };
+  const admin = createAdminClient();
+  const [{ data: profile }, role] = await Promise.all([
+    admin.from("users").select("membership_status").eq("id", user.id).maybeSingle(),
+    getRole(user.id),
+  ]);
+  if (profile?.membership_status !== "active") redirect("/signin?error=Your+Society+access+is+not+active.");
+  return { user, role };
 }
 
 export async function requireRole(allowed: AppRole[]) {
@@ -32,6 +68,12 @@ export async function requireRole(allowed: AppRole[]) {
   return session;
 }
 
-export const canManageContent = (role: AppRole) => role === "administrator" || role === "committee";
-export const canViewContentManagement = (role: AppRole) => canManageContent(role) || role === "read-only-committee";
+export async function requireCapability(capability: Capability) {
+  const session = await requireUser();
+  if (!hasCapability(session.role, capability)) redirect("/dashboard?notice=not-authorised");
+  return session;
+}
+
+export const canManageContent = (role: AppRole) => hasCapability(role, "events.manage");
+export const canViewContentManagement = (role: AppRole) => hasCapability(role, "events.manage");
 export const isAdministrator = (role: AppRole) => role === "administrator";

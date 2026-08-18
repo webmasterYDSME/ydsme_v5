@@ -6,7 +6,9 @@ import {
   saveDonationSettings,
   saveSiteConfig,
 } from "@/lib/actions/content";
-import { parseDonationSettings } from "@/lib/donations";
+import { defaultDonationSettings } from "@/lib/donations";
+import { SignedUploadField } from "@/app/components/SignedUploadField";
+import { EditableLinkLists } from "@/app/components/EditableLinkLists";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ function CommitteeForm({ person }: { person?: Committee }) {
       <label>Name (blank if vacant)<input name="name" defaultValue={person?.name} /></label>
       <label>Position<input name="title" defaultValue={person?.title} required /></label>
       <label>Email<input type="email" name="email" defaultValue={person?.email} required /></label>
-      <label>Portrait<input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/avif" /></label>
+      <SignedUploadField kind="committee-image" label={person ? "Replace portrait (optional)" : "Portrait (optional)"} />
       <input type="hidden" name="file_url" value={person?.file_url || ""} />
       <button type="submit" className="button dark">Save committee record</button>
     </form>
@@ -39,21 +41,29 @@ export default async function Settings({
 }) {
   const query = await searchParams;
   const admin = createAdminClient();
-  const [{ data, error }, { data: config, error: configError }] = await Promise.all([
+  const [{ data, error }, { data: config, error: configError }, { data: socialData }, { data: affiliateData }, { data: campaignData }] = await Promise.all([
     admin.from("committees").select("id,name,title,email,file_url").order("id"),
     admin
       .from("configs")
-      .select("id,short_name,full_name,registered_name,company_no,website,telephone,registered_address,settings,socials,affiliates")
+      .select("id,short_name,full_name,registered_name,company_no,website,telephone,registered_address")
       .limit(1)
       .single(),
+    admin.from("site_social_links").select("name,url,position").order("position"),
+    admin.from("site_affiliates").select("name,url,logo_path,position").order("position"),
+    admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence"),
   ]);
 
   if (error || configError) throw new Error(error?.message || configError?.message);
   const people = (data ?? []) as Committee[];
   const address = config.registered_address as Record<string, string>;
-  const socials = config.socials as Array<{ name: string; link: string }>;
-  const affiliates = config.affiliates as Array<{ name: string; website: string; logo?: string }>;
-  const donations = parseDonationSettings(config.settings);
+  const socials = (socialData ?? []).map(item => ({ name: item.name, link: item.url }));
+  const affiliates = (affiliateData ?? []).map(item => ({ name: item.name, website: item.url, logo: item.logo_path }));
+  const generic = campaignData?.find(item => item.kind === "generic");
+  const target = campaignData?.find(item => item.kind === "target");
+  const donations = {
+    generic: generic ? { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label } : defaultDonationSettings.generic,
+    target: target ? { enabled: target.enabled, title: target.title, description: target.description, buttonLabel: target.button_label, targetPence: Number(target.target_pence), raisedPence: 0 } : defaultDonationSettings.target,
+  };
 
   return (
     <div className="portal-content">
@@ -84,25 +94,7 @@ export default async function Settings({
           <label>City<input name="city" defaultValue={address.city} required /></label>
           <label>Postcode<input name="postcode" defaultValue={address.postcode} required /></label>
           <label>Country<input name="country" defaultValue={address.country} required /></label>
-          <div className="wide settings-subsection">
-            <h3>Social links</h3>
-            {socials.map((social, index) => (
-              <div className="settings-pair" key={`${social.name}-${index}`}>
-                <label>Name<input name="social_name" defaultValue={social.name} required /></label>
-                <label>URL<input type="url" name="social_link" defaultValue={social.link} /></label>
-              </div>
-            ))}
-          </div>
-          <div className="wide settings-subsection">
-            <h3>Affiliates</h3>
-            {affiliates.map((affiliate, index) => (
-              <div className="settings-pair" key={`${affiliate.name}-${index}`}>
-                <label>Name<input name="affiliate_name" defaultValue={affiliate.name} required /></label>
-                <label>Website<input type="url" name="affiliate_website" defaultValue={affiliate.website} /></label>
-                <input type="hidden" name="affiliate_logo" value={affiliate.logo || ""} />
-              </div>
-            ))}
-          </div>
+          <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
           <button type="submit" className="button dark">Save Society settings</button>
         </form>
       </details>

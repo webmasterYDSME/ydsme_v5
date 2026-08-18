@@ -1,6 +1,7 @@
 import { ArrowUpRight, HeartHandshake, LockKeyhole, Target } from "lucide-react";
 import type { DonationCampaign, TargetDonationCampaign } from "@/lib/donations";
 import { startDonationCheckout } from "@/lib/actions/donations";
+import { CaptchaField } from "@/app/components/CaptchaField";
 
 const pounds = new Intl.NumberFormat("en-GB", {
   style: "currency",
@@ -34,6 +35,7 @@ function DonationForm({
           required
         />
       </label>
+      <CaptchaField />
       <button className="button donation-button" type="submit">
         {campaign.buttonLabel}
         <ArrowUpRight size={17} aria-hidden="true" />

@@ -1,8 +1,10 @@
 import "server-only";
 
+import { connection } from "next/server";
 import { createPublicClient, publicStorageUrl } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { defaultDonationSettings, parseDonationSettings } from "@/lib/donations";
+import { defaultDonationSettings } from "@/lib/donations";
+import { donationsEnabled, visitorBookingsEnabled } from "@/lib/features";
 
 export type EventRecord = {
   id: number;
@@ -18,6 +20,7 @@ export type EventRecord = {
   is_ticket_required: boolean;
   reservation_link: string;
   booking_enabled: boolean;
+  booking_mode: "none" | "external" | "website";
   booking_capacity: number | null;
   booked_places: number;
   available_places: number;
@@ -25,25 +28,50 @@ export type EventRecord = {
 
 export type CommitteeRecord = {
   id: number;
-  user_id: string | null;
   name: string;
   title: string;
   file_url: string;
   email: string;
 };
 
+type PublicEventRow = Omit<EventRecord, "booked_places" | "available_places">;
+
+function isMissingProjection(error: { code?: string } | null) {
+  // Only support the known expand-migration gap. Permission or policy failures
+  // must remain failures and must never fall through to an operational table.
+  return error?.code === "PGRST205";
+}
+
 export async function getPublicEvents() {
+  await connection();
   const supabase = createPublicClient();
   const today = new Date().toISOString().slice(0, 10);
-  const { data, error } = await supabase
-    .from("events")
-    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_capacity")
+  const projection = await supabase
+    .from("public_events")
+    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_mode,booking_capacity")
     .eq("event_type", "public")
+    .eq("lifecycle_status", "published")
     .gte("end_date", today)
     .order("start_date", { ascending: true })
     .order("start_time", { ascending: true });
-  if (error) throw new Error(`Unable to load public events: ${error.message}`);
-  const events = data ?? [];
+  let events: PublicEventRow[];
+  if (isMissingProjection(projection.error)) {
+    const legacy = await supabase
+      .from("events")
+      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_capacity")
+      .eq("event_type", "public")
+      .gte("end_date", today)
+      .order("start_date", { ascending: true })
+      .order("start_time", { ascending: true });
+    if (legacy.error) throw new Error("Unable to load public events.");
+    events = (legacy.data ?? []).map((event) => ({
+      ...event,
+      booking_mode: event.booking_enabled ? "website" : event.reservation_link ? "external" : "none",
+    })) as PublicEventRow[];
+  } else {
+    if (projection.error) throw new Error("Unable to load public events.");
+    events = (projection.data ?? []) as unknown as PublicEventRow[];
+  }
   if (!events.length) return [] as EventRecord[];
 
   const { data: bookings, error: bookingError } = await createAdminClient()
@@ -51,7 +79,7 @@ export async function getPublicEvents() {
     .select("event_id,party_size,status")
     .in("event_id", events.map((event) => event.id))
     .in("status", ["confirmed", "checked_in"]);
-  if (bookingError) throw new Error(`Unable to load event availability: ${bookingError.message}`);
+  if (bookingError) throw new Error("Unable to load event availability.");
 
   const totals = new Map<number, number>();
   for (const booking of bookings ?? []) {
@@ -61,6 +89,7 @@ export async function getPublicEvents() {
     const bookedPlaces = totals.get(event.id) ?? 0;
     return {
       ...event,
+      booking_enabled: event.booking_enabled && visitorBookingsEnabled(),
       booked_places: bookedPlaces,
       available_places: event.booking_capacity ? Math.max(0, event.booking_capacity - bookedPlaces) : 0,
     };
@@ -68,22 +97,25 @@ export async function getPublicEvents() {
 }
 
 export async function getBookableEvent(id: number) {
+  await connection();
+  if (!visitorBookingsEnabled()) return null;
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
   const { data: event, error } = await admin.from("events")
-    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_capacity")
+    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,reservation_link,booking_enabled,booking_mode,booking_capacity")
     .eq("id", id)
     .eq("event_type", "public")
+    .eq("lifecycle_status", "published")
     .gte("end_date", today)
     .maybeSingle();
-  if (error) throw new Error(`Unable to load the event: ${error.message}`);
-  if (!event?.booking_enabled || !event.booking_capacity) return null;
+  if (error) throw new Error("Unable to load the event.");
+  if (!event || event.booking_mode !== "website" || !event.booking_enabled || !event.booking_capacity) return null;
 
   const { data: bookings, error: bookingError } = await admin.from("event_bookings")
     .select("party_size")
     .eq("event_id", id)
     .in("status", ["confirmed", "checked_in"]);
-  if (bookingError) throw new Error(`Unable to load event availability: ${bookingError.message}`);
+  if (bookingError) throw new Error("Unable to load event availability.");
   const bookedPlaces = (bookings ?? []).reduce((total, booking) => total + booking.party_size, 0);
   return {
     ...event,
@@ -93,29 +125,45 @@ export async function getBookableEvent(id: number) {
 }
 
 export async function getCommittees() {
+  await connection();
   const supabase = createPublicClient();
-  const { data, error } = await supabase
-    .from("committees")
-    .select("id,user_id,name,title,file_url,email")
+  const projection = await supabase
+    .from("public_committee_roster")
+    .select("id,name,title,file_url,email")
     .order("id", { ascending: true });
-  if (error) throw new Error(`Unable to load the committee: ${error.message}`);
-  return (data ?? []) as CommitteeRecord[];
+  if (isMissingProjection(projection.error)) {
+    const legacy = await supabase
+      .from("committees")
+      .select("id,name,title,file_url,email")
+      .order("id", { ascending: true });
+    if (legacy.error) throw new Error("Unable to load the committee.");
+    return (legacy.data ?? []) as CommitteeRecord[];
+  }
+  if (projection.error) throw new Error("Unable to load the committee.");
+  return (projection.data ?? []) as CommitteeRecord[];
 }
 
 export async function getDonationSettings() {
-  const supabase = createPublicClient();
+  await connection();
+  if (!donationsEnabled()) return defaultDonationSettings;
   const admin = createAdminClient();
   const [{ data, error }, { data: raisedPence, error: totalError }] = await Promise.all([
-    supabase.from("configs").select("settings").limit(1).maybeSingle(),
+    admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence"),
     admin.rpc("target_donation_total_pence"),
   ]);
 
   if (error || !data) return defaultDonationSettings;
-  const donations = parseDonationSettings(data.settings);
+  const generic = data.find(item => item.kind === "generic");
+  const target = data.find(item => item.kind === "target");
+  if (!generic || !target) return defaultDonationSettings;
   return {
-    ...donations,
+    generic: { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label },
     target: {
-      ...donations.target,
+      enabled: target.enabled,
+      title: target.title,
+      description: target.description,
+      buttonLabel: target.button_label,
+      targetPence: Number(target.target_pence),
       raisedPence: totalError ? 0 : Number(raisedPence ?? 0),
     },
   };

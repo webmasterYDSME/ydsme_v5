@@ -7,8 +7,9 @@ import { TargetDonation } from "./components/DonationCards";
 import { getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 
-export const dynamic = "force-static";
-export const revalidate = 300;
+// Public database content is resolved at request time. This keeps builds
+// independent from a live Supabase schema and avoids caching operational data.
+export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
   title: "Miniature Railways & Live Steam in York",
   description: "Discover miniature railways, live steam and model engineering across five woodland acres at York Model Engineers in Dringhouses.",

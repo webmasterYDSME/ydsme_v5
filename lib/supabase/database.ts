@@ -7,8 +7,72 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          actor_role: string
+          actor_user_id: string | null
+          after_state: Json | null
+          before_state: Json | null
+          entity_id: string
+          entity_type: string
+          id: string
+          occurred_at: string
+          summary: string
+        }
+        Insert: {
+          action: string
+          actor_role: string
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          occurred_at?: string
+          summary?: string
+        }
+        Update: {
+          action?: string
+          actor_role?: string
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          occurred_at?: string
+          summary?: string
+        }
+        Relationships: []
+      }
       committees: {
         Row: {
           created_at: string
@@ -113,6 +177,81 @@ export type Database = {
         }
         Relationships: []
       }
+      documents: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          category: Database["public"]["Enums"]["file_category"]
+          created_at: string
+          created_by: string | null
+          descriptions: string
+          file_url: string
+          id: string
+          lifecycle_status: string
+          name: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          category: Database["public"]["Enums"]["file_category"]
+          created_at?: string
+          created_by?: string | null
+          descriptions?: string
+          file_url?: string
+          id?: string
+          lifecycle_status?: string
+          name?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          category?: Database["public"]["Enums"]["file_category"]
+          created_at?: string
+          created_by?: string | null
+          descriptions?: string
+          file_url?: string
+          id?: string
+          lifecycle_status?: string
+          name?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      donation_campaigns: {
+        Row: {
+          button_label: string
+          description: string
+          enabled: boolean
+          kind: string
+          target_pence: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          button_label: string
+          description: string
+          enabled?: boolean
+          kind: string
+          target_pence?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          button_label?: string
+          description?: string
+          enabled?: boolean
+          kind?: string
+          target_pence?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       donation_payments: {
         Row: {
           amount_pence: number
@@ -158,98 +297,17 @@ export type Database = {
         }
         Relationships: []
       }
-      documents: {
-        Row: {
-          category: Database["public"]["Enums"]["file_category"]
-          created_at: string
-          created_by: string | null
-          descriptions: string
-          file_url: string
-          id: string
-          name: string
-        }
-        Insert: {
-          category: Database["public"]["Enums"]["file_category"]
-          created_at?: string
-          created_by?: string | null
-          descriptions?: string
-          file_url?: string
-          id?: string
-          name?: string
-        }
-        Update: {
-          category?: Database["public"]["Enums"]["file_category"]
-          created_at?: string
-          created_by?: string | null
-          descriptions?: string
-          file_url?: string
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      events: {
-        Row: {
-          booking_capacity: number | null
-          booking_enabled: boolean
-          created_at: string
-          descriptions: string
-          display_in_homepage: boolean
-          end_date: string
-          end_time: string
-          event_type: Database["public"]["Enums"]["event_type"]
-          file_url: string
-          host: string
-          id: number
-          is_ticket_required: boolean
-          name: string
-          reservation_link: string
-          start_date: string
-          start_time: string
-        }
-        Insert: {
-          booking_capacity?: number | null
-          booking_enabled?: boolean
-          created_at?: string
-          descriptions?: string
-          display_in_homepage?: boolean
-          end_date: string
-          end_time: string
-          event_type?: Database["public"]["Enums"]["event_type"]
-          file_url?: string
-          host?: string
-          id?: number
-          is_ticket_required?: boolean
-          name?: string
-          reservation_link?: string
-          start_date: string
-          start_time: string
-        }
-        Update: {
-          booking_capacity?: number | null
-          booking_enabled?: boolean
-          created_at?: string
-          descriptions?: string
-          display_in_homepage?: boolean
-          end_date?: string
-          end_time?: string
-          event_type?: Database["public"]["Enums"]["event_type"]
-          file_url?: string
-          host?: string
-          id?: number
-          is_ticket_required?: boolean
-          name?: string
-          reservation_link?: string
-          start_date?: string
-          start_time?: string
-        }
-        Relationships: []
-      }
       event_bookings: {
         Row: {
+          anonymized_at: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           checked_in_at: string | null
           checked_in_by: string | null
+          confirmation_email_attempts: number
           confirmation_email_error: string | null
+          confirmation_email_last_attempt_at: string | null
           confirmation_email_sent_at: string | null
           created_at: string
           email: string
@@ -258,13 +316,20 @@ export type Database = {
           lead_name: string
           party_size: number
           reference_code: string
+          retention_until: string | null
           status: string
           updated_at: string
         }
         Insert: {
+          anonymized_at?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           checked_in_at?: string | null
           checked_in_by?: string | null
+          confirmation_email_attempts?: number
           confirmation_email_error?: string | null
+          confirmation_email_last_attempt_at?: string | null
           confirmation_email_sent_at?: string | null
           created_at?: string
           email: string
@@ -273,13 +338,20 @@ export type Database = {
           lead_name: string
           party_size: number
           reference_code: string
+          retention_until?: string | null
           status?: string
           updated_at?: string
         }
         Update: {
+          anonymized_at?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           checked_in_at?: string | null
           checked_in_by?: string | null
+          confirmation_email_attempts?: number
           confirmation_email_error?: string | null
+          confirmation_email_last_attempt_at?: string | null
           confirmation_email_sent_at?: string | null
           created_at?: string
           email?: string
@@ -288,6 +360,7 @@ export type Database = {
           lead_name?: string
           party_size?: number
           reference_code?: string
+          retention_until?: string | null
           status?: string
           updated_at?: string
         }
@@ -301,57 +374,162 @@ export type Database = {
           },
         ]
       }
+      events: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          booking_capacity: number | null
+          booking_enabled: boolean
+          booking_mode: string
+          created_at: string
+          descriptions: string
+          display_in_homepage: boolean
+          end_date: string
+          end_time: string
+          event_type: Database["public"]["Enums"]["event_type"]
+          file_url: string
+          host: string
+          id: number
+          is_ticket_required: boolean
+          lifecycle_status: string
+          name: string
+          reservation_link: string
+          start_date: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          booking_capacity?: number | null
+          booking_enabled?: boolean
+          booking_mode?: string
+          created_at?: string
+          descriptions?: string
+          display_in_homepage?: boolean
+          end_date: string
+          end_time: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          file_url?: string
+          host?: string
+          id?: number
+          is_ticket_required?: boolean
+          lifecycle_status?: string
+          name?: string
+          reservation_link?: string
+          start_date: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          booking_capacity?: number | null
+          booking_enabled?: boolean
+          booking_mode?: string
+          created_at?: string
+          descriptions?: string
+          display_in_homepage?: boolean
+          end_date?: string
+          end_time?: string
+          event_type?: Database["public"]["Enums"]["event_type"]
+          file_url?: string
+          host?: string
+          id?: number
+          is_ticket_required?: boolean
+          lifecycle_status?: string
+          name?: string
+          reservation_link?: string
+          start_date?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       feeds: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           author_id: string | null
           author_name: string | null
           created_at: string
           id: number
+          lifecycle_status: string
           message: string
           title: string | null
           type: Database["public"]["Enums"]["feed_type"]
+          updated_at: string
           url: string | null
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           author_id?: string | null
           author_name?: string | null
           created_at?: string
           id?: number
+          lifecycle_status?: string
           message: string
           title?: string | null
           type: Database["public"]["Enums"]["feed_type"]
+          updated_at?: string
           url?: string | null
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           author_id?: string | null
           author_name?: string | null
           created_at?: string
           id?: number
+          lifecycle_status?: string
           message?: string
           title?: string | null
           type?: Database["public"]["Enums"]["feed_type"]
+          updated_at?: string
           url?: string | null
         }
         Relationships: []
       }
       participants: {
         Row: {
+          cancelled_at: string | null
           created_at: string
           id: number
+          notification_email_attempts: number
+          notification_email_error: string | null
+          notification_email_last_attempt_at: string | null
+          notification_email_sent_at: string | null
           participant_id: string
           reference_id: string
+          reservation_status: string
+          updated_at: string
         }
         Insert: {
+          cancelled_at?: string | null
           created_at?: string
           id?: number
+          notification_email_attempts?: number
+          notification_email_error?: string | null
+          notification_email_last_attempt_at?: string | null
+          notification_email_sent_at?: string | null
           participant_id?: string
           reference_id?: string
+          reservation_status?: string
+          updated_at?: string
         }
         Update: {
+          cancelled_at?: string | null
           created_at?: string
           id?: number
+          notification_email_attempts?: number
+          notification_email_error?: string | null
+          notification_email_last_attempt_at?: string | null
+          notification_email_sent_at?: string | null
           participant_id?: string
           reference_id?: string
+          reservation_status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -440,21 +618,102 @@ export type Database = {
         }
         Relationships: []
       }
-      role_permissions: {
+      rate_limits: {
+        Row: {
+          attempts: number
+          expires_at: string
+          scope: string
+          subject_hash: string
+          window_started_at: string
+        }
+        Insert: {
+          attempts?: number
+          expires_at: string
+          scope: string
+          subject_hash: string
+          window_started_at: string
+        }
+        Update: {
+          attempts?: number
+          expires_at?: string
+          scope?: string
+          subject_hash?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
+      site_affiliates: {
         Row: {
           id: number
-          permission: Database["public"]["Enums"]["app_permission"]
-          role: Database["public"]["Enums"]["app_role"]
+          logo_path: string
+          name: string
+          position: number
+          url: string
         }
         Insert: {
           id?: number
-          permission: Database["public"]["Enums"]["app_permission"]
-          role: Database["public"]["Enums"]["app_role"]
+          logo_path?: string
+          name: string
+          position: number
+          url?: string
         }
         Update: {
           id?: number
-          permission?: Database["public"]["Enums"]["app_permission"]
-          role?: Database["public"]["Enums"]["app_role"]
+          logo_path?: string
+          name?: string
+          position?: number
+          url?: string
+        }
+        Relationships: []
+      }
+      site_social_links: {
+        Row: {
+          id: number
+          name: string
+          position: number
+          url: string
+        }
+        Insert: {
+          id?: number
+          name: string
+          position: number
+          url?: string
+        }
+        Update: {
+          id?: number
+          name?: string
+          position?: number
+          url?: string
+        }
+        Relationships: []
+      }
+      stripe_webhook_events: {
+        Row: {
+          claimed_at: string | null
+          completed_at: string | null
+          event_type: string
+          last_error: string | null
+          processing_status: string
+          processed_at: string
+          stripe_event_id: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          completed_at?: string | null
+          event_type: string
+          last_error?: string | null
+          processing_status?: string
+          processed_at?: string
+          stripe_event_id: string
+        }
+        Update: {
+          claimed_at?: string | null
+          completed_at?: string | null
+          event_type?: string
+          last_error?: string | null
+          processing_status?: string
+          processed_at?: string
+          stripe_event_id?: string
         }
         Relationships: []
       }
@@ -523,17 +782,17 @@ export type Database = {
       user_roles: {
         Row: {
           id: number
-          role: Database["public"]["Enums"]["app_role"]
+          role: string
           user_id: string
         }
         Insert: {
           id?: number
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: string
           user_id: string
         }
         Update: {
           id?: number
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -548,6 +807,8 @@ export type Database = {
       }
       users: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           avatar_url: string | null
           billing_address: Json | null
           birthday: string | null
@@ -556,10 +817,16 @@ export type Database = {
           email: string
           full_name: string | null
           id: string
+          legal_hold: boolean
+          membership_status: string
           payment_method: Json | null
+          retention_until: string | null
           title: string
+          updated_at: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           avatar_url?: string | null
           billing_address?: Json | null
           birthday?: string | null
@@ -568,10 +835,16 @@ export type Database = {
           email: string
           full_name?: string | null
           id: string
+          legal_hold?: boolean
+          membership_status?: string
           payment_method?: Json | null
+          retention_until?: string | null
           title?: string
+          updated_at?: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           avatar_url?: string | null
           billing_address?: Json | null
           birthday?: string | null
@@ -580,13 +853,19 @@ export type Database = {
           email?: string
           full_name?: string | null
           id?: string
+          legal_hold?: boolean
+          membership_status?: string
           payment_method?: Json | null
+          retention_until?: string | null
           title?: string
+          updated_at?: string
         }
         Relationships: []
       }
       workshops: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           created_at: string
           created_by: string
           date: string
@@ -594,14 +873,18 @@ export type Database = {
           end_time: string
           host_name: string
           id: string
+          lifecycle_status: string
           maximum_participants: number
           notes: string
           start_time: string
           title: string
+          updated_at: string
           venue: string
           virtual_link: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           created_at?: string
           created_by?: string
           date: string
@@ -609,14 +892,18 @@ export type Database = {
           end_time: string
           host_name: string
           id?: string
+          lifecycle_status?: string
           maximum_participants?: number
           notes?: string
           start_time: string
           title: string
+          updated_at?: string
           venue?: string
           virtual_link?: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           created_at?: string
           created_by?: string
           date?: string
@@ -624,10 +911,12 @@ export type Database = {
           end_time?: string
           host_name?: string
           id?: string
+          lifecycle_status?: string
           maximum_participants?: number
           notes?: string
           start_time?: string
           title?: string
+          updated_at?: string
           venue?: string
           virtual_link?: string
         }
@@ -635,20 +924,61 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_committee_roster: {
+        Row: {
+          email: string | null
+          file_url: string | null
+          id: number | null
+          name: string | null
+          title: string | null
+        }
+        Relationships: []
+      }
+      public_events: {
+        Row: {
+          booking_capacity: number | null
+          booking_enabled: boolean | null
+          booking_mode: string | null
+          descriptions: string | null
+          display_in_homepage: boolean | null
+          end_date: string | null
+          end_time: string | null
+          event_type: Database["public"]["Enums"]["event_type"] | null
+          file_url: string | null
+          id: number | null
+          is_ticket_required: boolean | null
+          lifecycle_status: string | null
+          name: string | null
+          reservation_link: string | null
+          start_date: string | null
+          start_time: string | null
+        }
+        Relationships: []
+      }
+      public_site_links: {
+        Row: {
+          link_type: string | null
+          logo_path: string | null
+          name: string | null
+          position: number | null
+          url: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      authorize: {
-        Args: {
-          requested_permission: Database["public"]["Enums"]["app_permission"]
-        }
+      cancel_workshop_place: {
+        Args: { p_workshop_id: string }
         Returns: boolean
       }
-      custom_access_token_hook: {
+      consume_rate_limit: {
         Args: {
-          event: Json
+          p_max_attempts: number
+          p_scope: string
+          p_subject_hash: string
+          p_window_seconds: number
         }
-        Returns: Json
+        Returns: boolean
       }
       create_event_booking: {
         Args: {
@@ -664,49 +994,50 @@ export type Database = {
           reference_code: string
         }[]
       }
-      target_donation_total_pence: {
-        Args: Record<PropertyKey, never>
-        Returns: number
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      has_app_role: { Args: { allowed_roles: string[] }; Returns: boolean }
+      record_event_booking_email_attempt: {
+        Args: { p_booking_id: string; p_error: string; p_sent: boolean }
+        Returns: boolean
       }
+      record_workshop_email_attempt: {
+        Args: { p_error?: string; p_reservation_id: number; p_sent: boolean }
+        Returns: boolean
+      }
+      replace_donation_campaigns: {
+        Args: { p_generic: Json; p_target: Json }
+        Returns: undefined
+      }
+      replace_public_site_links: {
+        Args: { p_affiliates: Json; p_socials: Json }
+        Returns: undefined
+      }
+      reserve_workshop_place: {
+        Args: { p_workshop_id: string }
+        Returns: {
+          available_places: number
+          reservation_id: number
+          reserved_places: number
+        }[]
+      }
+      run_dashboard_retention: { Args: never; Returns: Json }
+      target_donation_total_pence: { Args: never; Returns: number }
       update_users: {
         Args: {
-          user_id: string
-          user_email: string
-          user_title: string
-          user_full_name: string
-          user_birthday: string
-          user_contact_number: string
           user_avatar_url: string
           user_billing_address: Json
+          user_birthday: string
           user_club_rules_agreement: boolean
+          user_contact_number: string
+          user_email: string
+          user_full_name: string
+          user_id: string
+          user_title: string
         }
         Returns: undefined
       }
     }
     Enums: {
-      app_permission:
-        | "moderator.select"
-        | "moderator.create"
-        | "moderator.update"
-        | "moderator.delete"
-        | "committee.select"
-        | "committee.create"
-        | "committee.update"
-        | "committee.delete"
-        | "read-only-committee.select"
-        | "read-only-committee.create"
-        | "read-only-committee.update"
-        | "read-only-committee.delete"
-        | "administrator.select"
-        | "administrator.create"
-        | "administrator.update"
-        | "administrator.delete"
-      app_role:
-        | "member"
-        | "moderator"
-        | "committee"
-        | "read-only-committee"
-        | "administrator"
       event_type: "member_only" | "public"
       feed_type:
         | "event"
@@ -741,27 +1072,33 @@ export type Database = {
   }
 }
 
-type PublicSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
-  PublicTableNameOrOptions extends
-    | keyof (PublicSchema["Tables"] & PublicSchema["Views"])
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-        Database[PublicTableNameOrOptions["schema"]]["Views"])
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
-      Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : PublicTableNameOrOptions extends keyof (PublicSchema["Tables"] &
-        PublicSchema["Views"])
-    ? (PublicSchema["Tables"] &
-        PublicSchema["Views"])[PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -769,20 +1106,24 @@ export type Tables<
     : never
 
 export type TablesInsert<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -790,20 +1131,24 @@ export type TablesInsert<
     : never
 
 export type TablesUpdate<
-  PublicTableNameOrOptions extends
-    | keyof PublicSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
-> = PublicTableNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : PublicTableNameOrOptions extends keyof PublicSchema["Tables"]
-    ? PublicSchema["Tables"][PublicTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -811,29 +1156,75 @@ export type TablesUpdate<
     : never
 
 export type Enums<
-  PublicEnumNameOrOptions extends
-    | keyof PublicSchema["Enums"]
-    | { schema: keyof Database },
-  EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
-    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
-> = PublicEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : PublicEnumNameOrOptions extends keyof PublicSchema["Enums"]
-    ? PublicSchema["Enums"][PublicEnumNameOrOptions]
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof PublicSchema["CompositeTypes"]
-    | { schema: keyof Database },
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
-    ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {
+      event_type: ["member_only", "public"],
+      feed_type: [
+        "event",
+        "user",
+        "document",
+        "workshop",
+        "message",
+        "broadcast",
+      ],
+      file_category: [
+        "publication",
+        "minute",
+        "insurance-policy",
+        "club-rule",
+        "calendar",
+        "boiler-guide",
+        "others",
+      ],
+      pricing_plan_interval: ["day", "week", "month", "year"],
+      pricing_type: ["one_time", "recurring"],
+      subscription_status: [
+        "trialing",
+        "active",
+        "canceled",
+        "incomplete",
+        "incomplete_expired",
+        "past_due",
+        "unpaid",
+        "paused",
+      ],
+    },
+  },
+} as const

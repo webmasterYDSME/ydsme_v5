@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
+import { writeAudit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 
@@ -102,6 +103,34 @@ export async function POST(request: Request) {
   }
 
   try {
+    const admin = createAdminClient();
+    const { error: claimError } = await admin.from("stripe_webhook_events").insert({
+      stripe_event_id: event.id,
+      event_type: event.type,
+      processing_status: "processing",
+      claimed_at: new Date().toISOString(),
+    });
+    if (claimError?.code === "23505") {
+      const { data: existing, error: existingError } = await admin.from("stripe_webhook_events")
+        .select("processing_status")
+        .eq("stripe_event_id", event.id)
+        .single();
+      if (existingError) throw new Error("Unable to inspect the existing Stripe event claim.");
+      if (existing.processing_status === "processed") return Response.json({ received: true, replay: true });
+      if (existing.processing_status === "processing") {
+        return Response.json({ received: false, retry: true }, { status: 409 });
+      }
+      const { data: reclaimed, error: reclaimError } = await admin.from("stripe_webhook_events")
+        .update({ processing_status: "processing", claimed_at: new Date().toISOString(), last_error: null })
+        .eq("stripe_event_id", event.id)
+        .eq("processing_status", "failed")
+        .select("stripe_event_id")
+        .maybeSingle();
+      if (reclaimError) throw new Error("Unable to reclaim the failed Stripe event.");
+      if (!reclaimed) return Response.json({ received: false, retry: true }, { status: 409 });
+    }
+    if (claimError && claimError.code !== "23505") throw new Error("Unable to claim Stripe event for processing.");
+
     let targetChanged = false;
     if (
       event.type === "checkout.session.completed" ||
@@ -112,9 +141,28 @@ export async function POST(request: Request) {
       targetChanged = await recordRefund(event);
     }
 
+    await writeAudit({
+      actorUserId: null,
+      actorRole: "system",
+      action: `stripe.${event.type}`,
+      entityType: "stripe_event",
+      entityId: event.id,
+      after: { processed: true, target_campaign_changed: targetChanged },
+    });
+    const { error: completionError } = await admin.from("stripe_webhook_events")
+      .update({ processing_status: "processed", completed_at: new Date().toISOString(), last_error: null })
+      .eq("stripe_event_id", event.id)
+      .eq("processing_status", "processing")
+      .select("stripe_event_id")
+      .single();
+    if (completionError) throw new Error("Unable to complete the Stripe event claim.");
     if (targetChanged) revalidatePath("/");
     return Response.json({ received: true });
   } catch (error) {
+    await createAdminClient().from("stripe_webhook_events").update({
+      processing_status: "failed",
+      last_error: "Processing failed; retry required.",
+    }).eq("stripe_event_id", event.id).eq("processing_status", "processing");
     console.error(
       "Stripe webhook processing failed",
       error instanceof Error ? error.message : "Unknown error",

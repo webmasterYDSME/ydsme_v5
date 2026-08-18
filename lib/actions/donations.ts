@@ -1,46 +1,36 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { getDonationSettings } from "@/lib/data";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
+import { verifyTurnstile } from "@/lib/turnstile";
+import { donationsEnabled } from "@/lib/features";
+import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 
 const checkoutSchema = z.object({
   campaign: z.enum(["generic", "target"]),
   amount: z.coerce.number().min(1).max(10_000),
 });
 
-function safeOrigin(value: string | null | undefined) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    const isLocal = url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname);
-    if (url.protocol !== "https:" && !isLocal) return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-async function checkoutOrigin() {
-  const configured = safeOrigin(process.env.NEXT_PUBLIC_SITE_URL);
-  if (configured) return configured;
-  const requestOrigin = safeOrigin((await headers()).get("origin"));
-  if (requestOrigin) return requestOrigin;
-  throw new Error("The public site URL is not configured for Stripe Checkout.");
-}
-
 export async function startDonationCheckout(formData: FormData) {
+  if (!donationsEnabled()) redirect("/?donation=unavailable");
   const parsed = checkoutSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/?donation=invalid");
+  if (!await verifyTurnstile(String(formData.get("captchaToken") || ""))) {
+    redirect("/?donation=security-check");
+  }
+  if (!await consumeRateLimit("donation-checkout", 8, 15 * 60, parsed.data.campaign)) {
+    redirect("/?donation=rate-limited");
+  }
 
   const donations = await getDonationSettings();
   const campaign = donations[parsed.data.campaign];
   if (!campaign.enabled) redirect("/?donation=unavailable");
 
   const amountPence = Math.round(parsed.data.amount * 100);
-  const origin = await checkoutOrigin();
+  const origin = getTrustedAppOrigin();
   const cancelPath = parsed.data.campaign === "target" ? "/" : "/visitors";
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
