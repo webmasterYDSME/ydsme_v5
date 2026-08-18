@@ -90,20 +90,32 @@ test("rejects duplicate MemberMojo IDs and missing required columns", () => {
   );
 });
 
-test("preview implementation is administrator-gated, read-only, and service-role-only", async () => {
-  const [action, comparison, component, migration] = await Promise.all([
+test("preview and apply are administrator-gated, same-file, atomic and service-role-only", async () => {
+  const [action, comparison, component, foundation, applyMigration] = await Promise.all([
     readFile(new URL("../lib/actions/member-imports.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/membermojo.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/MemberMojoImportForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180026_membermojo_import_foundation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180027_membermojo_import_apply.sql", import.meta.url), "utf8"),
   ]);
 
-  assert.match(action, /requireCapability\("members\.manage"\)/);
+  assert.equal(action.match(/requireCapability\("members\.manage"\)/g)?.length, 2);
+  assert.match(action, /z\.literal\("APPLY MEMBERMOJO IMPORT"\)/);
+  assert.match(action, /z\.literal\("yes"\)/);
   assert.doesNotMatch(action, /\.(?:insert|update|upsert|delete)\(\{/);
   assert.doesNotMatch(comparison, /\.(?:insert|update|upsert|delete)\(\{/);
-  assert.match(component, /Preview is read-only/);
-  assert.match(component, /<button type="button" disabled>Apply import<\/button>/);
-  assert.match(migration, /alter table public\.membership_imports enable row level security/);
-  assert.match(migration, /revoke all on table public\.membership_imports from public, anon, authenticated/);
-  assert.match(migration, /grant select, insert, update, delete on table public\.membership_imports to service_role/);
+  assert.match(comparison, /p_file_sha256: fileSha256/);
+  assert.doesNotMatch(comparison.match(/const records = parsed\.records[\s\S]*?as Json;/)?.[0] ?? "", /sourceSiteRole/);
+  assert.match(component, /select the exact CSV used for preview/);
+  assert.match(component, /Apply membership records/);
+  assert.match(foundation, /alter table public\.membership_imports enable row level security/);
+  assert.match(foundation, /revoke all on table public\.membership_imports from public, anon, authenticated/);
+  assert.match(applyMigration, /for update/);
+  assert.match(applyMigration, /p_file_sha256 is distinct from v_import\.file_sha256/);
+  assert.match(applyMigration, /on conflict \(source, external_id\) do update/);
+  assert.match(applyMigration, /insert into public\.audit_logs/);
+  assert.match(applyMigration, /portal_accounts_changed', 0/);
+  assert.doesNotMatch(applyMigration, /(?:update|insert into|delete from) public\.(?:users|user_roles)/);
+  assert.match(applyMigration, /revoke all on function public\.apply_membermojo_membership_import[\s\S]*from public, anon, authenticated/);
+  assert.match(applyMigration, /grant execute on function public\.apply_membermojo_membership_import[\s\S]*to service_role/);
 });

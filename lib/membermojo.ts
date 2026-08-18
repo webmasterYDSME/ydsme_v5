@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { parseMemberMojoCsv, type MemberMojoIssue, type MemberMojoRecord } from "@/lib/membermojo-csv";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Json } from "@/lib/supabase/database";
 
 export const memberImportModes = ["update_only", "complete_active_snapshot"] as const;
 export type MemberImportMode = (typeof memberImportModes)[number];
@@ -19,6 +20,9 @@ export type MemberImportPreviewRow = {
 };
 
 export type MemberImportPreview = {
+  importId: string;
+  canApply: boolean;
+  expiresAt: string;
   fileFingerprint: string;
   mode: MemberImportMode;
   encoding: "utf-8" | "windows-1252";
@@ -41,6 +45,19 @@ export type MemberImportPreview = {
   issues: MemberMojoIssue[];
   issuesTruncated: boolean;
 };
+
+export type AppliedMemberImport = {
+  processedCount: number;
+  createdCount: number;
+  refreshedCount: number;
+};
+
+export class MemberMojoImportApplyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MemberMojoImportApplyError";
+  }
+}
 
 type ExistingMembership = {
   external_id: string;
@@ -99,6 +116,7 @@ function changedFields(record: MemberMojoRecord, existing: ExistingMembership) {
 export async function buildMemberMojoPreview(
   bytes: Uint8Array,
   mode: MemberImportMode,
+  actorId: string,
 ): Promise<MemberImportPreview> {
   const parsed = parseMemberMojoCsv(bytes);
   const admin = createAdminClient();
@@ -170,27 +188,92 @@ export async function buildMemberMojoPreview(
   const issueLimit = 150;
   const rowLimit = 150;
   const reviewRows = rows.filter(row => row.outcome !== "unchanged");
+  const totals: MemberImportPreview["totals"] = {
+    uploadedRows: rows.length,
+    activeRows: parsed.records.filter(record => record.sourceState.toLowerCase() === "active").length,
+    existingRecords: rows.filter(row => row.outcome !== "new").length,
+    newRecords: rows.filter(row => row.outcome === "new").length,
+    changedRecords: rows.filter(row => row.outcome === "changed").length,
+    unchangedRecords: rows.filter(row => row.outcome === "unchanged").length,
+    alreadyLinked: rows.filter(row => row.portalMatch === "already-linked").length,
+    portalLinkCandidates: rows.filter(row => row.portalMatch === "candidate").length,
+    missingFromSnapshot,
+    warnings: parsed.issues.filter(issue => issue.severity === "warning").length,
+    information: parsed.issues.filter(issue => issue.severity === "information").length,
+  };
+  const issueCounts = Object.fromEntries([...new Set(parsed.issues.map(issue => issue.code))]
+    .map(code => [code, parsed.issues.filter(issue => issue.code === code).length]));
+  const fileSha256 = createHash("sha256").update(bytes).digest("hex");
+  const { data: registrationData, error: registrationError } = await admin.rpc("register_membermojo_import_preview", {
+    p_actor_id: actorId,
+    p_file_sha256: fileSha256,
+    p_import_mode: mode,
+    p_row_count: rows.length,
+    p_source_encoding: parsed.encoding,
+    p_summary: {
+      totals,
+      ignored_column_count: parsed.ignoredHeaders.length,
+      issue_counts: issueCounts,
+    },
+  });
+  const registration = registrationData?.[0];
+  if (registrationError || !registration) throw new Error("Unable to register the import preview.");
+
   return {
-    fileFingerprint: createHash("sha256").update(bytes).digest("hex").slice(0, 12),
+    importId: registration.import_id,
+    canApply: registration.import_status === "previewed",
+    expiresAt: registration.import_expires_at,
+    fileFingerprint: fileSha256.slice(0, 12),
     mode,
     encoding: parsed.encoding,
     ignoredHeaders: parsed.ignoredHeaders,
-    totals: {
-      uploadedRows: rows.length,
-      activeRows: parsed.records.filter(record => record.sourceState.toLowerCase() === "active").length,
-      existingRecords: rows.filter(row => row.outcome !== "new").length,
-      newRecords: rows.filter(row => row.outcome === "new").length,
-      changedRecords: rows.filter(row => row.outcome === "changed").length,
-      unchangedRecords: rows.filter(row => row.outcome === "unchanged").length,
-      alreadyLinked: rows.filter(row => row.portalMatch === "already-linked").length,
-      portalLinkCandidates: rows.filter(row => row.portalMatch === "candidate").length,
-      missingFromSnapshot,
-      warnings: parsed.issues.filter(issue => issue.severity === "warning").length,
-      information: parsed.issues.filter(issue => issue.severity === "information").length,
-    },
+    totals,
     rows: reviewRows.slice(0, rowLimit),
     rowsTruncated: reviewRows.length > rowLimit,
     issues: parsed.issues.slice(0, issueLimit),
     issuesTruncated: parsed.issues.length > issueLimit,
+  };
+}
+
+function safeApplyMessage(message: string) {
+  if (message.includes("membermojo_import_already_applied")) return "This MemberMojo file has already been applied.";
+  if (message.includes("membermojo_preview_expired")) return "This preview has expired. Create a new preview before applying the file.";
+  if (message.includes("membermojo_file_changed")) return "The selected file is not the file used for this preview.";
+  if (message.includes("membermojo_preview_not_found")) return "This preview is unavailable or belongs to another administrator.";
+  return "The membership import could not be applied. No membership records were changed.";
+}
+
+export async function applyMemberMojoMembershipImport(
+  bytes: Uint8Array,
+  importId: string,
+  actorId: string,
+): Promise<AppliedMemberImport> {
+  const parsed = parseMemberMojoCsv(bytes);
+  const fileSha256 = createHash("sha256").update(bytes).digest("hex");
+  const records = parsed.records.map(record => ({
+    external_id: record.externalId,
+    title: record.title,
+    first_name: record.firstName,
+    last_name: record.lastName,
+    contact_email: record.contactEmail,
+    membership_type: record.membershipType,
+    source_state: record.sourceState,
+    source_expires_on: record.expiresOn,
+    source_renewed_on: record.renewedOn,
+    source_member_since: record.memberSince,
+    source_rules_agreement: record.rulesAgreement,
+  })) as Json;
+  const { data, error } = await createAdminClient().rpc("apply_membermojo_membership_import", {
+    p_actor_id: actorId,
+    p_file_sha256: fileSha256,
+    p_import_id: importId,
+    p_records: records,
+  });
+  const result = data?.[0];
+  if (error || !result) throw new MemberMojoImportApplyError(safeApplyMessage(error?.message ?? "missing result"));
+  return {
+    processedCount: result.processed_count,
+    createdCount: result.created_count,
+    refreshedCount: result.refreshed_count,
   };
 }

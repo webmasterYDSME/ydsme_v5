@@ -1,14 +1,50 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertTriangle, Database, FileSearch, FileUp, Link2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Database, FileSearch, FileUp, Link2, ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { previewMemberMojoImport, type MemberImportActionState } from "@/lib/actions/member-imports";
+import {
+  applyMemberMojoImport,
+  previewMemberMojoImport,
+  type MemberImportActionState,
+  type MemberImportApplyActionState,
+} from "@/lib/actions/member-imports";
+import type { MemberImportPreview } from "@/lib/membermojo";
 
 const initialState: MemberImportActionState = { status: "idle" };
+const initialApplyState: MemberImportApplyActionState = { status: "idle" };
 
 function plural(value: number, singular: string, pluralForm = `${singular}s`) {
   return `${value} ${value === 1 ? singular : pluralForm}`;
+}
+
+function ApplyMemberImportForm({ preview }: { preview: MemberImportPreview }) {
+  const [state, formAction] = useActionState(applyMemberMojoImport, initialApplyState);
+
+  if (state.status === "success") {
+    return <section className="member-import-applied" aria-live="polite"><Check/><div><span>Import applied</span><h3>{plural(state.processedCount ?? 0, "membership record")} processed</h3><p>{state.createdCount} created · {state.refreshedCount} existing records refreshed. Portal accounts, Auth emails and website roles were unchanged.</p></div></section>;
+  }
+  if (!preview.canApply) {
+    return <section className="member-import-apply-placeholder"><ShieldCheck/><div><strong>This file has already been applied</strong><p>The fingerprint matches a completed import. Upload a newer MemberMojo export to make another change.</p></div><button type="button" disabled>Applied</button></section>;
+  }
+
+  return <section className="member-import-apply-panel" aria-labelledby="member-import-apply-heading">
+    <div className="member-import-section-heading"><div><span>Administrator confirmation</span><h3 id="member-import-apply-heading">Apply membership records</h3><p>Preview expires {new Date(preview.expiresAt).toLocaleString("en-GB")}.</p></div><ShieldCheck/></div>
+    <form action={formAction} className="stack-form member-import-apply-form">
+      <input type="hidden" name="importId" value={preview.importId}/>
+      <p className="form-help">For integrity checking, select the exact CSV used for preview. The full file is reparsed but is not retained.</p>
+      <label>Same MemberMojo CSV
+        <input type="file" name="file" accept="text/csv,.csv" required/>
+      </label>
+      <label className="member-import-review-check" aria-label="I have reviewed the preview exceptions"><input type="checkbox" name="reviewed" value="yes" required/><span>I have reviewed the preview exceptions and understand that they will be stored exactly as supplied by MemberMojo.</span></label>
+      <label>Type <code className="member-import-confirmation-phrase">APPLY MEMBERMOJO IMPORT</code> to confirm
+        <input name="confirmation" autoComplete="off" required/>
+      </label>
+      <div className="member-import-apply-scope"><strong>This operation will:</strong><ul><li>Create or refresh MemberMojo membership records.</li><li>Preserve existing portal-account links and lifecycle fields.</li></ul><strong>It will not:</strong><ul><li>Change portal access, Auth emails or website roles.</li><li>Suspend, archive or delete anyone.</li></ul></div>
+      {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
+      <PendingSubmitButton className="button dark" pendingLabel="Applying atomically…"><Database/>Apply membership records</PendingSubmitButton>
+    </form>
+  </section>;
 }
 
 export function MemberMojoImportForm() {
@@ -18,7 +54,7 @@ export function MemberMojoImportForm() {
 
   return <div className="member-import-workspace">
     <section className="portal-card member-import-card">
-      <div className="member-import-safety"><ShieldCheck/><div><strong>Preview is read-only</strong><p>The uploaded file is parsed in memory. Previewing does not update memberships, portal access, roles, or Supabase Auth.</p></div></div>
+      <div className="member-import-safety"><ShieldCheck/><div><strong>Preview does not change member data</strong><p>The raw file is parsed in memory and never retained. Only its fingerprint and aggregate review counts are registered for confirmation and audit integrity.</p></div></div>
       <form action={formAction} className="stack-form member-import-form">
         <label>MemberMojo CSV file
           <input type="file" name="file" accept="text/csv,.csv" required/>
@@ -63,7 +99,7 @@ export function MemberMojoImportForm() {
       </details> : null}
 
       {preview.ignoredHeaders.length ? <details className="member-import-details"><summary>Ignored CSV columns ({preview.ignoredHeaders.length})</summary><p className="form-help">{preview.ignoredHeaders.join(", ")}</p></details> : null}
-      <div className="member-import-apply-placeholder"><ShieldCheck/><div><strong>Applying changes is not enabled yet</strong><p>This first implementation deliberately stops after comparison. The next stage will add an administrator confirmation step, an audit record, and safe, reversible membership updates.</p></div><button type="button" disabled>Apply import</button></div>
+      <ApplyMemberImportForm key={preview.importId} preview={preview}/>
     </section> : null}
   </div>;
 }

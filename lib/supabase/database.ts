@@ -1208,6 +1208,19 @@ export type Database = {
       }
     }
     Functions: {
+      apply_membermojo_membership_import: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_id: string
+          p_records: Json
+        }
+        Returns: {
+          created_count: number
+          processed_count: number
+          refreshed_count: number
+        }[]
+      }
       cancel_workshop_place: {
         Args: { p_workshop_id: string }
         Returns: boolean
@@ -1277,6 +1290,21 @@ export type Database = {
       record_event_booking_email_attempt: {
         Args: { p_booking_id: string; p_error: string; p_sent: boolean }
         Returns: boolean
+      }
+      register_membermojo_import_preview: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_mode: string
+          p_row_count: number
+          p_source_encoding: string
+          p_summary: Json
+        }
+        Returns: {
+          import_expires_at: string
+          import_id: string
+          import_status: string
+        }[]
       }
       record_workshop_email_attempt: {
         Args: { p_error?: string; p_reservation_id: number; p_sent: boolean }
