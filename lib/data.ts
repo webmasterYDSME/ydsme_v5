@@ -5,6 +5,11 @@ import { createPublicClient, publicStorageUrl } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { defaultDonationSettings } from "@/lib/donations";
 import { donationsEnabled, visitorBookingsEnabled } from "@/lib/features";
+import {
+  ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
+  ANNOUNCEMENT_TITLE_MAX_LENGTH,
+  fitAnnouncementText,
+} from "@/lib/announcements";
 
 export type EventRecord = {
   id: number;
@@ -32,6 +37,14 @@ export type CommitteeRecord = {
   title: string;
   file_url: string;
   email: string;
+};
+
+export type AnnouncementRecord = {
+  id: number;
+  title: string;
+  body: string;
+  published_at: string;
+  updated_at: string;
 };
 
 type PublicEventRow = Omit<EventRecord, "booked_places" | "available_places">;
@@ -141,6 +154,29 @@ export async function getCommittees() {
   }
   if (projection.error) throw new Error("Unable to load the committee.");
   return (projection.data ?? []) as CommitteeRecord[];
+}
+
+export async function getPublicAnnouncements(limit?: number) {
+  await connection();
+  const supabase = createPublicClient();
+  let query = supabase
+    .from("public_announcements")
+    .select("id,title,body,published_at,updated_at")
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false });
+  if (limit) query = query.limit(limit);
+  const { data, error } = await query;
+  if (error) throw new Error("Unable to load public announcements.");
+  return (data ?? []) as AnnouncementRecord[];
+}
+
+export async function getCarriageAnnouncements(limit = 6) {
+  const announcements = await getPublicAnnouncements(limit);
+  return announcements.map((announcement) => ({
+    ...announcement,
+    title: fitAnnouncementText(announcement.title, ANNOUNCEMENT_TITLE_MAX_LENGTH),
+    body: fitAnnouncementText(announcement.body, ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH),
+  }));
 }
 
 export async function getDonationSettings() {

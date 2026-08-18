@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, DM_Sans } from "next/font/google";
+import NextTopLoader from "nextjs-toploader";
+import type { ReactNode } from "react";
 import "./globals.css";
-import {ReactNode} from "react";
 import { organisationJsonLd, safeJsonLd } from "@/lib/seo";
 
 const display = Cormorant_Garamond({ variable: "--font-display", subsets: ["latin"], weight: ["400","500","600","700"], style: ["normal","italic"], display: "swap", preload: false });
@@ -44,5 +45,22 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <html lang="en-GB"><body className={`${display.variable} ${sans.variable}`}><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(organisationJsonLd) }} />{children}</body></html>;
+  return (
+    <html lang="en-GB">
+      <body className={`${display.variable} ${sans.variable}`}>
+        <NextTopLoader
+          color="#d5a84b"
+          height={3}
+          showSpinner={false}
+          shadow="0 0 10px rgba(213, 168, 75, 0.65)"
+          showForHashAnchor={false}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(organisationJsonLd) }}
+        />
+        {children}
+      </body>
+    </html>
+  );
 }

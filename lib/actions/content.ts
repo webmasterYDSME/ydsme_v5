@@ -12,6 +12,10 @@ import { finalizeQuarantinedUpload } from "@/lib/uploads";
 import { sendWorkshopReservationUpdate } from "@/lib/booking-email";
 import { safeHttpUrl } from "@/lib/security-input";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
+import {
+  ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
+  ANNOUNCEMENT_TITLE_MAX_LENGTH,
+} from "@/lib/announcements";
 
 const text = (min = 1, max = 5000) => z.string().trim().min(min).max(max);
 const idString = z.string().min(1).max(100);
@@ -39,6 +43,13 @@ const workshopSchema = z.object({
   date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8), host_name: text(2, 180), venue: text(2, 240),
   virtual_link: optionalUrl, maximum_participants: z.coerce.number().int().min(1).max(500),
   lifecycle_status: z.enum(["draft", "published", "cancelled"]),
+});
+
+const announcementSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  title: text(2, ANNOUNCEMENT_TITLE_MAX_LENGTH),
+  body: text(2, ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH),
+  lifecycle_status: z.enum(["draft", "published"]),
 });
 
 const bool = (formData: FormData, name: string) => formData.get(name) === "on" || formData.get(name) === "true";
@@ -139,6 +150,77 @@ export async function saveWorkshop(formData: FormData) {
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "workshop.updated" : "workshop.created", entityType: "workshop", entityId: saved.id, after: { title: values.title, date: values.date, lifecycle_status } });
   revalidatePath("/dashboard"); revalidatePath("/admin/workshops");
   redirect("/admin/workshops?notice=workshop-saved");
+}
+
+export async function saveAnnouncement(formData: FormData) {
+  const { user, role } = await requireRole(["administrator", "committee"]);
+  const parsed = announcementSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) redirect("/admin/announcements?error=Please+check+the+announcement+title+and+message.");
+  const { id, ...values } = parsed.data;
+  const admin = createAdminClient();
+  const { data: before } = id
+    ? await admin.from("announcements").select("title,body,lifecycle_status,published_at").eq("id", id).maybeSingle()
+    : { data: null };
+  const now = new Date().toISOString();
+  const savedValues = {
+    ...values,
+    published_at: values.lifecycle_status === "published" ? before?.published_at ?? now : null,
+    archived_at: null,
+    archived_by: null,
+    updated_at: now,
+  };
+  const query = id
+    ? admin.from("announcements").update(savedValues).eq("id", id).select("id").single()
+    : admin.from("announcements").insert({ ...savedValues, created_by: user.id }).select("id").single();
+  const { data: saved, error } = await query;
+  if (error) redirect("/admin/announcements?error=The+announcement+could+not+be+saved.");
+  await writeAudit({
+    actorUserId: user.id,
+    actorRole: role,
+    action: id ? "announcement.updated" : "announcement.created",
+    entityType: "announcement",
+    entityId: saved.id,
+    summary: values.title,
+    before,
+    after: { title: values.title, lifecycle_status: values.lifecycle_status },
+  });
+  revalidatePath("/");
+  revalidatePath("/news");
+  revalidatePath("/admin/announcements");
+  redirect("/admin/announcements?notice=announcement-saved");
+}
+
+export async function archiveAnnouncement(formData: FormData) {
+  const { user, role } = await requireRole(["administrator", "committee"]);
+  const id = z.coerce.number().int().positive().parse(formData.get("id"));
+  const now = new Date().toISOString();
+  const { data, error } = await createAdminClient().from("announcements")
+    .update({ lifecycle_status: "archived", archived_at: now, archived_by: user.id, updated_at: now })
+    .eq("id", id)
+    .neq("lifecycle_status", "archived")
+    .select("id,title")
+    .maybeSingle();
+  if (error) redirect("/admin/announcements?error=The+announcement+could+not+be+archived.");
+  if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.archived", entityType: "announcement", entityId: id, summary: data.title });
+  revalidatePath("/");
+  revalidatePath("/news");
+  revalidatePath("/admin/announcements");
+}
+
+export async function restoreAnnouncement(formData: FormData) {
+  const { user, role } = await requireRole(["administrator", "committee"]);
+  const id = z.coerce.number().int().positive().parse(formData.get("id"));
+  const now = new Date().toISOString();
+  const { data, error } = await createAdminClient().from("announcements")
+    .update({ lifecycle_status: "draft", published_at: null, archived_at: null, archived_by: null, updated_at: now })
+    .eq("id", id)
+    .eq("lifecycle_status", "archived")
+    .select("id,title")
+    .maybeSingle();
+  if (error || !data) redirect("/admin/announcements?error=The+announcement+could+not+be+restored.");
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.restored", entityType: "announcement", entityId: id, summary: data.title, after: { lifecycle_status: "draft" } });
+  revalidatePath("/admin/announcements");
+  redirect("/admin/announcements?notice=announcement-restored");
 }
 
 export async function deleteWorkshop(formData: FormData) {

@@ -1,21 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, MailCheck, Pencil, Plus, RotateCcw, Search, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   cancelWorkshopReservation,
+  archiveAnnouncement,
   deleteEvent,
   deleteMember,
   deleteWorkshop,
   inviteMember,
   purgeMember,
   restoreEvent,
+  restoreAnnouncement,
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
   saveEvent,
+  saveAnnouncement,
   saveWorkshop,
   suspendMember,
   updateMemberRole,
@@ -23,11 +26,13 @@ import {
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { AnnouncementFields } from "@/app/components/AnnouncementFields";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
 
 type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; reservation_link:string; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
+type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
 
@@ -50,22 +55,38 @@ function EventForm({ event }: { event?: EventRow }) {
   </form>;
 }
 
+function AnnouncementForm({ announcement }: { announcement?: AnnouncementRow }) {
+  return <form action={saveAnnouncement} className="editor-form">
+    {announcement ? <input type="hidden" name="id" value={announcement.id}/> : null}
+    <AnnouncementFields initialTitle={announcement?.title} initialDescription={announcement?.body}/>
+    <label>Status<select name="lifecycle_status" defaultValue={announcement?.lifecycle_status === "archived" ? "draft" : announcement?.lifecycle_status || "published"}><option value="published">Published</option><option value="draft">Draft</option></select><small>Published announcements are immediately visible to everyone.</small></label>
+    <PendingSubmitButton className="button dark" pendingLabel={announcement ? "Saving changes…" : "Posting announcement…"}>{announcement ? "Save changes" : "Post announcement"}</PendingSubmitButton>
+  </form>;
+}
+
 function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
   return <form action={saveWorkshop} className="editor-form">{workshop ? <input type="hidden" name="id" value={workshop.id}/> : null}<label className="wide">Workshop title<input name="title" defaultValue={workshop?.title} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={workshop?.descriptions} rows={4} required/></label><label>Date<input type="date" name="date" defaultValue={workshop?.date} required/></label><label>Status<select name="lifecycle_status" defaultValue={workshop?.lifecycle_status === "archived" ? "draft" : workshop?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label><label>Host<input name="host_name" defaultValue={workshop?.host_name} required/></label><label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label><label>Venue<input name="venue" defaultValue={workshop?.venue} required/></label><label>Maximum places<input type="number" min="1" max="500" name="maximum_participants" defaultValue={workshop?.maximum_participants || 20} required/></label><label className="wide">Virtual link<input type="url" name="virtual_link" defaultValue={workshop?.virtual_link}/></label><label className="wide">Notes<textarea name="notes" defaultValue={workshop?.notes} rows={3}/></label><PendingSubmitButton className="button dark" pendingLabel={workshop ? "Saving changes…" : "Creating workshop…"}>{workshop ? "Save changes" : "Create workshop"}</PendingSubmitButton></form>;
 }
 
 function statusNotice(value?: string) {
-  const messages: Record<string, string> = { "event-saved": "Event saved.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
+  const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "event-saved": "Event saved.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
   return value ? messages[value] : null;
 }
 
 export default async function AdminSection({ params, searchParams }: { params: Promise<{ section: string }>; searchParams: Promise<Query> }) {
   const [{ section }, query, session] = await Promise.all([params, searchParams, requireUser()]);
-  if (!( ["events", "workshops", "members"] as const).includes(section as never)) notFound();
-  const needed = section === "events" ? "events.manage" : section === "workshops" ? "workshops.manage" : "members.manage";
+  if (!( ["announcements", "events", "workshops", "members"] as const).includes(section as never)) notFound();
+  const needed = section === "announcements" ? "announcements.manage" : section === "events" ? "events.manage" : section === "workshops" ? "workshops.manage" : "members.manage";
   if (!hasCapability(session.role, needed)) notFound();
   const admin = createAdminClient();
   const notice = statusNotice(query.notice);
+
+  if (section === "announcements") {
+    const { data, error } = await admin.from("announcements").select("id,title,body,lifecycle_status,published_at,updated_at").order("updated_at", { ascending: false });
+    if (error) throw new Error("Unable to load announcements.");
+    const announcements = (data ?? []) as AnnouncementRow[];
+    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}<details className="manager-panel" open={!announcements.length}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details><div className="admin-list">{announcements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div></div>;
+  }
 
   if (section === "events") {
     const { data, error } = await admin.from("events").select("*").order("start_date", { ascending: false });

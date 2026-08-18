@@ -31,6 +31,44 @@ test("keeps private events off public pages", async () => {
   assert.doesNotMatch(events, /member_only/);
 });
 
+test("publishes announcements through a safe public projection and staff-only actions", async () => {
+  const [migration, limitsMigration, descriptionMigration, limits, actions, data, home, train, sitemap, adminPage, news] = await Promise.all([
+    read("supabase/migrations/202608180016_public_announcements.sql"),
+    read("supabase/migrations/202608180017_announcement_carriage_limits.sql"),
+    read("supabase/migrations/202608180018_announcement_description_length.sql"),
+    read("lib/announcements.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/data.ts"),
+    read("app/page.tsx"),
+    read("app/components/RailSite.tsx"),
+    read("app/sitemap.ts"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/news/page.tsx"),
+  ]);
+  assert.match(migration, /alter table public\.announcements enable row level security/);
+  assert.match(migration, /revoke all on table public\.announcements from public, anon, authenticated/);
+  assert.match(migration, /view public\.public_announcements/);
+  assert.match(migration, /where lifecycle_status = 'published'/);
+  assert.match(actions, /saveAnnouncement[\s\S]*requireRole\(\["administrator", "committee"\]\)/);
+  assert.match(actions, /archiveAnnouncement[\s\S]*requireRole\(\["administrator", "committee"\]\)/);
+  assert.match(limitsMigration, /between 2 and 26/);
+  assert.match(limitsMigration, /between 2 and 120/);
+  assert.match(descriptionMigration, /between 2 and 120/);
+  assert.match(limits, /ANNOUNCEMENT_TITLE_MAX_LENGTH = 26/);
+  assert.match(limits, /ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH = 120/);
+  assert.match(data, /from\("public_announcements"\)/);
+  assert.match(home, /getCarriageAnnouncements\(6\)/);
+  assert.match(home, /<InteractiveSteamTrain announcements=/);
+  assert.match(train, /setInterval\([\s\S]*setAnnouncementIndex/);
+  assert.match(train, /announcement \? <Link className="train-banner" href="\/news"/);
+  assert.match(train, /announcement \? <span className="train-coupler"/);
+  assert.doesNotMatch(train, /const nav = \[[^\n]*News/);
+  assert.match(train, /Footer navigation[\s\S]*href="\/news"/);
+  assert.match(sitemap, /path: "\/news"/);
+  assert.match(news, /getPublicAnnouncements\(\)/);
+  assert.match(adminPage, /section === "announcements"/);
+});
+
 test("requires action-level roles before privileged writes", async () => {
   const [actions, uploads, uploadField] = await Promise.all([
     read("lib/actions/content.ts"),

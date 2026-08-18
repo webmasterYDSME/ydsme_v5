@@ -4,7 +4,7 @@ import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { InteractiveSteamTrain, PageShell, Reveal, SectionHeading } from "./components/RailSite";
 import { TargetDonation } from "./components/DonationCards";
-import { getDonationSettings, getPublicEvents } from "@/lib/data";
+import { getCarriageAnnouncements, getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 
 // Public database content is resolved at request time. This keeps builds
@@ -24,7 +24,7 @@ const interests = [
 ];
 
 export default async function Home() {
-  const [publicEvents, donations] = await Promise.all([getPublicEvents(), getDonationSettings()]);
+  const [publicEvents, donations, announcements] = await Promise.all([getPublicEvents(), getDonationSettings(), getCarriageAnnouncements(6)]);
   const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>
@@ -39,7 +39,7 @@ export default async function Home() {
           <div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div>
         </div>
         {nextEvent ? <Link className="next-running-badge" href="/events"><span className="next-running-kicker"><i aria-hidden="true"/> Next public running</span><time className="next-running-date" dateTime={`${nextEvent.start_date}T${nextEvent.start_time.slice(0,5)}`}><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><span>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()}<small>{format(parseISO(nextEvent.start_date), "yyyy")}</small></span></time><span className="next-running-name">{nextEvent.name}</span><span className="next-running-detail">{format(parseISO(nextEvent.start_date), "EEE")} · {nextEvent.start_time.slice(0,5)}</span><span className="next-running-arrow" aria-hidden="true"><ArrowUpRight/></span></Link> : null}
-        <div className="track-line"><InteractiveSteamTrain/></div>
+        <div className="track-line"><InteractiveSteamTrain announcements={announcements.map(({ id, title, body }) => ({ id, title, body }))}/></div>
       </section>
 
       <section className="ticker" aria-label="Club highlights"><div>FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM <i/> YORK’S HIDDEN RAILWAY <i/> FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM</div></section>

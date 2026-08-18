@@ -34,6 +34,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          body: string
+          created_at: string
+          created_by: string
+          id: number
+          lifecycle_status: string
+          published_at: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          body: string
+          created_at?: string
+          created_by: string
+          id?: number
+          lifecycle_status?: string
+          published_at?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          body?: string
+          created_at?: string
+          created_by?: string
+          id?: number
+          lifecycle_status?: string
+          published_at?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -924,6 +963,16 @@ export type Database = {
       }
     }
     Views: {
+      public_announcements: {
+        Row: {
+          body: string | null
+          id: number | null
+          published_at: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
       public_committee_roster: {
         Row: {
           email: string | null

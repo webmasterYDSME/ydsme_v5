@@ -31,13 +31,23 @@ export function Reveal({children, delay=0}:{children:ReactNode;delay?:number}) {
 
 export function SectionHeading({children}:{children:ReactNode}) { return <h2 className="section-heading">{children}</h2>; }
 
-export function InteractiveSteamTrain() {
+export function InteractiveSteamTrain({ announcements }: { announcements: Array<{ id: number; title: string; body: string }> }) {
   const [playing, setPlaying] = useState(false);
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+  const [rotationPaused, setRotationPaused] = useState(false);
   const resetTimer = useRef<number | null>(null);
 
   useEffect(() => () => {
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
   }, []);
+
+  useEffect(() => {
+    if (announcements.length < 2 || rotationPaused || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const rotationTimer = window.setInterval(() => setAnnouncementIndex((index) => index + 1), 9000);
+    return () => window.clearInterval(rotationTimer);
+  }, [announcements.length, rotationPaused]);
+
+  const announcement = announcements.length ? announcements[announcementIndex % announcements.length] : undefined;
 
   const soundDoubleHorn = async () => {
     if (playing) return;
@@ -110,7 +120,12 @@ export function InteractiveSteamTrain() {
     }, 1850);
   };
 
-  return <button className={playing ? "train-marker is-sounding" : "train-marker"} type="button" onClick={soundDoubleHorn} disabled={playing} aria-label="Sound the steam train double horn"><span className="loco-smoke" aria-hidden="true"><i/><i/><i/></span><span className="mini-loco" aria-hidden="true"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></span></button>;
+  return <div className={announcement ? "train-consist has-announcement" : "train-consist"} onMouseEnter={()=>setRotationPaused(true)} onMouseLeave={()=>setRotationPaused(false)} onFocus={()=>setRotationPaused(true)} onBlur={()=>setRotationPaused(false)}>
+    {announcements.length ? <div className="sr-only" role="region" aria-label="Public announcements">{announcements.map(item=><p key={item.id}><strong>{item.title}.</strong> {item.body}</p>)}</div> : null}
+    {announcement ? <Link className="train-banner" href="/news" aria-label="Read all news and announcements"><div className="train-banner-copy" key={announcement.id}><div className="train-banner-heading"><strong>{announcement.title}</strong><span className="train-banner-label">Public announcement</span></div><p>{announcement.body}</p></div><div className="train-banner-wheels" aria-hidden="true"><i/><i/></div></Link> : null}
+    {announcement ? <span className="train-coupler" aria-hidden="true"/> : null}
+    <button className={playing ? "train-marker is-sounding" : "train-marker"} type="button" onClick={soundDoubleHorn} disabled={playing} aria-label="Sound the steam train double horn"><span className="loco-smoke" aria-hidden="true"><i/><i/><i/></span><span className="mini-loco" aria-hidden="true"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></span></button>
+  </div>;
 }
 
 export function PageShell({children}:{children:ReactNode}) {
@@ -133,7 +148,7 @@ export function PageShell({children}:{children:ReactNode}) {
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
     <main id="main-content">{children}</main>
-    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address>Dringhouses<br/>York · YO24 2JE</address><a className="footer-email" href="mailto:secretary@yorkmodelengineers.co.uk">secretary@yorkmodelengineers.co.uk</a></div><nav aria-label="Footer navigation"><h3>Explore</h3>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}<a href="https://www.facebook.com/YorkModelEngineers">Facebook</a></nav><nav aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav><div className="footer-small"><p>York City & District Society<br/>of Model Engineers Limited<br/>Company no. 26478R</p><p>© 2026 YCDSME</p></div></footer>
+    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address>Dringhouses<br/>York · YO24 2JE</address><a className="footer-email" href="mailto:secretary@yorkmodelengineers.co.uk">secretary@yorkmodelengineers.co.uk</a></div><nav aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}<a href="https://www.facebook.com/YorkModelEngineers">Facebook</a></nav><nav aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav><div className="footer-small"><p>York City & District Society<br/>of Model Engineers Limited<br/>Company no. 26478R</p><p>© 2026 YCDSME</p></div></footer>
   </>;
 }
 

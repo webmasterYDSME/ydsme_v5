@@ -7,6 +7,7 @@ declare
   workshop_id uuid := gen_random_uuid();
   reservation_id bigint;
   event_id bigint;
+  visible_announcement_count integer;
   second_reservation_rejected boolean := false;
   second_booking_rejected boolean := false;
 begin
@@ -34,6 +35,8 @@ begin
   end if;
   if has_table_privilege('anon', 'public.events', 'SELECT')
     or not has_table_privilege('anon', 'public.public_events', 'SELECT')
+    or has_table_privilege('anon', 'public.announcements', 'SELECT')
+    or not has_table_privilege('anon', 'public.public_announcements', 'SELECT')
     or has_column_privilege('authenticated', 'public.events', 'host', 'SELECT')
     or not has_column_privilege('authenticated', 'public.events', 'id', 'SELECT') then
     raise exception 'Public or member event projections expose operational columns';
@@ -47,6 +50,17 @@ begin
   if has_table_privilege('service_role', 'public.audit_logs', 'UPDATE')
     or has_table_privilege('service_role', 'public.audit_logs', 'DELETE') then
     raise exception 'Audit history is mutable';
+  end if;
+
+  insert into public.announcements (title, body, lifecycle_status, created_by, published_at)
+  values
+    ('Contract draft note', 'This must remain private.', 'draft', first_member, null),
+    ('Contract public note', 'This must be publicly visible.', 'published', first_member, now());
+  select count(*)::integer into visible_announcement_count
+  from public.public_announcements
+  where title like 'Contract % note';
+  if visible_announcement_count <> 1 then
+    raise exception 'Public announcement projection leaked a draft or hid a published record';
   end if;
 
   insert into public.workshops (id, title, descriptions, date, start_time, end_time, host_name, created_by, maximum_participants)
