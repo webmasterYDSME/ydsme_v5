@@ -113,6 +113,51 @@ export type Database = {
         }
         Relationships: []
       }
+      donation_payments: {
+        Row: {
+          amount_pence: number
+          campaign: string
+          created_at: string
+          currency: string
+          id: string
+          paid_at: string
+          payment_status: string
+          refunded_pence: number
+          stripe_checkout_session_id: string
+          stripe_event_id: string
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_pence: number
+          campaign: string
+          created_at?: string
+          currency: string
+          id?: string
+          paid_at: string
+          payment_status: string
+          refunded_pence?: number
+          stripe_checkout_session_id: string
+          stripe_event_id: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_pence?: number
+          campaign?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          paid_at?: string
+          payment_status?: string
+          refunded_pence?: number
+          stripe_checkout_session_id?: string
+          stripe_event_id?: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           category: Database["public"]["Enums"]["file_category"]
@@ -145,6 +190,8 @@ export type Database = {
       }
       events: {
         Row: {
+          booking_capacity: number | null
+          booking_enabled: boolean
           created_at: string
           descriptions: string
           display_in_homepage: boolean
@@ -161,6 +208,8 @@ export type Database = {
           start_time: string
         }
         Insert: {
+          booking_capacity?: number | null
+          booking_enabled?: boolean
           created_at?: string
           descriptions?: string
           display_in_homepage?: boolean
@@ -177,6 +226,8 @@ export type Database = {
           start_time: string
         }
         Update: {
+          booking_capacity?: number | null
+          booking_enabled?: boolean
           created_at?: string
           descriptions?: string
           display_in_homepage?: boolean
@@ -193,6 +244,62 @@ export type Database = {
           start_time?: string
         }
         Relationships: []
+      }
+      event_bookings: {
+        Row: {
+          checked_in_at: string | null
+          checked_in_by: string | null
+          confirmation_email_error: string | null
+          confirmation_email_sent_at: string | null
+          created_at: string
+          email: string
+          event_id: number
+          id: string
+          lead_name: string
+          party_size: number
+          reference_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          checked_in_at?: string | null
+          checked_in_by?: string | null
+          confirmation_email_error?: string | null
+          confirmation_email_sent_at?: string | null
+          created_at?: string
+          email: string
+          event_id: number
+          id?: string
+          lead_name: string
+          party_size: number
+          reference_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          checked_in_at?: string | null
+          checked_in_by?: string | null
+          confirmation_email_error?: string | null
+          confirmation_email_sent_at?: string | null
+          created_at?: string
+          email?: string
+          event_id?: number
+          id?: string
+          lead_name?: string
+          party_size?: number
+          reference_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_bookings_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       feeds: {
         Row: {
@@ -543,6 +650,24 @@ export type Database = {
         }
         Returns: Json
       }
+      create_event_booking: {
+        Args: {
+          p_email: string
+          p_event_id: number
+          p_lead_name: string
+          p_party_size: number
+          p_reference_code: string
+        }
+        Returns: {
+          available_places: number
+          booking_id: string
+          reference_code: string
+        }[]
+      }
+      target_donation_total_pence: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       update_users: {
         Args: {
           user_id: string
@@ -712,5 +837,3 @@ export type CompositeTypes<
   : PublicCompositeTypeNameOrOptions extends keyof PublicSchema["CompositeTypes"]
     ? PublicSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never
-
-

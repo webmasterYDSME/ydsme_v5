@@ -8,11 +8,28 @@ import { deleteEvent, deleteMember, deleteWorkshop, inviteMember, saveEvent, sav
 
 export const dynamic = "force-dynamic";
 
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; is_ticket_required:boolean; reservation_link:string };
+type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; is_ticket_required:boolean; reservation_link:string; booking_enabled:boolean; booking_capacity:number|null };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number };
 
 function EventForm({ event }: { event?: EventRow }) {
-  return <form action={saveEvent} className="editor-form" encType="multipart/form-data">{event ? <input type="hidden" name="id" value={event.id}/> : null}<label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label><label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label><label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label><label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label><label>Event image<input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/avif"/></label><input type="hidden" name="file_url" value={event?.file_url || ""}/><label className="wide">Reservation link<input type="url" name="reservation_link" defaultValue={event?.reservation_link}/></label><label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label><label className="check"><input type="checkbox" name="is_ticket_required" defaultChecked={event?.is_ticket_required}/>Booking required</label><button type="submit" className="button dark">{event ? "Save changes" : "Create event"}</button></form>;
+  return <form action={saveEvent} className="editor-form">
+    {event ? <input type="hidden" name="id" value={event.id}/> : null}
+    <label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label>
+    <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
+    <label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label>
+    <label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label>
+    <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label>
+    <label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
+    <label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label>
+    <label>Event image<input type="file" name="image" accept="image/jpeg,image/png,image/webp,image/avif"/></label>
+    <input type="hidden" name="file_url" value={event?.file_url || ""}/>
+    <label className="wide">External reservation link (optional)<input type="url" name="reservation_link" defaultValue={event?.reservation_link}/><small>Keep this blank when using the website booking system.</small></label>
+    <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
+    <label className="check"><input type="checkbox" name="booking_enabled" defaultChecked={event?.booking_enabled}/>Use website visitor booking</label>
+    <label>Visitor capacity<input type="number" name="booking_capacity" min="1" max="10000" defaultValue={event?.booking_capacity ?? 100}/><small>Total people, not number of bookings.</small></label>
+    <p className="form-help">Website booking is for public events. It collects the lead visitor’s name, email and group size, then issues a reference for site control.</p>
+    <button type="submit" className="button dark">{event ? "Save changes" : "Create event"}</button>
+  </form>;
 }
 
 function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {

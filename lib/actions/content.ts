@@ -16,7 +16,8 @@ const eventSchema = z.object({
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
   start_date: z.iso.date(), end_date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8),
   event_type: z.enum(["public", "member_only"]), reservation_link: optionalUrl,
-  file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(), is_ticket_required: z.boolean(),
+  file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(), booking_enabled: z.boolean(),
+  booking_capacity: z.coerce.number().int().min(1).max(10000).optional(),
 });
 
 const workshopSchema = z.object({
@@ -33,11 +34,20 @@ export async function saveEvent(formData: FormData) {
     id: formData.get("id") || undefined, name: formData.get("name"), descriptions: formData.get("descriptions"),
     start_date: formData.get("start_date"), end_date: formData.get("end_date"), start_time: formData.get("start_time"), end_time: formData.get("end_time"),
     event_type: formData.get("event_type"), reservation_link: formData.get("reservation_link") || "", file_url: formData.get("file_url") || "",
-    display_in_homepage: bool(formData, "display_in_homepage"), is_ticket_required: bool(formData, "is_ticket_required"),
+    display_in_homepage: bool(formData, "display_in_homepage"), booking_enabled: bool(formData, "booking_enabled"),
+    booking_capacity: formData.get("booking_capacity") || undefined,
   });
   if (!parsed.success) redirect("/admin/events?error=Please+check+all+event+fields.");
   if (parsed.data.end_date < parsed.data.start_date) redirect("/admin/events?error=The+end+date+cannot+be+before+the+start+date.");
-  const { id, ...values } = parsed.data;
+  if (parsed.data.booking_enabled && (parsed.data.event_type !== "public" || !parsed.data.booking_capacity)) {
+    redirect("/admin/events?error=Website+booking+needs+a+public+event+and+a+visitor+capacity.");
+  }
+  const { id, booking_capacity, ...parsedValues } = parsed.data;
+  const values = {
+    ...parsedValues,
+    booking_capacity: parsedValues.booking_enabled ? booking_capacity : null,
+    is_ticket_required: parsedValues.booking_enabled || Boolean(parsedValues.reservation_link),
+  };
   const admin = createAdminClient();
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
@@ -244,6 +254,67 @@ export async function saveSiteConfig(formData: FormData) {
   if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
   revalidatePath("/settings");
   redirect("/settings?notice=config-saved");
+}
+
+export async function saveDonationSettings(formData: FormData) {
+  await requireRole(["administrator"]);
+  const parsed = z.object({
+    id: z.coerce.number().int().positive(),
+    generic_title: text(2, 120),
+    generic_description: text(2, 500),
+    generic_button_label: text(2, 40),
+    target_title: text(2, 120),
+    target_description: text(2, 500),
+    target_button_label: text(2, 40),
+    target_pounds: z.coerce.number().min(1).max(10_000_000),
+  }).safeParse(Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    redirect("/settings?error=Please+check+the+donation+content+and+campaign+amounts.");
+  }
+
+  const genericEnabled = bool(formData, "generic_enabled");
+  const targetEnabled = bool(formData, "target_enabled");
+  if ((genericEnabled || targetEnabled) && !process.env.STRIPE_SECRET_KEY) {
+    redirect("/settings?error=Add+the+Stripe+secret+key+before+enabling+donations.");
+  }
+
+  const admin = createAdminClient();
+  const { data: config, error: readError } = await admin
+    .from("configs")
+    .select("settings")
+    .eq("id", parsed.data.id)
+    .single();
+  if (readError) redirect(`/settings?error=${encodeURIComponent(readError.message)}`);
+
+  const currentSettings = config.settings && typeof config.settings === "object" && !Array.isArray(config.settings)
+    ? config.settings
+    : {};
+  const settings = {
+    ...currentSettings,
+    donations: {
+      generic: {
+        enabled: genericEnabled,
+        title: parsed.data.generic_title,
+        description: parsed.data.generic_description,
+        buttonLabel: parsed.data.generic_button_label,
+      },
+      target: {
+        enabled: targetEnabled,
+        title: parsed.data.target_title,
+        description: parsed.data.target_description,
+        buttonLabel: parsed.data.target_button_label,
+        targetPence: Math.round(parsed.data.target_pounds * 100),
+      },
+    },
+  };
+
+  const { error } = await admin.from("configs").update({ settings }).eq("id", parsed.data.id);
+  if (error) redirect(`/settings?error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/");
+  revalidatePath("/visitors");
+  revalidatePath("/settings");
+  redirect("/settings?notice=donations-saved");
 }
 
 function parseCsv(file: File) {

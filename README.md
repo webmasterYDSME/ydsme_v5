@@ -21,12 +21,15 @@ The local database currently contains a private production snapshot for developm
 ## Main routes
 
 - Public: `/`, `/visitors`, `/events`, `/club-history`, `/committees`, `/membership`
+- Public event booking: `/events/[id]/book`
 - Authentication: `/signin`, `/reset-password`, `/auth/callback`
 - Members: `/dashboard`, `/dashboard/minutes`, `/dashboard/publications`, `/dashboard/resources`, `/account`
-- Committee: `/admin/events`, `/admin/workshops`
+- Committee: `/admin/events`, `/admin/bookings`, `/admin/workshops`
 - Administrator: `/admin/members`, `/settings`
 
 Public events and committee members load from Supabase. Member-only events are only rendered inside the authenticated dashboard.
+
+Public events can optionally use capacity-limited booking. Configure `RESEND_API_KEY` and a verified `BOOKINGS_FROM_EMAIL` sender to deliver confirmations; the booking and reference are still recorded if email delivery is temporarily unavailable. Each confirmation includes a unique 1080 × 1920 mobile PNG ticket, both inline and attached, with an event-specific design and a QR code that opens the protected staff lookup. Site control can search references and check groups in at `/admin/bookings`.
 
 ## Access model
 

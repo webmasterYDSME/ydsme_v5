@@ -25,7 +25,7 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
-  icons: { icon: "/favicon.svg" },
+  icons: { icon: { url: "/favicon.png", type: "image/png", sizes: "64x64" } },
   openGraph: {
     type: "website",
     locale: "en_GB",

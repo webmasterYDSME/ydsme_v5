@@ -3,7 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { InteractiveSteamTrain, PageShell, Reveal, SectionHeading } from "./components/RailSite";
-import { getPublicEvents } from "@/lib/data";
+import { TargetDonation } from "./components/DonationCards";
+import { getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-static";
@@ -22,7 +23,7 @@ const interests = [
 ];
 
 export default async function Home() {
-  const publicEvents = await getPublicEvents();
+  const [publicEvents, donations] = await Promise.all([getPublicEvents(), getDonationSettings()]);
   const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>
@@ -51,6 +52,8 @@ export default async function Home() {
         <Image src="/images/track.webp" alt="Miniature railway track through the club grounds" fill quality={35} sizes="100vw" />
         <div className="feature-card"><span className="counter">03</span><h2>Railways,<br/>one remarkable site</h2><p>Raised and ground-level tracks engineered for locomotives from 2.5&quot; to 7.25&quot; gauge.</p></div>
       </section>
+
+      <TargetDonation campaign={donations.target} />
 
       <section className="section">
         <Reveal><div className="section-heading-row"><SectionHeading>Find your <em>fascination.</em></SectionHeading><p>Old-school craft meets new-school making. There is always another skill to learn—and someone happy to share it.</p></div></Reveal>

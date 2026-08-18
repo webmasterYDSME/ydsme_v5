@@ -88,3 +88,67 @@ test("publishes reviewed legal notices and original Society PDFs", async () => {
   assert.ok(safetyPdf.size > 300_000);
   assert.ok(historyPdf.size > 100_000);
 });
+
+test("keeps donation checkout server-side and administrator controlled", async () => {
+  const [checkout, stripe, content, cards, webhook, migration, settings] = await Promise.all([
+    read("lib/actions/donations.ts"),
+    read("lib/stripe.ts"),
+    read("lib/actions/content.ts"),
+    read("app/components/DonationCards.tsx"),
+    read("app/api/stripe/webhook/route.ts"),
+    read("supabase/migrations/202608180002_donation_webhook.sql"),
+    read("app/settings/page.tsx"),
+  ]);
+  assert.match(stripe, /process\.env\.STRIPE_SECRET_KEY/);
+  assert.match(stripe, /import "server-only"/);
+  assert.match(checkout, /amount: z\.coerce\.number\(\)\.min\(1\)\.max\(10_000\)/);
+  assert.match(checkout, /checkout\.sessions\.create/);
+  assert.match(checkout, /submit_type: "donate"/);
+  assert.doesNotMatch(checkout, /payment_method_types/);
+  assert.match(content, /saveDonationSettings[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(cards, /startDonationCheckout/);
+  assert.doesNotMatch(cards, /STRIPE_SECRET_KEY/);
+  assert.match(webhook, /request\.text\(\)/);
+  assert.match(webhook, /webhooks\.constructEvent/);
+  assert.match(webhook, /checkout\.session\.async_payment_succeeded/);
+  assert.match(webhook, /charge\.refunded/);
+  assert.match(migration, /stripe_checkout_session_id text not null unique/);
+  assert.match(migration, /alter table public\.donation_payments enable row level security/);
+  assert.match(migration, /grant execute on function public\.target_donation_total_pence\(\) to service_role/);
+  assert.doesNotMatch(content, /raised_pounds/);
+  assert.doesNotMatch(settings, /Raised so far/);
+});
+
+test("keeps visitor bookings private, capacity-safe and staff verified", async () => {
+  const [migration, actions, form, admin, data, email, ticket] = await Promise.all([
+    read("supabase/migrations/202608180003_event_bookings.sql"),
+    read("lib/actions/bookings.ts"),
+    read("app/components/BookingForm.tsx"),
+    read("app/admin/bookings/page.tsx"),
+    read("lib/data.ts"),
+    read("lib/booking-email.ts"),
+    read("lib/booking-ticket.ts"),
+  ]);
+  assert.match(migration, /alter table public\.event_bookings enable row level security/);
+  assert.match(migration, /revoke all on table public\.event_bookings from public, anon, authenticated/);
+  assert.match(migration, /for update/);
+  assert.match(migration, /reserved_places \+ p_party_size > selected_event\.booking_capacity/);
+  assert.match(migration, /event_bookings_active_email_unique/);
+  assert.match(actions, /TURNSTILE_SECRET_KEY/);
+  assert.match(actions, /requireRole\(\["administrator", "committee"\]\)/);
+  assert.match(actions, /create_event_booking/);
+  assert.match(form, /useActionState/);
+  assert.match(form, /referenceCode/);
+  assert.match(admin, /checkInBooking/);
+  assert.match(data, /available_places/);
+  assert.match(email, /Idempotency-Key/);
+  assert.match(email, /attachments/);
+  assert.match(email, /content_id/);
+  assert.match(email, /cid:\$\{ticket\.contentId\}/);
+  assert.match(ticket, /TICKET_WIDTH = 1080/);
+  assert.match(ticket, /TICKET_HEIGHT = 1920/);
+  assert.match(ticket, /QRCode\.create/);
+  assert.match(ticket, /shape-rendering="crispEdges"/);
+  assert.match(ticket, /bookingVerificationUrl/);
+  assert.doesNotMatch(email, /NEXT_PUBLIC_RESEND/);
+});

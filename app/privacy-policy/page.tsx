@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
     eyebrow="Legal · Your information"
     title="Privacy notice"
     summary="A plain-English account of the personal information the Society uses, why we use it, and the choices and rights available to you."
-    updated="17 August 2026"
+    updated="18 August 2026"
   >
     <section>
       <h2>Who we are</h2>
@@ -33,6 +33,7 @@ export default function PrivacyPolicy() {
       </ul>
       <h3>Public visitors and correspondents</h3>
       <ul>
+        <li>When an event requires advance booking, the lead visitor’s name, email address, number of people attending, booking reference and check-in status.</li>
         <li>Information you choose to send by email or otherwise provide when contacting the Society.</li>
         <li>Basic technical and security information generated when the website is used, such as IP address, browser or device information, request time and security events.</li>
       </ul>
@@ -46,7 +47,7 @@ export default function PrivacyPolicy() {
         <tbody>
           <tr><td>Process applications and administer membership, renewals, member access and benefits through membermojo</td><td>Performance of the membership agreement and the Society’s legitimate interests in running the club</td></tr>
           <tr><td>Collect membership subscriptions through membermojo, process voluntary donations through Stripe and maintain financial records</td><td>Performance of the membership agreement, the Society’s legitimate interests and compliance with legal obligations</td></tr>
-          <tr><td>Organise events, workshops, volunteer activity and Society communications</td><td>Legitimate interests in operating and promoting the Society; consent where the law requires it</td></tr>
+          <tr><td>Manage event capacity, issue visitor booking confirmations, verify arrivals, organise workshops and coordinate Society activities</td><td>Legitimate interests in operating safe, appropriately attended events; consent where the law requires it</td></tr>
           <tr><td>Protect accounts, prevent abuse and investigate security incidents</td><td>Legitimate interests in keeping members, systems and information secure</td></tr>
           <tr><td>Meet safety, insurance, governance and other legal requirements, or establish and defend legal claims</td><td>Legal obligation and legitimate interests</td></tr>
         </tbody>
@@ -56,7 +57,7 @@ export default function PrivacyPolicy() {
 
     <section>
       <h2>Where information comes from</h2>
-      <p>We normally receive information directly from you, from a parent or guardian where appropriate, or from a Society officer acting on an application or existing membership record. Membership application, renewal and subscription updates may also be received from membermojo. Donation-payment confirmations may be received from Stripe.</p>
+      <p>We normally receive information directly from you, including when you reserve event places, from a parent or guardian where appropriate, or from a Society officer acting on an application or existing membership record. Membership application, renewal and subscription updates may also be received from membermojo. Donation-payment confirmations may be received from Stripe.</p>
     </section>
 
     <section>
@@ -67,7 +68,8 @@ export default function PrivacyPolicy() {
         <li><strong>Vercel</strong> for website hosting, delivery and operational logs;</li>
         <li><strong>membermojo Ltd</strong> for membership applications, renewals, subscription collection and membership record administration;</li>
         <li><strong>Stripe</strong> solely for processing voluntary donations and associated fraud prevention and payment records; and</li>
-        <li><strong>Cloudflare Turnstile</strong> to distinguish genuine sign-in and recovery attempts from automated abuse.</li>
+        <li><strong>Resend</strong> for transactional visitor-booking confirmation emails; and</li>
+        <li><strong>Cloudflare Turnstile</strong> to distinguish genuine booking, sign-in and recovery attempts from automated abuse.</li>
       </ul>
       <p>We may disclose information to insurers, professional advisers, regulators, law-enforcement bodies or other parties where the law requires or permits it. We do not sell personal information.</p>
     </section>
@@ -79,7 +81,7 @@ export default function PrivacyPolicy() {
 
     <section>
       <h2>How long we keep information</h2>
-      <p>The core membership record is normally kept throughout membership and for up to 12 months after membership ends. Records required for accounting, tax, insurance, safety, dispute or legal purposes may be retained for the longer period required by law or reasonably needed for those purposes. Public committee details are updated when roles change. Provider backups and security logs expire according to controlled retention schedules.</p>
+      <p>The core membership record is normally kept throughout membership and for up to 12 months after membership ends. Visitor booking details are normally removed or anonymised within 90 days after the event, unless they are needed for a safety incident, dispute or legal obligation. Records required for accounting, tax, insurance, safety, dispute or legal purposes may be retained for the longer period required by law or reasonably needed for those purposes. Public committee details are updated when roles change. Provider backups and security logs expire according to controlled retention schedules.</p>
       <p>When information is no longer required, we delete it or render it anonymous.</p>
     </section>
 
