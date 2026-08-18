@@ -166,6 +166,7 @@ export async function getPublicAnnouncements(limit?: number) {
     .order("id", { ascending: false });
   if (limit) query = query.limit(limit);
   const { data, error } = await query;
+  if (isMissingProjection(error)) return [] as AnnouncementRecord[];
   if (error) throw new Error("Unable to load public announcements.");
   return (data ?? []) as AnnouncementRecord[];
 }

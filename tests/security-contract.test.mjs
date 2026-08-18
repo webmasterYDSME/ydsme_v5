@@ -57,6 +57,7 @@ test("publishes announcements through a safe public projection and staff-only ac
   assert.match(limits, /ANNOUNCEMENT_TITLE_MAX_LENGTH = 26/);
   assert.match(limits, /ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH = 120/);
   assert.match(data, /from\("public_announcements"\)/);
+  assert.match(data, /isMissingProjection\(error\)[\s\S]*return \[\] as AnnouncementRecord\[\]/);
   assert.match(home, /getCarriageAnnouncements\(6\)/);
   assert.match(home, /<InteractiveSteamTrain announcements=/);
   assert.match(train, /setInterval\([\s\S]*setAnnouncementIndex/);
