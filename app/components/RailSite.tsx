@@ -158,6 +158,6 @@ export function RailSiteFrame({children, siteConfig}:{children:ReactNode;siteCon
   </>;
 }
 
-export function InnerHero({kicker,title,copy,image,imageAlt}:{kicker:string;title:ReactNode;copy:string;image:string;imageAlt:string}) {
-  return <section className="inner-hero" aria-labelledby="inner-hero-title"><div className="inner-photo"><Image src={image} alt={imageAlt} fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" /></div><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1 id="inner-hero-title">{title}</h1><p>{copy}</p></div><div className="vertical-label" aria-hidden="true">YORK · ENGLAND · EST 1929</div></section>;
+export function InnerHero({kicker,title,copy,image,imageAlt,imagePosition}:{kicker:string;title:ReactNode;copy:string;image:string;imageAlt:string;imagePosition?:string}) {
+  return <section className="inner-hero" aria-labelledby="inner-hero-title"><div className="inner-photo"><Image src={image} alt={imageAlt} fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" style={imagePosition ? {objectPosition:imagePosition} : undefined} /></div><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1 id="inner-hero-title">{title}</h1><p>{copy}</p></div><div className="vertical-label" aria-hidden="true">YORK · ENGLAND · EST 1929</div></section>;
 }
