@@ -577,6 +577,137 @@ export type Database = {
         }
         Relationships: []
       }
+      membership_imports: {
+        Row: {
+          applied_at: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          file_sha256: string
+          id: string
+          import_mode: string
+          row_count: number
+          source: string
+          source_encoding: string
+          status: string
+          summary: Json
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          file_sha256: string
+          id?: string
+          import_mode: string
+          row_count: number
+          source?: string
+          source_encoding: string
+          status?: string
+          summary?: Json
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          file_sha256?: string
+          id?: string
+          import_mode?: string
+          row_count?: number
+          source?: string
+          source_encoding?: string
+          status?: string
+          summary?: Json
+        }
+        Relationships: []
+      }
+      membership_records: {
+        Row: {
+          auth_user_id: string | null
+          contact_email: string | null
+          created_at: string
+          external_id: string
+          first_name: string
+          id: string
+          last_name: string
+          last_seen_at: string | null
+          last_seen_import_id: string | null
+          legal_hold: boolean
+          legal_hold_reason: string | null
+          legal_hold_review_at: string | null
+          membership_ended_at: string | null
+          membership_type: string
+          retention_until: string | null
+          source: string
+          source_expires_on: string | null
+          source_member_since: string | null
+          source_renewed_on: string | null
+          source_rules_agreement: boolean | null
+          source_state: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id?: string | null
+          contact_email?: string | null
+          created_at?: string
+          external_id: string
+          first_name: string
+          id?: string
+          last_name: string
+          last_seen_at?: string | null
+          last_seen_import_id?: string | null
+          legal_hold?: boolean
+          legal_hold_reason?: string | null
+          legal_hold_review_at?: string | null
+          membership_ended_at?: string | null
+          membership_type: string
+          retention_until?: string | null
+          source?: string
+          source_expires_on?: string | null
+          source_member_since?: string | null
+          source_renewed_on?: string | null
+          source_rules_agreement?: boolean | null
+          source_state: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string | null
+          contact_email?: string | null
+          created_at?: string
+          external_id?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          last_seen_at?: string | null
+          last_seen_import_id?: string | null
+          legal_hold?: boolean
+          legal_hold_reason?: string | null
+          legal_hold_review_at?: string | null
+          membership_ended_at?: string | null
+          membership_type?: string
+          retention_until?: string | null
+          source?: string
+          source_expires_on?: string | null
+          source_member_since?: string | null
+          source_renewed_on?: string | null
+          source_rules_agreement?: boolean | null
+          source_state?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_records_last_seen_import_id_fkey"
+            columns: ["last_seen_import_id"]
+            isOneToOne: false
+            referencedRelation: "membership_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           cancelled_at: string | null
