@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
 import { Archive, CalendarDays, Download, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
@@ -42,41 +42,6 @@ type EventRow = { id:number; name:string; descriptions:string; file_url:string; 
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function compareEvents(a: EventRow, b: EventRow, status: LifecycleStatus) {
-  if (status === "published") {
-    return a.start_date.localeCompare(b.start_date)
-      || a.start_time.localeCompare(b.start_time)
-      || a.id - b.id;
-  }
-  if (status === "draft" || status === "cancelled") {
-    return b.updated_at.localeCompare(a.updated_at)
-      || b.start_date.localeCompare(a.start_date)
-      || b.start_time.localeCompare(a.start_time)
-      || b.id - a.id;
-  }
-  return b.end_date.localeCompare(a.end_date)
-    || b.start_date.localeCompare(a.start_date)
-    || b.start_time.localeCompare(a.start_time)
-    || b.id - a.id;
-}
-
-function compareWorkshops(a: WorkshopRow, b: WorkshopRow, status: LifecycleStatus) {
-  if (status === "published") {
-    return a.date.localeCompare(b.date)
-      || a.start_time.localeCompare(b.start_time)
-      || a.id.localeCompare(b.id);
-  }
-  if (status === "draft" || status === "cancelled") {
-    return b.updated_at.localeCompare(a.updated_at)
-      || b.date.localeCompare(a.date)
-      || b.start_time.localeCompare(a.start_time)
-      || b.id.localeCompare(a.id);
-  }
-  return b.date.localeCompare(a.date)
-    || b.start_time.localeCompare(a.start_time)
-    || b.id.localeCompare(a.id);
-}
 
 function EventForm({ event }: { event?: EventRow }) {
   const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
@@ -122,54 +87,67 @@ export default async function AdminSection({ params, searchParams }: { params: P
   const notice = statusNotice(query.notice);
 
   if (section === "announcements") {
-    const { data, error } = await admin.from("announcements").select("id,title,body,lifecycle_status,published_at,updated_at").order("updated_at", { ascending: false });
-    if (error) throw new Error("Unable to load announcements.");
-    const announcements = (data ?? []) as AnnouncementRow[];
     const status = query.status === "draft" || query.status === "archived" ? query.status : "published";
-    const publishedCount = announcements.filter(item => item.lifecycle_status === "published").length;
-    const draftCount = announcements.filter(item => item.lifecycle_status === "draft").length;
-    const archivedCount = announcements.filter(item => item.lifecycle_status === "archived").length;
-    const filteredAnnouncements = announcements.filter(item => item.lifecycle_status === status);
-    const pageCount = Math.max(1, Math.ceil(filteredAnnouncements.length / ANNOUNCEMENT_PAGE_SIZE));
     const requestedPage = Number(query.page);
-    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
-    const visibleAnnouncements = filteredAnnouncements.slice((currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE, currentPage * ANNOUNCEMENT_PAGE_SIZE);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const announcementStatuses = ["published", "draft", "archived"] as const;
+    const [announcementResult, ...announcementCountResults] = await Promise.all([
+      admin.from("announcements")
+        .select("id,title,body,lifecycle_status,published_at,updated_at", { count: "exact" })
+        .eq("lifecycle_status", status)
+        .order("updated_at", { ascending: false })
+        .range((currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE, currentPage * ANNOUNCEMENT_PAGE_SIZE - 1),
+      ...announcementStatuses.map((value) => admin.from("announcements").select("id", { count: "exact", head: true }).eq("lifecycle_status", value)),
+    ]);
+    if (announcementResult.error || announcementCountResults.some((result) => result.error)) throw new Error("Unable to load announcements.");
+    const visibleAnnouncements = (announcementResult.data ?? []) as AnnouncementRow[];
+    const statusCounts = Object.fromEntries(announcementStatuses.map((value, index) => [value, announcementCountResults[index].count ?? 0])) as Record<(typeof announcementStatuses)[number], number>;
+    const pageCount = Math.max(1, Math.ceil((announcementResult.count ?? 0) / ANNOUNCEMENT_PAGE_SIZE));
+    if (currentPage > pageCount) redirect(`/admin/announcements?status=${status}&page=${pageCount}`);
+    const announcementTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/announcements?status=${status}&page=${page}`;
 
     return <div className="portal-content">
       <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!announcements.length}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details>
+      <details className="manager-panel" open={!announcementTotal}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details>
       <nav className="status-filter" aria-label="Filter announcements by status">
-        <Link href="/admin/announcements?status=published" aria-current={status === "published" ? "page" : undefined}>Published <span>{publishedCount}</span></Link>
-        <Link href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{draftCount}</span></Link>
-        <Link href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{archivedCount}</span></Link>
+        <Link prefetch={false} href="/admin/announcements?status=published" aria-current={status === "published" ? "page" : undefined}>Published <span>{statusCounts.published}</span></Link>
+        <Link prefetch={false} href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
+        <Link prefetch={false} href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{statusCounts.archived}</span></Link>
       </nav>
       <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
       {!visibleAnnouncements.length ? <div className="empty-state"><Megaphone/><h2>No {status} announcements</h2><p>{status === "archived" ? "Archived announcements will appear here." : `Create or move an announcement into ${status} status to see it here.`}</p></div> : null}
-      {pageCount > 1 ? <nav className="pagination" aria-label="Announcement pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+      <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={announcementResult.count ?? 0} itemLabel="announcements" href={pageHref} ariaLabel="Announcement pages"/>
     </div>;
   }
 
   if (section === "events") {
-    const { data, error } = await admin.from("events").select("*").order("start_date", { ascending: false });
-    if (error) throw new Error("Unable to load events.");
-    const events = (data ?? []) as EventRow[];
     const status: LifecycleStatus = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status as LifecycleStatus : "published";
-    const statusCounts = {
-      published: events.filter(event => event.lifecycle_status === "published").length,
-      draft: events.filter(event => event.lifecycle_status === "draft").length,
-      cancelled: events.filter(event => event.lifecycle_status === "cancelled").length,
-      archived: events.filter(event => event.lifecycle_status === "archived").length,
-    };
-    const filteredEvents = events
-      .filter(event => event.lifecycle_status === status)
-      .sort((a, b) => compareEvents(a, b, status));
-    const pageCount = Math.max(1, Math.ceil(filteredEvents.length / EVENT_PAGE_SIZE));
     const requestedPage = Number(query.page);
-    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
-    const visibleEvents = filteredEvents.slice((currentPage - 1) * EVENT_PAGE_SIZE, currentPage * EVENT_PAGE_SIZE);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const eventStatuses = ["published", "draft", "cancelled", "archived"] as const;
+    let eventQuery = admin.from("events")
+      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,booking_enabled,booking_mode,booking_capacity,lifecycle_status,updated_at", { count: "exact" })
+      .eq("lifecycle_status", status);
+    if (status === "published") {
+      eventQuery = eventQuery.order("start_date").order("start_time").order("id");
+    } else if (status === "draft" || status === "cancelled") {
+      eventQuery = eventQuery.order("updated_at", { ascending: false }).order("start_date", { ascending: false }).order("start_time", { ascending: false }).order("id", { ascending: false });
+    } else {
+      eventQuery = eventQuery.order("end_date", { ascending: false }).order("start_date", { ascending: false }).order("start_time", { ascending: false }).order("id", { ascending: false });
+    }
+    const [eventResult, ...eventCountResults] = await Promise.all([
+      eventQuery.range((currentPage - 1) * EVENT_PAGE_SIZE, currentPage * EVENT_PAGE_SIZE - 1),
+      ...eventStatuses.map((value) => admin.from("events").select("id", { count: "exact", head: true }).eq("lifecycle_status", value)),
+    ]);
+    if (eventResult.error || eventCountResults.some((result) => result.error)) throw new Error("Unable to load events.");
+    const visibleEvents = (eventResult.data ?? []) as EventRow[];
+    const statusCounts = Object.fromEntries(eventStatuses.map((value, index) => [value, eventCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
+    const pageCount = Math.max(1, Math.ceil((eventResult.count ?? 0) / EVENT_PAGE_SIZE));
+    if (currentPage > pageCount) redirect(`/admin/events?status=${status}&page=${pageCount}`);
+    const eventTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/events?status=${status}&page=${page}`;
     const emptyCopy: Record<string, string> = {
       published: "Publish an event to add it to the upcoming timetable.",
@@ -182,46 +160,60 @@ export default async function AdminSection({ params, searchParams }: { params: P
       <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!events.length}><summary><Plus/>Create an event</summary><EventForm/></details>
+      <details className="manager-panel" open={!eventTotal}><summary><Plus/>Create an event</summary><EventForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter events by status">
-        <Link href="/admin/events?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
-        <Link href="/admin/events?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
-        <Link href="/admin/events?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
-        <Link href="/admin/events?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
+        <Link prefetch={false} href="/admin/events?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
+        <Link prefetch={false} href="/admin/events?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
+        <Link prefetch={false} href="/admin/events?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
+        <Link prefetch={false} href="/admin/events?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
       </nav>
       <div className="admin-list event-admin-list">{visibleEvents.map(event => {
         const isPast = event.end_date < new Date().toISOString().slice(0, 10);
         return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions">{event.lifecycle_status === "archived" ? <><details><summary><Pencil/>{isPast ? "Reschedule" : "Edit"}</summary><div className="popover-editor"><EventForm event={event}/></div></details>{!isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null}</> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>;
       })}</div>
       {!visibleEvents.length ? <div className="empty-state"><CalendarDays/><h2>No {status === "published" ? "upcoming" : status} events</h2><p>{emptyCopy[status]}</p></div> : null}
-      {pageCount > 1 ? <nav className="pagination" aria-label="Event pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+      <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={eventResult.count ?? 0} itemLabel="events" href={pageHref} ariaLabel="Event pages"/>
     </div>;
   }
 
   if (section === "workshops") {
-    const [{ data, error }, { data: reservations }] = await Promise.all([
-      admin.from("workshops").select("*").order("date", { ascending: false }),
-      admin.from("participants").select("id,reference_id,participant_id,created_at,reservation_status,notification_email_attempts,notification_email_error").order("created_at"),
-    ]);
-    if (error) throw new Error("Unable to load workshops.");
-    const participantIds = [...new Set((reservations ?? []).map(item => item.participant_id))];
-    const memberResult = participantIds.length ? await admin.from("users").select("id,full_name,email,contact_number").in("id", participantIds) : { data: [] };
-    const members = new Map((memberResult.data ?? []).map(member => [member.id, member]));
-    const workshops = (data ?? []) as WorkshopRow[];
     const status: LifecycleStatus = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status as LifecycleStatus : "published";
-    const statusCounts = {
-      published: workshops.filter(workshop => workshop.lifecycle_status === "published").length,
-      draft: workshops.filter(workshop => workshop.lifecycle_status === "draft").length,
-      cancelled: workshops.filter(workshop => workshop.lifecycle_status === "cancelled").length,
-      archived: workshops.filter(workshop => workshop.lifecycle_status === "archived").length,
-    };
-    const filteredWorkshops = workshops
-      .filter(workshop => workshop.lifecycle_status === status)
-      .sort((a, b) => compareWorkshops(a, b, status));
-    const pageCount = Math.max(1, Math.ceil(filteredWorkshops.length / WORKSHOP_PAGE_SIZE));
     const requestedPage = Number(query.page);
-    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
-    const visibleWorkshops = filteredWorkshops.slice((currentPage - 1) * WORKSHOP_PAGE_SIZE, currentPage * WORKSHOP_PAGE_SIZE);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    const workshopStatuses = ["published", "draft", "cancelled", "archived"] as const;
+    let workshopQuery = admin.from("workshops")
+      .select("id,title,descriptions,notes,date,start_time,end_time,host_name,venue,virtual_link,maximum_participants,lifecycle_status,updated_at", { count: "exact" })
+      .eq("lifecycle_status", status);
+    if (status === "published") {
+      workshopQuery = workshopQuery.order("date").order("start_time").order("id");
+    } else if (status === "draft" || status === "cancelled") {
+      workshopQuery = workshopQuery.order("updated_at", { ascending: false }).order("date", { ascending: false }).order("start_time", { ascending: false }).order("id", { ascending: false });
+    } else {
+      workshopQuery = workshopQuery.order("date", { ascending: false }).order("start_time", { ascending: false }).order("id", { ascending: false });
+    }
+    const [workshopResult, ...workshopCountResults] = await Promise.all([
+      workshopQuery.range((currentPage - 1) * WORKSHOP_PAGE_SIZE, currentPage * WORKSHOP_PAGE_SIZE - 1),
+      ...workshopStatuses.map((value) => admin.from("workshops").select("id", { count: "exact", head: true }).eq("lifecycle_status", value)),
+    ]);
+    if (workshopResult.error || workshopCountResults.some((result) => result.error)) throw new Error("Unable to load workshops.");
+    const visibleWorkshops = (workshopResult.data ?? []) as WorkshopRow[];
+    const statusCounts = Object.fromEntries(workshopStatuses.map((value, index) => [value, workshopCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
+    const pageCount = Math.max(1, Math.ceil((workshopResult.count ?? 0) / WORKSHOP_PAGE_SIZE));
+    if (currentPage > pageCount) redirect(`/admin/workshops?status=${status}&page=${pageCount}`);
+    const workshopTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
+    const visibleWorkshopIds = visibleWorkshops.map((workshop) => workshop.id);
+    const reservationResult = visibleWorkshopIds.length
+      ? await admin.from("participants")
+        .select("id,reference_id,participant_id,created_at,reservation_status,notification_email_attempts,notification_email_error")
+        .in("reference_id", visibleWorkshopIds)
+        .order("created_at")
+      : { data: [], error: null };
+    if (reservationResult.error) throw new Error("Unable to load workshop reservations.");
+    const reservations = reservationResult.data ?? [];
+    const participantIds = [...new Set(reservations.map(item => item.participant_id))];
+    const memberResult = participantIds.length ? await admin.from("users").select("id,full_name,email,contact_number").in("id", participantIds) : { data: [], error: null };
+    if (memberResult.error) throw new Error("Unable to load workshop members.");
+    const members = new Map((memberResult.data ?? []).map(member => [member.id, member]));
     const pageHref = (page: number) => `/admin/workshops?status=${status}&page=${page}`;
     const emptyCopy: Record<string, string> = {
       published: "Publish a workshop to add it to the upcoming programme.",
@@ -234,16 +226,16 @@ export default async function AdminSection({ params, searchParams }: { params: P
       <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><span className="count-badge"><Wrench/>{statusCounts.published} upcoming</span></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!workshops.length}><summary><Plus/>Create a workshop</summary><WorkshopForm/></details>
+      <details className="manager-panel" open={!workshopTotal}><summary><Plus/>Create a workshop</summary><WorkshopForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter workshops by status">
-        <Link href="/admin/workshops?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
-        <Link href="/admin/workshops?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
-        <Link href="/admin/workshops?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
-        <Link href="/admin/workshops?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
+        <Link prefetch={false} href="/admin/workshops?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
+        <Link prefetch={false} href="/admin/workshops?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
+        <Link prefetch={false} href="/admin/workshops?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
+        <Link prefetch={false} href="/admin/workshops?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
       </nav>
       <div className="admin-list workshop-admin-list">{visibleWorkshops.map(workshop => {
-      const roster = (reservations ?? []).filter(item => item.reference_id === workshop.id && item.reservation_status === "reserved");
-      const deliveryIssues = (reservations ?? []).filter(item => item.reference_id === workshop.id && item.notification_email_error);
+      const roster = reservations.filter(item => item.reference_id === workshop.id && item.reservation_status === "reserved");
+      const deliveryIssues = reservations.filter(item => item.reference_id === workshop.id && item.notification_email_error);
       const placesRemaining = Math.max(0, workshop.maximum_participants - roster.length);
       return <article key={workshop.id} className={`is-${workshop.lifecycle_status}`}>
         <time className="workshop-admin-date" dateTime={workshop.date}><strong>{format(parseISO(workshop.date), "dd")}</strong><span>{format(parseISO(workshop.date), "MMM")}</span><small>{format(parseISO(workshop.date), "yyyy")}</small></time>
@@ -253,13 +245,13 @@ export default async function AdminSection({ params, searchParams }: { params: P
           <p className="workshop-admin-description">{workshop.descriptions}</p>
           <dl className="workshop-admin-facts"><div><dt>Time</dt><dd>{workshop.start_time.slice(0,5)}–{workshop.end_time.slice(0,5)}</dd></div><div><dt>Venue</dt><dd>{workshop.venue}</dd></div>{workshop.virtual_link ? <div><dt>Format</dt><dd>In person + online</dd></div> : null}</dl>
           <div className="workshop-capacity"><div><span><UsersRound/>{roster.length}/{workshop.maximum_participants} places reserved</span><strong>{placesRemaining ? `${placesRemaining} remaining` : "Workshop full"}</strong></div><progress aria-label={`${roster.length} of ${workshop.maximum_participants} workshop places reserved`} max={workshop.maximum_participants} value={roster.length}/></div>
-          <div className="workshop-roster-tools"><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = members.get(reservation.participant_id); return <div key={reservation.id}><span><strong>{member?.full_name || "Member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = members.get(reservation.participant_id); return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span><form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form></div>; })}</div></details> : null}</div>
+          <div className="workshop-roster-tools"><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = members.get(reservation.participant_id); return <div key={reservation.id}><span><strong>{member?.full_name || "Member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link prefetch={false} className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = members.get(reservation.participant_id); return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span><form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form></div>; })}</div></details> : null}</div>
         </div>
         <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
       </article>;
       })}</div>
       {!visibleWorkshops.length ? <div className="empty-state"><Wrench/><h2>No {status === "published" ? "upcoming" : status} workshops</h2><p>{emptyCopy[status]}</p></div> : null}
-      {pageCount > 1 ? <nav className="pagination" aria-label="Workshop pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+      <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={workshopResult.count ?? 0} itemLabel="workshops" href={pageHref} ariaLabel="Workshop pages"/>
     </div>;
   }
 
@@ -275,11 +267,15 @@ export default async function AdminSection({ params, searchParams }: { params: P
     admin.from("users").select("id", { count: "exact", head: true }).eq("membership_status", "archived"),
   ]);
   const { data: users, count, error } = membersResult;
-  if (error) throw new Error("Unable to load members.");
+  if (error || activeResult.error || suspendedResult.error || archivedResult.error) throw new Error("Unable to load members.");
+  const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
+  if (page > pages) {
+    const canonical = new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(pages) });
+    redirect(`/admin/members?${canonical}`);
+  }
   const ids = (users ?? []).map(member => member.id);
   const { data: roles } = ids.length ? await admin.from("user_roles").select("user_id,role").in("user_id", ids) : { data: [] };
   const roleMap = new Map((roles ?? []).map(item => [item.user_id, item.role]));
-  const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   const pageHref = (value: number) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(value) })}`;
   const memberTabHref = (value: string) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status: value })}`;
   return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Members</h1><p>Invite members, manage portal access and assign Society roles from one register.</p></div><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
@@ -289,7 +285,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
       { href: memberTabHref("suspended"), label: "Suspended", count: suspendedResult.count ?? 0, current: status === "suspended" },
       { href: memberTabHref("archived"), label: "Archived", count: archivedResult.count ?? 0, current: status === "archived" },
     ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link href="/administrator/add-members">Bulk invite</Link><Link href="/administrator/delete-members">Bulk archive</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
+    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link prefetch={false} href="/administrator/add-members">Bulk invite</Link><Link prefetch={false} href="/administrator/delete-members">Bulk archive</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
     <div className="member-table"><div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>{(users ?? []).map(member => <div className={`member-row is-${member.membership_status}`} key={member.id}><div className="member-identity"><div className="member-identity-heading"><strong>{member.full_name || "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{member.membership_status}{member.legal_hold ? " · legal hold" : ""}</span></div><small>{member.title || "Member"}</small>{member.retention_until ? <small>Retained until {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}</div><div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div><form className="member-role-form" action={updateMemberRole}><input type="hidden" name="user_id" value={member.id}/><label><span className="member-cell-label">Portal role</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={roleMap.get(member.id) || "member"} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label><PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton></form><div className="member-actions"><span className="member-cell-label">Access control</span>{member.membership_status === "active" ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form>}{member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold ? <p>Legal hold prevents deletion.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}</div></div>)}</div>
     {!users?.length ? <div className="empty-state"><h2>No matching members</h2></div> : null}
     <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="members" href={pageHref} ariaLabel="Member pages"/>

@@ -101,7 +101,7 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
   return <>
     <aside className={open ? "portal-sidebar is-open" : "portal-sidebar"}>
       <div className="portal-sidebar-top">
-        <Link href="/" className="portal-brand" onClick={closeMenu}>
+        <Link href="/" className="portal-brand" prefetch={false} onClick={closeMenu}>
           <Image src="/ydsme-logo.png" alt="York Model Engineers" width={72} height={72}/>
           <span>York Model<br/><b>Engineers</b></span>
         </Link>
@@ -114,13 +114,13 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
         <nav aria-label="Member navigation">
           {links.map(({ href, label, icon: Icon }) => {
             const current = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
-            return <Link key={href} href={href} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon/>{label}</Link>;
+            return <Link key={href} href={href} prefetch={false} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon/>{label}</Link>;
           })}
         </nav>
         <div className="portal-account">
           <span className="role-chip">{role}</span>
           <strong>{name}</strong>
-          <Link href="/account" onClick={closeMenu} aria-current={pathname === "/account" ? "page" : undefined} className={pathname === "/account" ? "active" : undefined}><UserRound/>Account</Link>
+          <Link href="/account" prefetch={false} onClick={closeMenu} aria-current={pathname === "/account" ? "page" : undefined} className={pathname === "/account" ? "active" : undefined}><UserRound/>Account</Link>
           <form action={signOut}><PendingSubmitButton pendingLabel="Signing out…"><LogOut/>Sign out</PendingSubmitButton></form>
         </div>
       </div>

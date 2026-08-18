@@ -31,6 +31,11 @@ begin
     or has_table_privilege('anon', 'public.events', 'TRUNCATE') then
     raise exception 'Sensitive direct-write privilege is still granted';
   end if;
+  if has_column_privilege('authenticated', 'public.users', 'membership_status', 'UPDATE')
+    or has_column_privilege('authenticated', 'public.users', 'legal_hold', 'UPDATE')
+    or not has_column_privilege('authenticated', 'public.users', 'full_name', 'UPDATE') then
+    raise exception 'Member profile column privileges are incorrect';
+  end if;
   if has_function_privilege('authenticated', 'public.update_users(uuid,text,text,text,text,text,text,jsonb,boolean)', 'EXECUTE') then
     raise exception 'A legacy security-definer function is exposed as an RPC';
   end if;

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,30 +39,30 @@ export function hasCapability(role: AppRole, capability: Capability) {
   return roleCapabilities[role].has(capability);
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async () => {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
   return error ? null : user;
-}
+});
 
-export async function getRole(userId: string): Promise<AppRole> {
+export const getRole = cache(async (userId: string): Promise<AppRole> => {
   const admin = createAdminClient();
   const { data } = await admin.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
   const role = data?.role as AppRole | undefined;
   return appRoles.includes(role ?? "member") ? (role ?? "member") : "member";
-}
+});
 
-export async function requireUser() {
+export const requireUser = cache(async () => {
   const user = await getCurrentUser();
   if (!user) redirect("/signin");
   const admin = createAdminClient();
   const [{ data: profile }, role] = await Promise.all([
-    admin.from("users").select("membership_status").eq("id", user.id).maybeSingle(),
+    admin.from("users").select("membership_status,full_name").eq("id", user.id).maybeSingle(),
     getRole(user.id),
   ]);
   if (profile?.membership_status !== "active") redirect("/signin?error=Your+Society+access+is+not+active.");
-  return { user, role };
-}
+  return { user, role, fullName: profile.full_name };
+});
 
 export async function requireRole(allowed: AppRole[]) {
   const session = await requireUser();

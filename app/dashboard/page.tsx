@@ -3,7 +3,6 @@ import { CalendarDays, FileText, Megaphone, Plus, Wrench } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireUser, canManageContent } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createMessage, deleteMessage, joinWorkshop, leaveWorkshop, restoreMessage } from "@/lib/actions/content";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
@@ -14,35 +13,36 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
   const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
   const supabase = await createClient();
-  const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [eventsResult, workshopsResult, feedsResult, latestDocumentResult, latestMemberPostResult, latestNewMemberResult, docsResult, eventCount, workshopCount] = await Promise.all([
-    supabase.from("events").select("id,name,start_date,start_time,event_type").eq("lifecycle_status", "published").gte("end_date", today).order("start_date").limit(6),
-    supabase.from("workshops").select("id,title,date,start_time,venue,maximum_participants").eq("lifecycle_status", "published").gte("date", today).order("date").limit(4),
-    supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").order("created_at", { ascending: false }).limit(12),
-    supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").eq("type", "document").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").eq("type", "message").order("created_at", { ascending: false }).limit(1).maybeSingle(),
-    supabase.from("feeds").select("id,title,message,created_at").eq("lifecycle_status", "published").eq("type", "user").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  const [eventsResult, workshopsResult, feedSnapshotResult, docsResult] = await Promise.all([
+    supabase.from("events").select("id,name,start_date,start_time,event_type", { count: "exact" }).eq("lifecycle_status", "published").gte("end_date", today).order("start_date").limit(6),
+    supabase.from("workshops").select("id,title,date,start_time,venue,maximum_participants", { count: "exact" }).eq("lifecycle_status", "published").gte("date", today).order("date").limit(4),
+    supabase.rpc("dashboard_feed_snapshot", { p_limit: 12 }),
     supabase.from("documents").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published"),
-    admin.from("events").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published").gte("end_date", today),
-    admin.from("workshops").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published").gte("date", today),
   ]);
   const events = eventsResult.data ?? [];
   const workshops = workshopsResult.data ?? [];
-  const feeds = feedsResult.data ?? [];
+  if (feedSnapshotResult.error) throw new Error("Unable to load member updates.");
+  const feedSnapshot = (feedSnapshotResult.data ?? {}) as unknown as Partial<{
+    recent: Array<{ id: number; type: string; title: string | null; message: string; url: string | null; author_name: string | null; author_id: string | null; created_at: string }>;
+    latest_document: { id: number; type: string; title: string | null; message: string; url: string | null; author_name: string | null; author_id: string | null; created_at: string } | null;
+    latest_message: { id: number; type: string; title: string | null; message: string; url: string | null; author_name: string | null; author_id: string | null; created_at: string } | null;
+    latest_user: { id: number; title: string | null; message: string; created_at: string } | null;
+  }>;
+  const feeds = feedSnapshot.recent ?? [];
   const workshopIds = workshops.map((workshop) => workshop.id);
   const [{ data: ownReservations }, { data: reservationCounts }] = workshopIds.length ? await Promise.all([
     supabase.from("participants").select("reference_id").eq("participant_id", user.id).eq("reservation_status", "reserved").in("reference_id", workshopIds),
-    admin.from("participants").select("reference_id").eq("reservation_status", "reserved").in("reference_id", workshopIds),
+    supabase.rpc("workshop_reservation_counts", { p_workshop_ids: workshopIds }),
   ]) : [{ data: [] }, { data: [] }];
   const ownWorkshopIds = new Set((ownReservations ?? []).map((item) => item.reference_id));
-  const placesByWorkshop = (reservationCounts ?? []).reduce((counts, item) => counts.set(item.reference_id, (counts.get(item.reference_id) ?? 0) + 1), new Map<string, number>());
-  const { data: archivedNotices } = await admin.from("feeds").select("id,title").eq("author_id", user.id).eq("lifecycle_status", "archived").order("archived_at", { ascending: false }).limit(10);
+  const placesByWorkshop = new Map((reservationCounts ?? []).map((item) => [item.reference_id, Number(item.reserved_count)]));
+  const { data: archivedNotices } = await supabase.rpc("own_archived_notices", { p_limit: 10 });
   const featuredFeeds = [
-    { label: "Latest document upload", kind: "document", empty: "No documents have been uploaded yet.", feed: latestDocumentResult.data },
-    { label: "Latest member post", kind: "message", empty: "No member posts have been shared yet.", feed: latestMemberPostResult.data },
+    { label: "Latest document upload", kind: "document", empty: "No documents have been uploaded yet.", feed: feedSnapshot.latest_document },
+    { label: "Latest member post", kind: "message", empty: "No member posts have been shared yet.", feed: feedSnapshot.latest_message },
   ];
-  const latestNewMember = latestNewMemberResult.data;
+  const latestNewMember = feedSnapshot.latest_user;
   const featuredFeedIds = new Set([...featuredFeeds.flatMap(({ feed }) => feed ? [feed.id] : []), ...(latestNewMember ? [latestNewMember.id] : [])]);
   const earlierFeeds = feeds.filter(feed => !featuredFeedIds.has(feed.id));
 
@@ -55,7 +55,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <h1>Good to see you.</h1>
         <p>The live Society board — member-only event dates, documents, workshops and notices.</p>
       </div>
-      <Link href="/events" className="button outline">Public website</Link>
+      <Link href="/events" prefetch={false} className="button outline">Public website</Link>
     </header>
 
     {query.error ? <p className="form-message error">{query.error}</p> : null}
@@ -65,7 +65,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="portal-card dashboard-primary-card" aria-labelledby="upcoming-running-days">
         <div className="card-heading">
           <div><p className="eyebrow dark">Private timetable</p><h2 id="upcoming-running-days">Upcoming running days</h2></div>
-          {canManageContent(role) ? <Link href="/admin/events">Manage <Plus/></Link> : null}
+          {canManageContent(role) ? <Link href="/admin/events" prefetch={false}>Manage <Plus/></Link> : null}
         </div>
         <div className="compact-list">
           {events.map(event => <article key={event.id}>
@@ -121,8 +121,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="portal-card dashboard-snapshot" aria-labelledby="society-snapshot">
         <div className="card-heading"><div><p className="eyebrow dark">At a glance</p><h2 id="society-snapshot">Society snapshot</h2></div></div>
         <dl>
-          <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventCount.count ?? 0}</dd></div>
-          <div><dt><Wrench/>Open workshops</dt><dd>{workshopCount.count ?? 0}</dd></div>
+          <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventsResult.count ?? 0}</dd></div>
+          <div><dt><Wrench/>Open workshops</dt><dd>{workshopsResult.count ?? 0}</dd></div>
           <div><dt><FileText/>Club documents</dt><dd>{docsResult.count ?? 0}</dd></div>
         </dl>
       </section>

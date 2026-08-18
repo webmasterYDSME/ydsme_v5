@@ -12,6 +12,7 @@ import { finalizeQuarantinedUpload } from "@/lib/uploads";
 import { sendWorkshopReservationUpdate } from "@/lib/booking-email";
 import { safeHttpUrl } from "@/lib/security-input";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
+import { storageObjectPath } from "@/lib/storage-path";
 import {
   ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
@@ -21,12 +22,6 @@ const text = (min = 1, max = 5000) => z.string().trim().min(min).max(max);
 const idString = z.string().min(1).max(100);
 const httpUrl = z.string().trim().max(2048).refine((value) => Boolean(safeHttpUrl(value)), "Use an HTTP or HTTPS URL.");
 const optionalUrl = z.union([z.literal(""), httpUrl]);
-
-function storagePath(value: string | null | undefined, bucket: "images" | "documents") {
-  if (!value?.startsWith(`${bucket}/`)) return null;
-  const path = value.slice(bucket.length + 1);
-  return path && !path.includes("..") ? path : null;
-}
 
 const eventSchema = z.object({
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
@@ -97,6 +92,8 @@ export async function saveEvent(formData: FormData) {
     } catch {
       redirect("/admin/events?error=The+event+image+failed+security+validation.");
     }
+  } else {
+    values.file_url = id ? before?.file_url ?? "" : "";
   }
   const query = id
     ? admin.from("events").update(values).eq("id", id).select("id,lifecycle_status").single()
@@ -104,8 +101,8 @@ export async function saveEvent(formData: FormData) {
   const { data: saved, error } = await query;
   if (error) redirect("/admin/events?error=The+event+could+not+be+saved.");
   if (quarantinePath) {
-    const oldPath = storagePath(before?.file_url, "images");
-    if (oldPath && oldPath !== storagePath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
+    const oldPath = storageObjectPath(before?.file_url, "images");
+    if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode } });
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
@@ -435,7 +432,7 @@ export async function purgeDocument(formData: FormData) {
   const admin = createAdminClient();
   const { data: doc } = await admin.from("documents").select("id,name,file_url,lifecycle_status,version").eq("id", parsed.data.id).maybeSingle();
   if (!doc || doc.lifecycle_status !== "archived") redirect("/dashboard/resources?error=Only+archived+documents+can+be+purged.");
-  const path = storagePath(doc.file_url, "documents");
+  const path = storageObjectPath(doc.file_url, "documents");
   if (path) {
     const { error: storageError } = await admin.storage.from("documents").remove([path]);
     if (storageError) redirect("/dashboard/resources?error=The+document+file+could+not+be+purged.");
@@ -457,13 +454,15 @@ export async function saveCommittee(formData: FormData) {
   if (quarantinePath) {
     try { values.file_url = (await finalizeQuarantinedUpload("committee-image", quarantinePath, user.id)).canonicalPath; }
     catch { redirect("/settings?tab=committee&error=The+portrait+failed+security+validation."); }
+  } else {
+    values.file_url = id ? before?.file_url ?? "" : "";
   }
   const query = id ? admin.from("committees").update(values).eq("id", id).select("id").single() : admin.from("committees").insert({ ...values, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
   if (error || !saved) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+saved.");
   if (quarantinePath) {
-    const oldPath = storagePath(before?.file_url, "images");
-    if (oldPath && oldPath !== storagePath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
+    const oldPath = storageObjectPath(before?.file_url, "images");
+    if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "committee-record.updated" : "committee-record.created", entityType: "committee-record", entityId: saved.id, before, after: values });
   revalidatePath("/committees"); revalidatePath("/settings");
@@ -475,7 +474,7 @@ export async function deleteCommittee(formData: FormData) {
   const admin = createAdminClient();
   const { data: before } = await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle();
   if (!before) redirect("/settings?tab=committee&error=The+committee+record+was+not+found.");
-  const path = storagePath(before.file_url, "images");
+  const path = storageObjectPath(before.file_url, "images");
   if (path) {
     const { error: storageError } = await admin.storage.from("images").remove([path]);
     if (storageError) redirect("/settings?tab=committee&error=The+committee+portrait+could+not+be+removed.");
@@ -490,7 +489,8 @@ export async function updateProfile(formData: FormData) {
   const { user } = await requireUser();
   const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(30), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/account?error=Please+check+your+profile+details.");
-  const { error } = await createAdminClient().from("users").update(parsed.data).eq("id", user.id);
+  const supabase = await createClient();
+  const { error } = await supabase.from("users").update(parsed.data).eq("id", user.id);
   if (error) redirect("/account?error=The+profile+could+not+be+updated.");
   revalidatePath("/account"); revalidatePath("/dashboard", "layout");
   redirect("/account?notice=profile-updated");

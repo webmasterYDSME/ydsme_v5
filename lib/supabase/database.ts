@@ -1123,7 +1123,26 @@ export type Database = {
         }[]
       }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
+      dashboard_feed_snapshot: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       has_app_role: { Args: { allowed_roles: string[] }; Returns: boolean }
+      own_archived_notices: {
+        Args: { p_limit?: number }
+        Returns: {
+          id: number
+          title: string | null
+        }[]
+      }
+      donation_management_summary: {
+        Args: { p_from?: string | null; p_until?: string | null }
+        Returns: Json
+      }
+      booking_management_summary: {
+        Args: { p_event_id?: number | null }
+        Returns: Json
+      }
       record_event_booking_email_attempt: {
         Args: { p_booking_id: string; p_error: string; p_sent: boolean }
         Returns: boolean
@@ -1163,6 +1182,13 @@ export type Database = {
           user_title: string
         }
         Returns: undefined
+      }
+      workshop_reservation_counts: {
+        Args: { p_workshop_ids: string[] }
+        Returns: {
+          reference_id: string
+          reserved_count: number
+        }[]
       }
     }
     Enums: {
