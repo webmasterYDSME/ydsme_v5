@@ -76,6 +76,8 @@ declare
   v_restored integer;
   v_reviews integer;
   v_retention jsonb;
+  v_claimed_user uuid;
+  v_claim_token uuid;
   v_users_before bigint;
   v_roles_before bigint;
   v_active_baseline integer;
@@ -112,6 +114,16 @@ begin
   if has_function_privilege('authenticated', 'public.apply_membermojo_membership_import_v2(uuid,uuid,text,jsonb)', 'execute')
     or not has_function_privilege('service_role', 'public.apply_membermojo_membership_import_v2(uuid,uuid,text,jsonb)', 'execute') then
     raise exception 'MemberMojo apply function privileges are unsafe';
+  end if;
+  if has_function_privilege('authenticated', 'public.claim_expired_portal_accounts(integer)', 'execute')
+    or not has_function_privilege('service_role', 'public.claim_expired_portal_accounts(integer)', 'execute')
+    or has_function_privilege('authenticated', 'public.release_expired_portal_account_claim(uuid,uuid,text)', 'execute')
+    or not has_function_privilege('service_role', 'public.release_expired_portal_account_claim(uuid,uuid,text)', 'execute') then
+    raise exception 'Expired portal-account purge privileges are unsafe';
+  end if;
+  if has_function_privilege('authenticated', 'public.anonymize_member_content_for_purge(uuid,uuid,uuid)', 'execute')
+    or not has_function_privilege('service_role', 'public.anonymize_member_content_for_purge(uuid,uuid,uuid)', 'execute') then
+    raise exception 'Member-content anonymisation privileges are unsafe';
   end if;
 
   v_actor := current_setting('app.membermojo_test_actor')::uuid;
@@ -239,9 +251,23 @@ begin
       and not mr.portal_access_review_required
       and mr.portal_access_review_decision = 'retain_access'
       and mr.portal_access_reviewed_by = v_actor
+      and mr.retention_until >= mr.portal_access_reviewed_at + interval '12 months'
       and u.membership_status = 'active'
   ) then
-    raise exception 'Retain-access review was not recorded without changing portal access';
+    raise exception 'Retain-access review was not recorded with a bounded extension and unchanged portal access';
+  end if;
+
+  update public.membership_records
+  set retention_until = now() - interval '1 day'
+  where external_id = '90000000000000000001';
+  v_retention := public.run_dashboard_retention();
+  if not exists (
+    select 1 from public.membership_records
+    where external_id = '90000000000000000001'
+      and portal_access_review_required
+      and portal_access_review_decision is null
+  ) or (v_retention->>'membership_records_portal_reviews_reopened')::integer < 1 then
+    raise exception 'Expired retained access did not return to the human review queue: %', v_retention;
   end if;
 
   select import_id into v_member_snapshot_import
@@ -286,6 +312,9 @@ begin
   update public.membership_records
   set retention_until = now() - interval '1 day'
   where external_id = '90000000000000000002';
+  update public.users
+  set retention_until = now() - interval '100 years'
+  where id = v_member;
   insert into public.membership_records (
     external_id, first_name, last_name, membership_type, source_state,
     membership_ended_at, retention_until
@@ -309,10 +338,72 @@ begin
     raise exception 'Linked or legally held expired membership was deleted';
   end if;
   if (v_retention->>'membership_records_deleted')::integer < 1
-    or (v_retention->>'membership_records_awaiting_portal_review')::integer < 1
+    or (v_retention->>'membership_records_expired_but_linked')::integer < 1
+    or (v_retention->>'portal_accounts_ready_for_purge')::integer < 1
     or (v_retention->>'membership_records_on_legal_hold')::integer < 1 then
     raise exception 'Retention result did not report deleted and retained membership records: %', v_retention;
   end if;
+
+  update public.users set legal_hold = true where id = v_member;
+  if exists (select 1 from public.claim_expired_portal_accounts(100) where user_id = v_member) then
+    raise exception 'Legal hold did not exclude an expired portal account from purge claims';
+  end if;
+  update public.users set legal_hold = false where id = v_member;
+
+  select user_id, claim_token into v_claimed_user, v_claim_token
+  from public.claim_expired_portal_accounts(100)
+  where user_id = v_member;
+  if v_claimed_user is distinct from v_member or v_claim_token is null then
+    raise exception 'Eligible expired portal account was not claimed';
+  end if;
+  begin
+    update public.users set membership_status = 'active' where id = v_member;
+    raise exception 'Expected restore during purge claim to fail';
+  exception when others then
+    if sqlerrm not like '%member_retention_purge_in_progress%' then raise; end if;
+  end;
+  insert into public.feeds (type, message, author_name, author_id)
+  values ('message', 'Synthetic historical message', 'Synthetic Import Member', v_member);
+  if not public.anonymize_member_content_for_purge(v_member, v_claim_token, null) then
+    raise exception 'Claimed member content was not anonymised';
+  end if;
+  if not exists (
+    select 1 from public.feeds
+    where message = 'Synthetic historical message'
+      and author_id is null
+      and author_name = 'Former member'
+  ) then
+    raise exception 'Direct feed authorship survived retention anonymisation';
+  end if;
+  if not public.release_expired_portal_account_claim(v_member, v_claim_token, 'Synthetic Auth deletion failure') then
+    raise exception 'Failed purge claim was not released';
+  end if;
+  if not exists (
+    select 1 from public.users
+    where id = v_member
+      and retention_purge_claim_token is null
+      and retention_purge_attempts = 1
+      and retention_purge_last_error = 'Synthetic Auth deletion failure'
+  ) or not exists (
+    select 1 from public.audit_logs
+    where entity_id = v_member::text and action = 'member.retention-purge-failed'
+  ) then
+    raise exception 'Purge retry state or failure audit was not recorded';
+  end if;
+  update public.membership_records
+  set legal_hold = true,
+      legal_hold_reason = 'Synthetic linked membership deletion hold'
+  where external_id = '90000000000000000002';
+  begin
+    perform public.anonymize_member_content_for_purge(v_member, null, v_actor);
+    raise exception 'Expected linked membership legal hold to block manual purge';
+  exception when others then
+    if sqlerrm not like '%member_purge_unavailable%' then raise; end if;
+  end;
+  update public.membership_records
+  set legal_hold = false,
+      legal_hold_reason = null
+  where external_id = '90000000000000000002';
 
   select import_id into v_changed_import
   from public.register_membermojo_import_preview(

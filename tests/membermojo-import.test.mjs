@@ -91,7 +91,7 @@ test("rejects duplicate MemberMojo IDs and missing required columns", () => {
 });
 
 test("preview and apply are administrator-gated, same-file, atomic and service-role-only", async () => {
-  const [action, comparison, component, page, foundation, applyMigration, lifecycleMigration, reviewMigration] = await Promise.all([
+  const [action, comparison, component, page, foundation, applyMigration, lifecycleMigration, reviewMigration, purgeMigration, anonymizeMigration, legalHoldMigration, hourlyPurgeMigration, purgeFunction, contentActions] = await Promise.all([
     readFile(new URL("../lib/actions/member-imports.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/membermojo.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/MemberMojoImportForm.tsx", import.meta.url), "utf8"),
@@ -100,6 +100,12 @@ test("preview and apply are administrator-gated, same-file, atomic and service-r
     readFile(new URL("../supabase/migrations/202608180027_membermojo_import_apply.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180028_membermojo_lifecycle_retention.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180029_membermojo_portal_reviews.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180030_expired_member_purge.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180031_member_purge_anonymisation.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180032_member_purge_legal_hold_guard.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180033_hourly_member_retention_purge.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/purge-expired-members/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/actions/content.ts", import.meta.url), "utf8"),
   ]);
 
   assert.equal(action.match(/requireCapability\("members\.manage"\)/g)?.length, 3);
@@ -143,4 +149,25 @@ test("preview and apply are administrator-gated, same-file, atomic and service-r
   assert.doesNotMatch(reviewMigration, /(?:update|insert into|delete from) auth\.users/);
   assert.match(reviewMigration, /revoke all on function public\.resolve_membermojo_portal_access_review[\s\S]*from public, anon, authenticated/);
   assert.match(reviewMigration, /grant execute on function public\.resolve_membermojo_portal_access_review[\s\S]*to service_role/);
+  assert.match(purgeMigration, /claim_expired_portal_accounts/);
+  assert.match(purgeMigration, /not mr\.legal_hold/);
+  assert.match(purgeMigration, /ur\.role = 'administrator'/);
+  assert.match(purgeMigration, /membership_records_portal_reviews_reopened/);
+  assert.match(purgeMigration, /purge-expired-portal-accounts[\s\S]*net\.http_post/);
+  assert.match(purgeMigration, /announcements_created_by_fkey[\s\S]*on delete set null/);
+  assert.doesNotMatch(purgeMigration, /(?:update|insert into|delete from) auth\.users/);
+  assert.match(purgeFunction, /withSupabase\(\{ auth: "secret" \}/);
+  assert.match(purgeFunction, /auth\.admin\.deleteUser\(claim\.user_id, false\)/);
+  assert.match(purgeFunction, /release_expired_portal_account_claim/);
+  assert.match(purgeFunction, /member\.retention-purged/);
+  assert.match(anonymizeMigration, /anonymize_member_content_for_purge/);
+  assert.match(anonymizeMigration, /author_name = 'Former member'/);
+  assert.match(anonymizeMigration, /participant_id = null/);
+  assert.match(anonymizeMigration, /role in \('administrator', 'committee'\)/);
+  assert.match(anonymizeMigration, /from public\.committees c/);
+  assert.match(purgeFunction, /anonymize_member_content_for_purge[\s\S]*auth\.admin\.deleteUser/);
+  assert.match(contentActions, /purgeMember[\s\S]*anonymize_member_content_for_purge[\s\S]*auth\.admin\.deleteUser/);
+  assert.match(legalHoldMigration, /mr\.auth_user_id = p_user_id and mr\.legal_hold/);
+  assert.match(hourlyPurgeMigration, /cron\.unschedule\('purge-expired-portal-accounts'\)/);
+  assert.match(hourlyPurgeMigration, /'47 \* \* \* \*'/);
 });

@@ -40,7 +40,7 @@ export type Database = {
           archived_by: string | null
           body: string
           created_at: string
-          created_by: string
+          created_by: string | null
           id: number
           lifecycle_status: string
           published_at: string | null
@@ -52,7 +52,7 @@ export type Database = {
           archived_by?: string | null
           body: string
           created_at?: string
-          created_by: string
+          created_by?: string | null
           id?: number
           lifecycle_status?: string
           published_at?: string | null
@@ -64,7 +64,7 @@ export type Database = {
           archived_by?: string | null
           body?: string
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           id?: number
           lifecycle_status?: string
           published_at?: string | null
@@ -115,7 +115,7 @@ export type Database = {
       committees: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           email: string
           file_url: string
           id: number
@@ -125,7 +125,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           email: string
           file_url?: string
           id?: number
@@ -135,7 +135,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           email?: string
           file_url?: string
           id?: number
@@ -732,7 +732,7 @@ export type Database = {
           notification_email_error: string | null
           notification_email_last_attempt_at: string | null
           notification_email_sent_at: string | null
-          participant_id: string
+          participant_id: string | null
           reference_id: string
           reservation_status: string
           updated_at: string
@@ -745,7 +745,7 @@ export type Database = {
           notification_email_error?: string | null
           notification_email_last_attempt_at?: string | null
           notification_email_sent_at?: string | null
-          participant_id?: string
+          participant_id?: string | null
           reference_id?: string
           reservation_status?: string
           updated_at?: string
@@ -758,7 +758,7 @@ export type Database = {
           notification_email_error?: string | null
           notification_email_last_attempt_at?: string | null
           notification_email_sent_at?: string | null
-          participant_id?: string
+          participant_id?: string | null
           reference_id?: string
           reservation_status?: string
           updated_at?: string
@@ -1052,6 +1052,11 @@ export type Database = {
           legal_hold: boolean
           membership_status: string
           payment_method: Json | null
+          retention_purge_attempts: number
+          retention_purge_claim_token: string | null
+          retention_purge_claimed_at: string | null
+          retention_purge_last_attempt_at: string | null
+          retention_purge_last_error: string | null
           retention_until: string | null
           title: string
           updated_at: string
@@ -1070,6 +1075,11 @@ export type Database = {
           legal_hold?: boolean
           membership_status?: string
           payment_method?: Json | null
+          retention_purge_attempts?: number
+          retention_purge_claim_token?: string | null
+          retention_purge_claimed_at?: string | null
+          retention_purge_last_attempt_at?: string | null
+          retention_purge_last_error?: string | null
           retention_until?: string | null
           title?: string
           updated_at?: string
@@ -1088,6 +1098,11 @@ export type Database = {
           legal_hold?: boolean
           membership_status?: string
           payment_method?: Json | null
+          retention_purge_attempts?: number
+          retention_purge_claim_token?: string | null
+          retention_purge_claimed_at?: string | null
+          retention_purge_last_attempt_at?: string | null
+          retention_purge_last_error?: string | null
           retention_until?: string | null
           title?: string
           updated_at?: string
@@ -1099,7 +1114,7 @@ export type Database = {
           archived_at: string | null
           archived_by: string | null
           created_at: string
-          created_by: string
+          created_by: string | null
           date: string
           descriptions: string
           end_time: string
@@ -1118,7 +1133,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           date: string
           descriptions: string
           end_time: string
@@ -1137,7 +1152,7 @@ export type Database = {
           archived_at?: string | null
           archived_by?: string | null
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           date?: string
           descriptions?: string
           end_time?: string
@@ -1223,6 +1238,17 @@ export type Database = {
       }
     }
     Functions: {
+      anonymize_member_content_for_purge: {
+        Args: { p_actor_id?: string; p_claim_token?: string; p_user_id: string }
+        Returns: boolean
+      }
+      claim_expired_portal_accounts: {
+        Args: { p_limit?: number }
+        Returns: {
+          claim_token: string
+          user_id: string
+        }[]
+      }
       apply_membermojo_membership_import: {
         Args: {
           p_actor_id: string
@@ -1337,6 +1363,10 @@ export type Database = {
           import_status: string
         }[]
       }
+      release_expired_portal_account_claim: {
+        Args: { p_claim_token: string; p_error: string; p_user_id: string }
+        Returns: boolean
+      }
       resolve_membermojo_portal_access_review: {
         Args: {
           p_actor_id: string
@@ -1372,6 +1402,7 @@ export type Database = {
         }[]
       }
       run_dashboard_retention: { Args: never; Returns: Json }
+      run_dashboard_retention_core: { Args: never; Returns: Json }
       target_donation_total_pence: { Args: never; Returns: number }
       update_users: {
         Args: {
