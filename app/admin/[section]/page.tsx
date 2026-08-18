@@ -27,18 +27,20 @@ import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { AnnouncementFields } from "@/app/components/AnnouncementFields";
+import { EventBookingFields } from "@/app/components/EventBookingFields";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
 const ANNOUNCEMENT_PAGE_SIZE = 12;
+const EVENT_PAGE_SIZE = 12;
 
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; reservation_link:string; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
+type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:string };
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
 
 function EventForm({ event }: { event?: EventRow }) {
-  const mode = event?.booking_mode || (event?.booking_enabled ? "website" : event?.reservation_link ? "external" : "none");
+  const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
   return <form action={saveEvent} className="editor-form">
     {event ? <input type="hidden" name="id" value={event.id}/> : null}
     <label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label>
@@ -47,9 +49,7 @@ function EventForm({ event }: { event?: EventRow }) {
     <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
     <label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label>
     <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
-    <label>Booking mode<select name="booking_mode" defaultValue={mode}><option value="none">None</option><option value="external">External link</option><option value="website">Website booking</option></select></label>
-    <label>Visitor capacity<input type="number" name="booking_capacity" min="1" max="10000" defaultValue={event?.booking_capacity ?? 100}/></label>
-    <label className="wide">External reservation link<input type="url" name="reservation_link" defaultValue={event?.reservation_link}/><small>Required only for external-link mode.</small></label>
+    <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
     <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
     <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
     <PendingSubmitButton className="button dark" pendingLabel={event ? "Saving changes…" : "Creating event…"}>{event ? "Save changes" : "Create event"}</PendingSubmitButton>
@@ -70,7 +70,7 @@ function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
 }
 
 function statusNotice(value?: string) {
-  const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "event-saved": "Event saved.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
+  const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "event-saved": "Event saved.", "event-archived": "Event moved to the archive.", "event-restored": "Event restored as a draft.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
   return value ? messages[value] : null;
 }
 
@@ -117,7 +117,45 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const { data, error } = await admin.from("events").select("*").order("start_date", { ascending: false });
     if (error) throw new Error("Unable to load events.");
     const events = (data ?? []) as EventRow[];
-    return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Event timetable</h1><p>Create, publish, cancel, archive and restore public or member-only dates.</p></div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}<details className="manager-panel" open={!events.length}><summary><Plus/>Create an event</summary><EventForm/></details><div className="admin-list">{events.map(event => <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {event.lifecycle_status} · {event.booking_mode}</span><h2>{event.name}</h2><p>{format(parseISO(event.start_date), "d MMMM yyyy")} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions">{event.lifecycle_status === "archived" ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div></div>;
+    const status = (["published", "draft", "cancelled", "archived"] as const).includes(query.status as never) ? query.status! : "published";
+    const statusCounts = {
+      published: events.filter(event => event.lifecycle_status === "published").length,
+      draft: events.filter(event => event.lifecycle_status === "draft").length,
+      cancelled: events.filter(event => event.lifecycle_status === "cancelled").length,
+      archived: events.filter(event => event.lifecycle_status === "archived").length,
+    };
+    const filteredEvents = events.filter(event => event.lifecycle_status === status);
+    if (status === "published") filteredEvents.sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const pageCount = Math.max(1, Math.ceil(filteredEvents.length / EVENT_PAGE_SIZE));
+    const requestedPage = Number(query.page);
+    const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
+    const visibleEvents = filteredEvents.slice((currentPage - 1) * EVENT_PAGE_SIZE, currentPage * EVENT_PAGE_SIZE);
+    const pageHref = (page: number) => `/admin/events?status=${status}&page=${page}`;
+    const emptyCopy: Record<string, string> = {
+      published: "Publish an event to add it to the upcoming timetable.",
+      draft: "Events saved as drafts will appear here.",
+      cancelled: "Cancelled events will appear here.",
+      archived: "Past events are moved here automatically after their end date.",
+    };
+
+    return <div className="portal-content">
+      <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div></header>
+      {query.error ? <p className="form-message error">{query.error}</p> : null}
+      {notice ? <p className="form-message success">{notice}</p> : null}
+      <details className="manager-panel" open={!events.length}><summary><Plus/>Create an event</summary><EventForm/></details>
+      <nav className="status-filter event-status-filter" aria-label="Filter events by status">
+        <Link href="/admin/events?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
+        <Link href="/admin/events?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
+        <Link href="/admin/events?status=cancelled" aria-current={status === "cancelled" ? "page" : undefined}>Cancelled <span>{statusCounts.cancelled}</span></Link>
+        <Link href="/admin/events?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archive <span>{statusCounts.archived}</span></Link>
+      </nav>
+      <div className="admin-list event-admin-list">{visibleEvents.map(event => {
+        const isPast = event.end_date < new Date().toISOString().slice(0, 10);
+        return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions">{event.lifecycle_status === "archived" ? <><details><summary><Pencil/>{isPast ? "Reschedule" : "Edit"}</summary><div className="popover-editor"><EventForm event={event}/></div></details>{!isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null}</> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>;
+      })}</div>
+      {!visibleEvents.length ? <div className="empty-state"><CalendarDays/><h2>No {status === "published" ? "upcoming" : status} events</h2><p>{emptyCopy[status]}</p></div> : null}
+      {pageCount > 1 ? <nav className="pagination" aria-label="Event pages">{currentPage > 1 ? <Link href={pageHref(currentPage - 1)}>← Previous</Link> : <span/>}<span>Page {currentPage} of {pageCount}</span>{currentPage < pageCount ? <Link href={pageHref(currentPage + 1)}>Next →</Link> : <span/>}</nav> : null}
+    </div>;
   }
 
   if (section === "workshops") {

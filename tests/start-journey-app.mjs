@@ -32,7 +32,6 @@ const child = spawn("npx", ["next", production ? "start" : "dev", "-p", port], {
     STRIPE_SECRET_KEY: "",
     STRIPE_WEBHOOK_SECRET: "",
     RATE_LIMIT_SECRET: "local-journey-rate-limit-secret",
-    CRON_SECRET: "local-journey-cron-secret",
   },
 });
 

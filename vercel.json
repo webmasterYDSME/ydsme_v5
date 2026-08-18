@@ -1,10 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run verify",
-  "crons": [
-    {
-      "path": "/api/cron/data-retention",
-      "schedule": "17 3 * * *"
-    }
-  ]
+  "buildCommand": "npm run verify"
 }
