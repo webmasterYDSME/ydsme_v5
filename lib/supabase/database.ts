@@ -638,6 +638,11 @@ export type Database = {
           legal_hold_review_at: string | null
           membership_ended_at: string | null
           membership_type: string
+          portal_access_review_decision: string | null
+          portal_access_review_reason: string | null
+          portal_access_review_required: boolean
+          portal_access_reviewed_at: string | null
+          portal_access_reviewed_by: string | null
           retention_until: string | null
           source: string
           source_expires_on: string | null
@@ -663,6 +668,11 @@ export type Database = {
           legal_hold_review_at?: string | null
           membership_ended_at?: string | null
           membership_type: string
+          portal_access_review_decision?: string | null
+          portal_access_review_reason?: string | null
+          portal_access_review_required?: boolean
+          portal_access_reviewed_at?: string | null
+          portal_access_reviewed_by?: string | null
           retention_until?: string | null
           source?: string
           source_expires_on?: string | null
@@ -688,6 +698,11 @@ export type Database = {
           legal_hold_review_at?: string | null
           membership_ended_at?: string | null
           membership_type?: string
+          portal_access_review_decision?: string | null
+          portal_access_review_reason?: string | null
+          portal_access_review_required?: boolean
+          portal_access_reviewed_at?: string | null
+          portal_access_reviewed_by?: string | null
           retention_until?: string | null
           source?: string
           source_expires_on?: string | null
@@ -1221,6 +1236,22 @@ export type Database = {
           refreshed_count: number
         }[]
       }
+      apply_membermojo_membership_import_v2: {
+        Args: {
+          p_actor_id: string
+          p_file_sha256: string
+          p_import_id: string
+          p_records: Json
+        }
+        Returns: {
+          created_count: number
+          ended_count: number
+          portal_access_review_count: number
+          processed_count: number
+          refreshed_count: number
+          restored_count: number
+        }[]
+      }
       cancel_workshop_place: {
         Args: { p_workshop_id: string }
         Returns: boolean
@@ -1304,6 +1335,20 @@ export type Database = {
           import_expires_at: string
           import_id: string
           import_status: string
+        }[]
+      }
+      resolve_membermojo_portal_access_review: {
+        Args: {
+          p_actor_id: string
+          p_decision: string
+          p_membership_record_id: string
+          p_reason: string
+        }
+        Returns: {
+          membership_record_id: string
+          portal_membership_status: string
+          portal_user_id: string
+          review_decision: string
         }[]
       }
       record_workshop_email_attempt: {

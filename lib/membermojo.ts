@@ -50,6 +50,9 @@ export type AppliedMemberImport = {
   processedCount: number;
   createdCount: number;
   refreshedCount: number;
+  endedCount: number;
+  restoredCount: number;
+  portalAccessReviewCount: number;
 };
 
 export class MemberMojoImportApplyError extends Error {
@@ -179,7 +182,7 @@ export async function buildMemberMojoPreview(
       .from("membership_records")
       .select("external_id")
       .eq("source", "membermojo")
-      .ilike("source_state", "active");
+      .is("membership_ended_at", null);
     if (error) throw new Error("Unable to identify members absent from the snapshot.");
     const uploadedIds = new Set(externalIds);
     missingFromSnapshot = (data ?? []).filter(record => !uploadedIds.has(record.external_id)).length;
@@ -263,7 +266,7 @@ export async function applyMemberMojoMembershipImport(
     source_member_since: record.memberSince,
     source_rules_agreement: record.rulesAgreement,
   })) as Json;
-  const { data, error } = await createAdminClient().rpc("apply_membermojo_membership_import", {
+  const { data, error } = await createAdminClient().rpc("apply_membermojo_membership_import_v2", {
     p_actor_id: actorId,
     p_file_sha256: fileSha256,
     p_import_id: importId,
@@ -275,5 +278,8 @@ export async function applyMemberMojoMembershipImport(
     processedCount: result.processed_count,
     createdCount: result.created_count,
     refreshedCount: result.refreshed_count,
+    endedCount: result.ended_count,
+    restoredCount: result.restored_count,
+    portalAccessReviewCount: result.portal_access_review_count,
   };
 }

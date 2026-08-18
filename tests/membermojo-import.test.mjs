@@ -91,15 +91,18 @@ test("rejects duplicate MemberMojo IDs and missing required columns", () => {
 });
 
 test("preview and apply are administrator-gated, same-file, atomic and service-role-only", async () => {
-  const [action, comparison, component, foundation, applyMigration] = await Promise.all([
+  const [action, comparison, component, page, foundation, applyMigration, lifecycleMigration, reviewMigration] = await Promise.all([
     readFile(new URL("../lib/actions/member-imports.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/membermojo.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/MemberMojoImportForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/administrator/member-import/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180026_membermojo_import_foundation.sql", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/202608180027_membermojo_import_apply.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180028_membermojo_lifecycle_retention.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/202608180029_membermojo_portal_reviews.sql", import.meta.url), "utf8"),
   ]);
 
-  assert.equal(action.match(/requireCapability\("members\.manage"\)/g)?.length, 2);
+  assert.equal(action.match(/requireCapability\("members\.manage"\)/g)?.length, 3);
   assert.match(action, /z\.literal\("APPLY MEMBERMOJO IMPORT"\)/);
   assert.match(action, /z\.literal\("yes"\)/);
   assert.doesNotMatch(action, /\.(?:insert|update|upsert|delete)\(\{/);
@@ -108,6 +111,11 @@ test("preview and apply are administrator-gated, same-file, atomic and service-r
   assert.doesNotMatch(comparison.match(/const records = parsed\.records[\s\S]*?as Json;/)?.[0] ?? "", /sourceSiteRole/);
   assert.match(component, /select the exact CSV used for preview/);
   assert.match(component, /Apply membership records/);
+  assert.match(component, /Retain ended records for 12 months/);
+  assert.match(page, /Portal access reviews/);
+  assert.match(page, /ARCHIVE PORTAL ACCESS/);
+  assert.match(page, /RETAIN PORTAL ACCESS/);
+  assert.match(action, /resolve_membermojo_portal_access_review/);
   assert.match(foundation, /alter table public\.membership_imports enable row level security/);
   assert.match(foundation, /revoke all on table public\.membership_imports from public, anon, authenticated/);
   assert.match(applyMigration, /for update/);
@@ -118,4 +126,21 @@ test("preview and apply are administrator-gated, same-file, atomic and service-r
   assert.doesNotMatch(applyMigration, /(?:update|insert into|delete from) public\.(?:users|user_roles)/);
   assert.match(applyMigration, /revoke all on function public\.apply_membermojo_membership_import[\s\S]*from public, anon, authenticated/);
   assert.match(applyMigration, /grant execute on function public\.apply_membermojo_membership_import[\s\S]*to service_role/);
+  assert.match(lifecycleMigration, /new\.import_mode = 'complete_active_snapshot'/);
+  assert.match(lifecycleMigration, /retention_until = v_now \+ interval '12 months'/);
+  assert.match(lifecycleMigration, /portal_access_review_required = auth_user_id is not null/);
+  assert.match(lifecycleMigration, /auth_user_id is null/);
+  assert.match(lifecycleMigration, /and not legal_hold/);
+  assert.match(lifecycleMigration, /membership_records_deleted/);
+  assert.doesNotMatch(lifecycleMigration, /(?:update|insert into|delete from) public\.(?:users|user_roles)/);
+  assert.match(lifecycleMigration, /revoke all on function public\.apply_membermojo_membership_import_v2[\s\S]*from public, anon, authenticated/);
+  assert.match(lifecycleMigration, /grant execute on function public\.apply_membermojo_membership_import_v2[\s\S]*to service_role/);
+  assert.match(reviewMigration, /p_decision not in \('archive_access', 'retain_access'\)/);
+  assert.match(reviewMigration, /membermojo_portal_review_self/);
+  assert.match(reviewMigration, /membermojo_portal_review_administrator/);
+  assert.match(reviewMigration, /membership_status = 'archived'/);
+  assert.match(reviewMigration, /insert into public\.audit_logs/);
+  assert.doesNotMatch(reviewMigration, /(?:update|insert into|delete from) auth\.users/);
+  assert.match(reviewMigration, /revoke all on function public\.resolve_membermojo_portal_access_review[\s\S]*from public, anon, authenticated/);
+  assert.match(reviewMigration, /grant execute on function public\.resolve_membermojo_portal_access_review[\s\S]*to service_role/);
 });

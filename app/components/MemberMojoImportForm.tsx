@@ -20,9 +20,10 @@ function plural(value: number, singular: string, pluralForm = `${singular}s`) {
 
 function ApplyMemberImportForm({ preview }: { preview: MemberImportPreview }) {
   const [state, formAction] = useActionState(applyMemberMojoImport, initialApplyState);
+  const completeSnapshot = preview.mode === "complete_active_snapshot";
 
   if (state.status === "success") {
-    return <section className="member-import-applied" aria-live="polite"><Check/><div><span>Import applied</span><h3>{plural(state.processedCount ?? 0, "membership record")} processed</h3><p>{state.createdCount} created · {state.refreshedCount} existing records refreshed. Portal accounts, Auth emails and website roles were unchanged.</p></div></section>;
+    return <section className="member-import-applied" aria-live="polite"><Check/><div><span>Import applied</span><h3>{plural(state.processedCount ?? 0, "membership record")} processed</h3><p>{state.createdCount} created · {state.refreshedCount} existing records refreshed.</p><p className="member-import-lifecycle-result">{state.endedCount} marked ended · {state.restoredCount} restored · {state.portalAccessReviewCount} portal access reviews required</p><p>Portal accounts, Auth emails and website roles were unchanged.</p></div></section>;
   }
   if (!preview.canApply) {
     return <section className="member-import-apply-placeholder"><ShieldCheck/><div><strong>This file has already been applied</strong><p>The fingerprint matches a completed import. Upload a newer MemberMojo export to make another change.</p></div><button type="button" disabled>Applied</button></section>;
@@ -40,7 +41,7 @@ function ApplyMemberImportForm({ preview }: { preview: MemberImportPreview }) {
       <label>Type <code className="member-import-confirmation-phrase">APPLY MEMBERMOJO IMPORT</code> to confirm
         <input name="confirmation" autoComplete="off" required/>
       </label>
-      <div className="member-import-apply-scope"><strong>This operation will:</strong><ul><li>Create or refresh MemberMojo membership records.</li><li>Preserve existing portal-account links and lifecycle fields.</li></ul><strong>It will not:</strong><ul><li>Change portal access, Auth emails or website roles.</li><li>Suspend, archive or delete anyone.</li></ul></div>
+      <div className="member-import-apply-scope"><strong>This operation will:</strong><ul><li>Create or refresh MemberMojo membership records.</li>{completeSnapshot ? <><li>Mark {plural(preview.totals.missingFromSnapshot, "previously active record")} absent from this complete snapshot as ended.</li><li>Retain ended records for 12 months and flag linked portal accounts for human review.</li></> : <li>Leave membership records absent from this update-only file unchanged.</li>}</ul><strong>It will not:</strong><ul><li>Change portal access, Auth emails or website roles.</li><li>Suspend, archive or delete any portal account.</li></ul></div>
       {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
       <PendingSubmitButton className="button dark" pendingLabel="Applying atomically…"><Database/>Apply membership records</PendingSubmitButton>
     </form>
