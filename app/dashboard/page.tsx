@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { CalendarDays, FileText, Megaphone, Plus, UsersRound, Wrench } from "lucide-react";
+import { CalendarDays, FileText, Megaphone, Plus, Wrench } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireUser, canManageContent } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createMessage, deleteMessage, joinWorkshop, leaveWorkshop, restoreMessage } from "@/lib/actions/content";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
 import { safeHttpUrl } from "@/lib/security-input";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +16,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const supabase = await createClient();
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [eventsResult, workshopsResult, feedsResult, docsResult, eventCount, workshopCount] = await Promise.all([
+  const [eventsResult, workshopsResult, feedsResult, latestDocumentResult, latestMemberPostResult, latestNewMemberResult, docsResult, eventCount, workshopCount] = await Promise.all([
     supabase.from("events").select("id,name,start_date,start_time,event_type").eq("lifecycle_status", "published").gte("end_date", today).order("start_date").limit(6),
     supabase.from("workshops").select("id,title,date,start_time,venue,maximum_participants").eq("lifecycle_status", "published").gte("date", today).order("date").limit(4),
     supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").order("created_at", { ascending: false }).limit(12),
+    supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").eq("type", "document").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("feeds").select("id,type,title,message,url,author_name,author_id,created_at").eq("lifecycle_status", "published").eq("type", "message").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("feeds").select("id,title,message,created_at").eq("lifecycle_status", "published").eq("type", "user").order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("documents").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published"),
     admin.from("events").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published").gte("end_date", today),
     admin.from("workshops").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published").gte("date", today),
@@ -34,6 +38,124 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const ownWorkshopIds = new Set((ownReservations ?? []).map((item) => item.reference_id));
   const placesByWorkshop = (reservationCounts ?? []).reduce((counts, item) => counts.set(item.reference_id, (counts.get(item.reference_id) ?? 0) + 1), new Map<string, number>());
   const { data: archivedNotices } = await admin.from("feeds").select("id,title").eq("author_id", user.id).eq("lifecycle_status", "archived").order("archived_at", { ascending: false }).limit(10);
+  const featuredFeeds = [
+    { label: "Latest document upload", kind: "document", empty: "No documents have been uploaded yet.", feed: latestDocumentResult.data },
+    { label: "Latest member post", kind: "message", empty: "No member posts have been shared yet.", feed: latestMemberPostResult.data },
+  ];
+  const latestNewMember = latestNewMemberResult.data;
+  const featuredFeedIds = new Set([...featuredFeeds.flatMap(({ feed }) => feed ? [feed.id] : []), ...(latestNewMember ? [latestNewMember.id] : [])]);
+  const earlierFeeds = feeds.filter(feed => !featuredFeedIds.has(feed.id));
 
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Members’ signal box</p><h1>Good to see you.</h1><p>The live Society board—private dates, documents, workshops and notices.</p></div><Link href="/events" className="button outline">Public website</Link></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{query.notice ? <p className="form-message success">Update complete.</p> : null}<section className="stat-grid"><article><CalendarDays/><strong>{eventCount.count ?? 0}</strong><span>upcoming dates</span></article><article><Wrench/><strong>{workshopCount.count ?? 0}</strong><span>open workshops</span></article><article><FileText/><strong>{docsResult.count ?? 0}</strong><span>club documents</span></article><article><UsersRound/><strong>{role}</strong><span>your access level</span></article></section><div className="portal-grid"><section className="portal-card span-2"><div className="card-heading"><div><p className="eyebrow dark">Private timetable</p><h2>Upcoming running days</h2></div>{canManageContent(role) ? <Link href="/admin/events">Manage <Plus/></Link> : null}</div><div className="compact-list">{events.map(event=><article key={event.id}><time><strong>{format(parseISO(event.start_date), "dd")}</strong>{format(parseISO(event.start_date), "MMM")}</time><div><h3>{event.name}</h3><p>{event.event_type === "member_only" ? "Members only" : "Public event"} · {event.start_time.slice(0,5)}</p></div></article>)}{!events.length ? <p>No upcoming dates are listed.</p> : null}</div></section><section className="portal-card"><div className="card-heading"><div><p className="eyebrow dark">Workshop bench</p><h2>Learn & make</h2></div></div><div className="workshop-list">{workshops.map(workshop=>{const signedUp=ownWorkshopIds.has(workshop.id);const places=placesByWorkshop.get(workshop.id) ?? 0;const full=!signedUp&&places>=workshop.maximum_participants;return <article key={workshop.id}><h3>{workshop.title}</h3><p>{format(parseISO(workshop.date), "d MMM")} · {workshop.start_time.slice(0,5)}<br/>{workshop.venue}</p><span>{places}/{workshop.maximum_participants} places</span><form action={signedUp ? leaveWorkshop : joinWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton disabled={full} pendingLabel={signedUp ? "Leaving…" : "Reserving…"}>{signedUp ? "Leave workshop" : full ? "Workshop full" : "Reserve place"}</PendingSubmitButton></form></article>})}{!workshops.length ? <p>No workshops are currently scheduled.</p> : null}</div></section><section className="portal-card span-2"><div className="card-heading"><div><p className="eyebrow dark">Notice board</p><h2>Latest from the club</h2></div><Megaphone/></div><div className="feed-list">{feeds.map(feed=>{const url=safeHttpUrl(feed.url);return <article key={feed.id}><div><span>{feed.type}</span><time>{format(new Date(feed.created_at), "d MMM yyyy")}</time></div><h3>{feed.title || "Club update"}</h3><p>{feed.message}</p>{url ? <a href={url} target="_blank" rel="noreferrer">Open attachment →</a> : null}{(feed.author_id===user.id||canManageContent(role)) ? <form action={deleteMessage}><input type="hidden" name="id" value={feed.id}/><PendingSubmitButton pendingLabel="Archiving…">Archive</PendingSubmitButton></form> : null}</article>})}</div></section><section className="portal-card"><p className="eyebrow dark">Post to members</p><h2>Add a notice</h2><form action={createMessage} className="stack-form"><label>Title<input name="title" maxLength={120} required/></label><label>Message<textarea name="message" rows={5} maxLength={2000} required/></label><PendingSubmitButton className="button dark" pendingLabel="Posting notice…">Post notice</PendingSubmitButton></form>{archivedNotices?.length ? <details><summary>Archived notices ({archivedNotices.length})</summary>{archivedNotices.map(notice => <form action={restoreMessage} key={notice.id}><input type="hidden" name="id" value={notice.id}/><span>{notice.title || "Notice"}</span><PendingSubmitButton pendingLabel="Restoring…">Restore</PendingSubmitButton></form>)}</details> : null}</section></div></div>;
+  return <>
+    {latestNewMember ? <NewMemberMarquee title={latestNewMember.title || "Welcome our newest member"} message={latestNewMember.message}/> : null}
+    <div className="portal-content">
+    <header className="portal-heading">
+      <div>
+        <p className="eyebrow dark">Members’ signal box</p>
+        <h1>Good to see you.</h1>
+        <p>The live Society board — member-only event dates, documents, workshops and notices.</p>
+      </div>
+      <Link href="/events" className="button outline">Public website</Link>
+    </header>
+
+    {query.error ? <p className="form-message error">{query.error}</p> : null}
+    {query.notice ? <p className="form-message success">Update complete.</p> : null}
+
+    <div className="dashboard-section-grid">
+      <section className="portal-card dashboard-primary-card" aria-labelledby="upcoming-running-days">
+        <div className="card-heading">
+          <div><p className="eyebrow dark">Private timetable</p><h2 id="upcoming-running-days">Upcoming running days</h2></div>
+          {canManageContent(role) ? <Link href="/admin/events">Manage <Plus/></Link> : null}
+        </div>
+        <div className="compact-list">
+          {events.map(event => <article key={event.id}>
+            <time dateTime={event.start_date}><strong>{format(parseISO(event.start_date), "dd")}</strong>{format(parseISO(event.start_date), "MMM")}</time>
+            <div><h3>{event.name}</h3><p>{event.event_type === "member_only" ? "Members only" : "Public event"} · {event.start_time.slice(0, 5)}</p></div>
+          </article>)}
+          {!events.length ? <p>No upcoming dates are listed.</p> : null}
+        </div>
+      </section>
+
+      <section className="portal-card dashboard-latest-card" aria-labelledby="latest-club-update">
+        <div className="card-heading">
+          <div><p className="eyebrow dark">Notice board</p><h2 id="latest-club-update">Latest from the club</h2></div>
+          <Megaphone aria-hidden="true"/>
+        </div>
+        <div className="dashboard-featured-feeds">
+          {featuredFeeds.map(({ label, kind, empty, feed }) => {
+            const url = safeHttpUrl(feed?.url);
+            return <article className="dashboard-featured-feed dashboard-message-card" data-feed-type={kind} key={label}>
+              <div><span>{label}</span>{feed ? <time dateTime={feed.created_at}>{format(new Date(feed.created_at), "d MMM yyyy")}</time> : null}</div>
+              {feed ? <>
+                <h3>{feed.title || "Club update"}</h3>
+                <p>{feed.message}</p>
+                {url ? <a href={url} target="_blank" rel="noreferrer">Open attachment →</a> : null}
+                {(feed.author_id === user.id || canManageContent(role)) ? <form action={deleteMessage}><input type="hidden" name="id" value={feed.id}/><PendingSubmitButton pendingLabel="Archiving…">Archive</PendingSubmitButton></form> : null}
+              </> : <p className="dashboard-empty-note">{empty}</p>}
+            </article>;
+          })}
+        </div>
+        {earlierFeeds.length ? <a className="dashboard-jump-link" href="#earlier-updates">Earlier updates ↓</a> : null}
+      </section>
+    </div>
+
+    <div className="dashboard-section-grid">
+      <section className="portal-card" aria-labelledby="workshop-bench">
+        <div className="card-heading"><div><p className="eyebrow dark">Workshop bench</p><h2 id="workshop-bench">Learn &amp; make</h2></div></div>
+        <div className="workshop-list">
+          {workshops.map(workshop => {
+            const signedUp = ownWorkshopIds.has(workshop.id);
+            const places = placesByWorkshop.get(workshop.id) ?? 0;
+            const full = !signedUp && places >= workshop.maximum_participants;
+            return <article key={workshop.id}>
+              <h3>{workshop.title}</h3>
+              <p>{format(parseISO(workshop.date), "d MMM")} · {workshop.start_time.slice(0, 5)}<br/>{workshop.venue}</p>
+              <span>{places}/{workshop.maximum_participants} places</span>
+              <form action={signedUp ? leaveWorkshop : joinWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton disabled={full} pendingLabel={signedUp ? "Leaving…" : "Reserving…"}>{signedUp ? "Leave workshop" : full ? "Workshop full" : "Reserve place"}</PendingSubmitButton></form>
+            </article>;
+          })}
+          {!workshops.length ? <p>No workshops are currently scheduled.</p> : null}
+        </div>
+      </section>
+
+      <section className="portal-card dashboard-snapshot" aria-labelledby="society-snapshot">
+        <div className="card-heading"><div><p className="eyebrow dark">At a glance</p><h2 id="society-snapshot">Society snapshot</h2></div></div>
+        <dl>
+          <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventCount.count ?? 0}</dd></div>
+          <div><dt><Wrench/>Open workshops</dt><dd>{workshopCount.count ?? 0}</dd></div>
+          <div><dt><FileText/>Club documents</dt><dd>{docsResult.count ?? 0}</dd></div>
+        </dl>
+      </section>
+    </div>
+
+    <div className="dashboard-section-grid dashboard-community-grid">
+      <section id="earlier-updates" className="portal-card" aria-labelledby="earlier-club-updates">
+        <div className="card-heading"><div><p className="eyebrow dark">Notice archive</p><h2 id="earlier-club-updates">Earlier updates</h2></div></div>
+        {earlierFeeds.length ? <div className="feed-list">
+          {earlierFeeds.map(feed => {
+            const url = safeHttpUrl(feed.url);
+            return <article className="dashboard-message-card" data-feed-type={feed.type} key={feed.id}>
+              <div><span>{feed.type}</span><time dateTime={feed.created_at}>{format(new Date(feed.created_at), "d MMM yyyy")}</time></div>
+              <h3>{feed.title || "Club update"}</h3>
+              <p>{feed.message}</p>
+              {url ? <a href={url} target="_blank" rel="noreferrer">Open attachment →</a> : null}
+              {(feed.author_id === user.id || canManageContent(role)) ? <form action={deleteMessage}><input type="hidden" name="id" value={feed.id}/><PendingSubmitButton pendingLabel="Archiving…">Archive</PendingSubmitButton></form> : null}
+            </article>;
+          })}
+        </div> : <p className="dashboard-empty-note">You’re all caught up.</p>}
+      </section>
+
+      <section className="portal-card dashboard-compose-card" aria-labelledby="add-member-notice">
+        <p className="eyebrow dark">Post to members</p>
+        <h2 id="add-member-notice">Add a notice</h2>
+        <form action={createMessage} className="stack-form">
+          <label>Title<input name="title" maxLength={120} required/></label>
+          <label>Message<textarea name="message" rows={5} maxLength={2000} required/></label>
+          <PendingSubmitButton className="button dark" pendingLabel="Posting notice…">Post notice</PendingSubmitButton>
+        </form>
+        {archivedNotices?.length ? <details><summary>Archived notices ({archivedNotices.length})</summary>{archivedNotices.map(notice => <form action={restoreMessage} key={notice.id}><input type="hidden" name="id" value={notice.id}/><span>{notice.title || "Notice"}</span><PendingSubmitButton pendingLabel="Restoring…">Restore</PendingSubmitButton></form>)}</details> : null}
+      </section>
+    </div>
+    </div>
+  </>;
 }
