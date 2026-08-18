@@ -80,28 +80,37 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   if (query.q) exportParams.set("q", query.q);
   if (query.event) exportParams.set("event", query.event);
   if (query.status) exportParams.set("status", query.status);
+  const hasFilters = Boolean(query.q || query.event || query.status);
+  const bookingCount = count ?? 0;
 
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Passenger control</p><h1>Visitor bookings</h1><p>Search, check in, contact and reconcile visitor groups.</p></div><span className="count-badge"><UsersRound/>{confirmedPeople} active visitors{selectedEvent?.booking_capacity ? ` / ${selectedEvent.booking_capacity}` : ""}</span></header>
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Passenger control</p><h1>Visitor bookings</h1><p>Search, check in, contact and reconcile visitor groups.</p></div><div className="booking-heading-summary"><span className="count-badge"><UsersRound/>{confirmedPeople} active {confirmedPeople === 1 ? "visitor" : "visitors"}{selectedEvent?.booking_capacity ? ` / ${selectedEvent.booking_capacity}` : ""}</span><small>{bookingCount} matching {bookingCount === 1 ? "booking" : "bookings"}</small></div></header>
     {query.error ? <p className="form-message error">{query.error}</p> : null}
     {notice ? <p className={query.notice === "cancelled-email-failed" ? "form-message error" : "form-message success"}>{notice}</p> : null}
     {blockedAttempts > 0 ? <div className="booking-abuse-summary"><ShieldAlert/><div><strong>{blockedAttempts} automatic booking {blockedAttempts === 1 ? "block" : "blocks"}</strong><span>{abuseTotals.browser} browser · {abuseTotals.ip} network · {abuseTotals.both} both · latest {format(new Date(abuseTotals.lastBlockedAt), "d MMM yyyy, HH:mm")}</span></div></div> : null}
-    <form className="booking-search" action="/admin/bookings" method="get">
-      <label htmlFor="booking-search">Reference, visitor name or email</label>
-      <div><Search/><input id="booking-search" name="q" defaultValue={query.q} placeholder="YME-12345-ABCDE" autoComplete="off"/><button className="button dark" type="submit">Filter</button></div>
-      <div className="form-grid two"><label>Event<select name="event" defaultValue={query.event || ""}><option value="">All events</option>{(events ?? []).map((event) => <option value={event.id} key={event.id}>{format(parseISO(event.start_date), "d MMM yyyy")} — {event.name}</option>)}</select></label><label>Status<select name="status" defaultValue={status}><option value="active">Active</option><option value="confirmed">Confirmed</option><option value="checked_in">Checked in</option><option value="cancelled">Cancelled</option></select></label></div>
-      <Link className="button secondary" href={`/admin/bookings/export?${exportParams}`}><Download/>Export CSV</Link>
+    <form className="booking-filter-panel" action="/admin/bookings" method="get">
+      <div className="booking-filter-heading"><div><h2>Find a booking</h2><p>Search the passenger list or narrow it by event and status.</p></div><Link className="button secondary" href={`/admin/bookings/export?${exportParams}`}><Download/>Export CSV</Link></div>
+      <div className="booking-filter-grid">
+        <label className="booking-filter-search" htmlFor="booking-search">Reference, visitor name or email<span><Search/><input id="booking-search" name="q" defaultValue={query.q} placeholder="YME-12345-ABCDE" autoComplete="off"/></span></label>
+        <label>Event<select name="event" defaultValue={query.event || ""}><option value="">All events</option>{(events ?? []).map((event) => <option value={event.id} key={event.id}>{format(parseISO(event.start_date), "d MMM yyyy")} — {event.name}</option>)}</select></label>
+        <label>Status<select name="status" defaultValue={status}><option value="active">Active</option><option value="confirmed">Confirmed</option><option value="checked_in">Checked in</option><option value="cancelled">Cancelled</option></select></label>
+        <button className="button dark" type="submit">Apply filters</button>
+      </div>
+      {hasFilters ? <Link className="booking-filter-clear" href="/admin/bookings"><RotateCcw/>Clear filters</Link> : null}
     </form>
     <div className="booking-admin-list">{(bookings ?? []).map((booking) => {
       const event = eventMap.get(booking.event_id);
-      return <article key={booking.id} className={booking.status === "checked_in" ? "is-checked-in" : ""}>
-        <div className="booking-admin-status">{booking.status === "checked_in" ? <UserCheck/> : booking.status === "cancelled" ? <Ban/> : <TicketCheck/>}<span>{booking.status.replace("_", " ")}</span></div>
-        <div className="booking-admin-person"><strong>{booking.lead_name}</strong><a href={`mailto:${booking.email}`}>{booking.email}</a><small>Booked {format(new Date(booking.created_at), "d MMM yyyy")} · {booking.confirmation_email_attempts} email attempt{booking.confirmation_email_attempts === 1 ? "" : "s"}</small>{booking.confirmation_email_error ? <small className="form-message error">Email delivery needs attention</small> : null}</div>
-        <div className="booking-admin-event"><span>{event ? `${format(parseISO(event.start_date), "d MMM yyyy")} · ${event.start_time.slice(0, 5)}` : "Event unavailable"}</span><strong>{event?.name || `Event ${booking.event_id}`}</strong><small>{booking.party_size} {booking.party_size === 1 ? "visitor" : "visitors"}</small></div>
-        <div className="booking-admin-reference"><small>Booking reference</small><strong>{booking.reference_code}</strong>{booking.cancellation_reason ? <small>{booking.cancellation_reason}</small> : null}</div>
+      return <article key={booking.id} className={`booking-admin-card is-${booking.status.replace("_", "-")}`}>
+        <header className="booking-admin-card-header"><div className="booking-admin-status">{booking.status === "checked_in" ? <UserCheck/> : booking.status === "cancelled" ? <Ban/> : <TicketCheck/>}<span>{booking.status.replace("_", " ")}</span></div><div className="booking-admin-reference"><small>Booking reference</small><strong>{booking.reference_code}</strong></div></header>
+        <div className="booking-admin-details">
+          <div className="booking-admin-person"><small className="booking-admin-label">Lead visitor</small><h2>{booking.lead_name}</h2><a href={`mailto:${booking.email}`}>{booking.email}</a><time dateTime={booking.created_at}>Booked {format(new Date(booking.created_at), "d MMM yyyy")} · {booking.confirmation_email_attempts} email attempt{booking.confirmation_email_attempts === 1 ? "" : "s"}</time>{booking.confirmation_email_error ? <small className="booking-delivery-warning"><ShieldAlert/>Email delivery needs attention</small> : null}</div>
+          <div className="booking-admin-event"><small className="booking-admin-label">Event</small><strong>{event?.name || `Event ${booking.event_id}`}</strong><span>{event ? <><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMM yyyy")}</time> · {event.start_time.slice(0, 5)}</> : "Event unavailable"}</span></div>
+          <div className="booking-party-size"><UsersRound/><div><small className="booking-admin-label">Party size</small><strong>{booking.party_size} {booking.party_size === 1 ? "visitor" : "visitors"}</strong></div></div>
+        </div>
+        {booking.cancellation_reason ? <p className="booking-cancellation-note"><Ban/>Cancellation reason: {booking.cancellation_reason}</p> : null}
         {booking.status !== "cancelled" ? <div className="booking-admin-actions">
           {booking.status === "checked_in" ? <form action={undoBookingCheckIn}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Reversing…"><RotateCcw/>Undo check-in</PendingSubmitButton></form> : <form action={checkInBooking}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton className="check-in-button" pendingLabel="Checking in…"><UserCheck/>Check in group</PendingSubmitButton></form>}
           <form action={resendBookingConfirmation}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Sending…"><MailCheck/>{booking.confirmation_email_sent_at ? "Resend ticket" : "Send ticket"}</PendingSubmitButton></form>
-          <form action={cancelBooking}><input type="hidden" name="id" value={booking.id}/><input name="reason" maxLength={500} aria-label="Cancellation reason" placeholder="Reason (optional)"/><PendingSubmitButton pendingLabel="Cancelling…"><Ban/>Cancel</PendingSubmitButton></form>
+          <form className="booking-cancel-form" action={cancelBooking}><input type="hidden" name="id" value={booking.id}/><input name="reason" maxLength={500} aria-label="Cancellation reason" placeholder="Cancellation reason (optional)"/><PendingSubmitButton pendingLabel="Cancelling…"><Ban/>Cancel booking</PendingSubmitButton></form>
         </div> : booking.confirmation_email_error ? <div className="booking-admin-actions"><form action={resendBookingCancellation}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Sending…"><MailCheck/>Retry cancellation email</PendingSubmitButton></form></div> : null}
       </article>;
     })}</div>
