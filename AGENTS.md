@@ -7,3 +7,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Supabase data safety
+
+- Treat every non-loopback Supabase endpoint as production data.
+- Never run seeds, fixtures, database resets, or test-data scripts against a remote Supabase project.
+- Data-writing tests must obtain their endpoint from `supabase status -o env` and refuse anything other than `http://127.0.0.1:54321`.
+- Keep `.env.local` pointed at the local Supabase stack. `.env.prod` is the remote configuration and must be used only for deployment or explicitly authorized, read-only auditing.
