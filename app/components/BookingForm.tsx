@@ -3,12 +3,13 @@
 import { useActionState } from "react";
 import { CalendarCheck, Check, Mail, UsersRound } from "lucide-react";
 import { CaptchaField } from "@/app/components/CaptchaField";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { createVisitorBooking, type BookingActionState } from "@/lib/actions/bookings";
 
 const initialState: BookingActionState = { status: "idle" };
 
 export function BookingForm({ eventId, availablePlaces }: { eventId: number; availablePlaces: number }) {
-  const [state, formAction, pending] = useActionState(createVisitorBooking, initialState);
+  const [state, formAction] = useActionState(createVisitorBooking, initialState);
 
   if (state.status === "success") {
     return <section className="booking-confirmation" aria-live="polite">
@@ -36,7 +37,7 @@ export function BookingForm({ eventId, availablePlaces }: { eventId: number; ava
     <label>How many people are coming?<input type="number" name="partySize" min="1" max={Math.min(20, availablePlaces)} defaultValue="1" inputMode="numeric" required/><small>Include adults and children. Maximum 20 people per booking.</small></label>
     <label className="booking-honeypot" aria-hidden="true">Website<input name="website" tabIndex={-1} autoComplete="off"/></label>
     <CaptchaField/>
-    <button className="button dark large" type="submit" disabled={pending}><CalendarCheck/>{pending ? "Reserving…" : "Confirm free booking"}</button>
+    <PendingSubmitButton className="button dark large" pendingLabel="Reserving…"><CalendarCheck/>Confirm free booking</PendingSubmitButton>
     <p className="booking-privacy">We use these details only to manage the event and send your confirmation. See our <a href="/privacy-policy">privacy notice</a>.</p>
   </form>;
 }

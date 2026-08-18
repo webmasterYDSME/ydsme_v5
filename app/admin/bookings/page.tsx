@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth";
 import { cancelBooking, checkInBooking, resendBookingCancellation, resendBookingConfirmation, undoBookingCheckIn } from "@/lib/actions/bookings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeSearchTerm } from "@/lib/security-input";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
@@ -83,10 +84,10 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
         <div className="booking-admin-event"><span>{event ? `${format(parseISO(event.start_date), "d MMM yyyy")} · ${event.start_time.slice(0, 5)}` : "Event unavailable"}</span><strong>{event?.name || `Event ${booking.event_id}`}</strong><small>{booking.party_size} {booking.party_size === 1 ? "visitor" : "visitors"}</small></div>
         <div className="booking-admin-reference"><small>Booking reference</small><strong>{booking.reference_code}</strong>{booking.cancellation_reason ? <small>{booking.cancellation_reason}</small> : null}</div>
         {booking.status !== "cancelled" ? <div className="booking-admin-actions">
-          {booking.status === "checked_in" ? <form action={undoBookingCheckIn}><input type="hidden" name="id" value={booking.id}/><button type="submit"><RotateCcw/>Undo check-in</button></form> : <form action={checkInBooking}><input type="hidden" name="id" value={booking.id}/><button className="check-in-button" type="submit"><UserCheck/>Check in group</button></form>}
-          <form action={resendBookingConfirmation}><input type="hidden" name="id" value={booking.id}/><button type="submit"><MailCheck/>{booking.confirmation_email_sent_at ? "Resend ticket" : "Send ticket"}</button></form>
-          <form action={cancelBooking}><input type="hidden" name="id" value={booking.id}/><input name="reason" maxLength={500} aria-label="Cancellation reason" placeholder="Reason (optional)"/><button type="submit"><Ban/>Cancel</button></form>
-        </div> : booking.confirmation_email_error ? <div className="booking-admin-actions"><form action={resendBookingCancellation}><input type="hidden" name="id" value={booking.id}/><button type="submit"><MailCheck/>Retry cancellation email</button></form></div> : null}
+          {booking.status === "checked_in" ? <form action={undoBookingCheckIn}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Reversing…"><RotateCcw/>Undo check-in</PendingSubmitButton></form> : <form action={checkInBooking}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton className="check-in-button" pendingLabel="Checking in…"><UserCheck/>Check in group</PendingSubmitButton></form>}
+          <form action={resendBookingConfirmation}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Sending…"><MailCheck/>{booking.confirmation_email_sent_at ? "Resend ticket" : "Send ticket"}</PendingSubmitButton></form>
+          <form action={cancelBooking}><input type="hidden" name="id" value={booking.id}/><input name="reason" maxLength={500} aria-label="Cancellation reason" placeholder="Reason (optional)"/><PendingSubmitButton pendingLabel="Cancelling…"><Ban/>Cancel</PendingSubmitButton></form>
+        </div> : booking.confirmation_email_error ? <div className="booking-admin-actions"><form action={resendBookingCancellation}><input type="hidden" name="id" value={booking.id}/><PendingSubmitButton pendingLabel="Sending…"><MailCheck/>Retry cancellation email</PendingSubmitButton></form></div> : null}
       </article>;
     })}</div>
     {!bookings?.length ? <div className="booking-admin-empty"><TicketCheck/><h2>No bookings found</h2><p>Adjust the event, status or search filters.</p></div> : null}

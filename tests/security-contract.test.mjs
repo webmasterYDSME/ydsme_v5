@@ -84,15 +84,17 @@ test("ships database and HTTP defence in depth", async () => {
 });
 
 test("keeps the supplied logo and local member login", async () => {
-  const [shell, signIn, authActions] = await Promise.all([
+  const [shell, signIn, signInCard, authActions] = await Promise.all([
     read("app/components/RailSite.tsx"),
     read("app/signin/page.tsx"),
+    read("app/components/SignInCard.tsx"),
     read("lib/actions/auth.ts"),
   ]);
   assert.match(shell, /\/ydsme-logo\.png/);
   assert.match(shell, /href="\/signin"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);
-  assert.match(signIn, /minLength=\{6\}/);
+  assert.match(signIn, /<SignInCard/);
+  assert.match(signInCard, /minLength=\{6\}/);
   assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
   assert.match(authActions, /newPasswordSchema = z\.string\(\)\.min\(8\)/);
 });

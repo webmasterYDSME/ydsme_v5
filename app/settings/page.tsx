@@ -9,6 +9,7 @@ import {
 import { defaultDonationSettings } from "@/lib/donations";
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ function CommitteeForm({ person }: { person?: Committee }) {
       <label>Email<input type="email" name="email" defaultValue={person?.email} required /></label>
       <SignedUploadField kind="committee-image" label={person ? "Replace portrait (optional)" : "Portrait (optional)"} />
       <input type="hidden" name="file_url" value={person?.file_url || ""} />
-      <button type="submit" className="button dark">Save committee record</button>
+      <PendingSubmitButton className="button dark">Save committee record</PendingSubmitButton>
     </form>
   );
 }
@@ -95,7 +96,7 @@ export default async function Settings({
           <label>Postcode<input name="postcode" defaultValue={address.postcode} required /></label>
           <label>Country<input name="country" defaultValue={address.country} required /></label>
           <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
-          <button type="submit" className="button dark">Save Society settings</button>
+          <PendingSubmitButton className="button dark">Save Society settings</PendingSubmitButton>
         </form>
       </details>
 
@@ -135,7 +136,7 @@ export default async function Settings({
             </div>
           </fieldset>
 
-          <button type="submit" className="button dark">Save donation components</button>
+          <PendingSubmitButton className="button dark">Save donation components</PendingSubmitButton>
         </form>
       </details>
 
@@ -159,7 +160,7 @@ export default async function Settings({
               </details>
               <form action={deleteCommittee}>
                 <input type="hidden" name="id" value={person.id} />
-                <button type="submit"><Trash2 />Delete</button>
+                <PendingSubmitButton pendingLabel="Deleting…"><Trash2 />Delete</PendingSubmitButton>
               </form>
             </div>
           </article>

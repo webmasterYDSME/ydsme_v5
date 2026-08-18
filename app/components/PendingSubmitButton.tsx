@@ -1,9 +1,39 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
-export function PendingSubmitButton({ children, pendingLabel = "Saving…", className }: { children: ReactNode; pendingLabel?: string; className?: string }) {
+type PendingSubmitButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "children"> & {
+  children: ReactNode;
+  pendingLabel?: string;
+};
+
+export function PendingSubmitButton({
+  children,
+  pendingLabel = "Saving…",
+  className,
+  disabled,
+  ...props
+}: PendingSubmitButtonProps) {
   const { pending } = useFormStatus();
-  return <button type="submit" className={className} disabled={pending} aria-disabled={pending}>{pending ? pendingLabel : children}</button>;
+  const isDisabled = disabled || pending;
+
+  return (
+    <button
+      {...props}
+      type="submit"
+      className={["pending-submit", className].filter(Boolean).join(" ")}
+      disabled={isDisabled}
+      aria-disabled={isDisabled}
+      aria-busy={pending}
+      data-pending={pending ? "true" : undefined}
+    >
+      {pending ? (
+        <span className="pending-submit-status" role="status">
+          <span className="button-spinner" aria-hidden="true" />
+          {pendingLabel}
+        </span>
+      ) : children}
+    </button>
+  );
 }
