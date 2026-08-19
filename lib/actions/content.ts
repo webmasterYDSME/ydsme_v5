@@ -28,7 +28,7 @@ const eventSchema = z.object({
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
   start_date: z.iso.date(), end_date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8),
   event_type: z.enum(["public", "member_only"]),
-  file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(),
+  file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(), public_teaser_enabled: z.boolean(),
   booking_mode: z.enum(["none", "website"]),
   lifecycle_status: z.enum(["draft", "published", "cancelled"]),
   booking_capacity: z.coerce.number().int().min(1).max(10000).optional(),
@@ -66,6 +66,7 @@ export async function saveEvent(formData: FormData) {
     start_date: formData.get("start_date"), end_date: formData.get("end_date"), start_time: formData.get("start_time"), end_time: formData.get("end_time"),
     event_type: formData.get("event_type"), file_url: formData.get("file_url") || "",
     display_in_homepage: bool(formData, "display_in_homepage"),
+    public_teaser_enabled: bool(formData, "public_teaser_enabled"),
     booking_mode: formData.get("booking_mode") || "none",
     lifecycle_status: formData.get("lifecycle_status") || "published",
     booking_capacity: formData.get("booking_capacity") || undefined,
@@ -78,6 +79,7 @@ export async function saveEvent(formData: FormData) {
   const { id, booking_capacity, ...parsedValues } = parsed.data;
   const values = {
     ...parsedValues,
+    public_teaser_enabled: parsedValues.event_type === "member_only" && parsedValues.public_teaser_enabled,
     reservation_link: "",
     booking_capacity: parsedValues.booking_mode === "website" ? booking_capacity : null,
     booking_enabled: parsedValues.booking_mode === "website",
@@ -85,7 +87,7 @@ export async function saveEvent(formData: FormData) {
     updated_at: new Date().toISOString(),
   };
   const admin = createAdminClient();
-  const { data: before } = id ? await admin.from("events").select("name,event_type,lifecycle_status,booking_mode,file_url").eq("id", id).maybeSingle() : { data: null };
+  const { data: before } = id ? await admin.from("events").select("name,event_type,lifecycle_status,booking_mode,file_url,public_teaser_enabled").eq("id", id).maybeSingle() : { data: null };
   const quarantinePath = String(formData.get("quarantine_path") || "");
   if (quarantinePath) {
     try {
@@ -105,7 +107,7 @@ export async function saveEvent(formData: FormData) {
     const oldPath = storageObjectPath(before?.file_url, "images");
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode } });
+  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode, public_teaser_enabled: values.public_teaser_enabled } });
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect(`/admin/events?status=${saved.lifecycle_status}&notice=event-saved`);
 }

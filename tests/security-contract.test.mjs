@@ -19,25 +19,40 @@ test("protects member routes with verified Supabase claims", async () => {
   assert.match(session, /from\("user_roles"\)/);
 });
 
-test("keeps private events off public pages", async () => {
-  const [data, events, home] = await Promise.all([
+test("exposes only explicitly selected member event teasers through a limited public view", async () => {
+  const [data, events, home, migration, admin, actions] = await Promise.all([
     read("lib/data.ts"),
     read("app/events/page.tsx"),
     read("app/page.tsx"),
+    read("supabase/migrations/202608190002_public_member_event_teasers.sql"),
+    read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
   ]);
   assert.match(data, /\.eq\("event_type", "public"\)/);
   assert.match(events, /getPublicEvents\(\)/);
   assert.match(home, /getPublicEvents\(\)/);
-  assert.doesNotMatch(events, /member_only/);
+  assert.match(data, /getPublicMemberEventTeasers[\s\S]*from\("public_member_event_teasers"\)/);
+  assert.match(data, /memberEventImage[\s\S]*\/images\/member-event-default\.webp/);
+  assert.match(events, /src=\{memberEventImage\(event\.file_url\)\}/);
+  assert.match(events, /member-event-grid-\$\{memberEvents\.length\}/);
+  assert.match(data, /isMissingProjection\(error\)[\s\S]*return \[\] as MemberEventTeaserRecord\[\]/);
+  assert.match(migration, /view public\.public_member_event_teasers/);
+  assert.match(migration, /event_type = 'member_only'/);
+  assert.match(migration, /public_teaser_enabled = true/);
+  assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
+  assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
+  assert.match(admin, /name="public_teaser_enabled"/);
+  assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
 
 test("keeps event management current and uses only the website booking system", async () => {
-  const [migration, admin, bookingFields, actions, publicEvents] = await Promise.all([
+  const [migration, admin, bookingFields, actions, publicEvents, eventsCarousel] = await Promise.all([
     read("supabase/migrations/202608180021_event_management_lifecycle.sql"),
     read("app/admin/[section]/page.tsx"),
     read("app/components/EventBookingFields.tsx"),
     read("lib/actions/content.ts"),
     read("app/events/page.tsx"),
+    read("app/events/EventsCarousel.tsx"),
   ]);
   assert.match(migration, /end_date < current_date/);
   assert.match(migration, /create trigger archive_past_event_on_write/);
@@ -53,6 +68,15 @@ test("keeps event management current and uses only the website booking system", 
   assert.doesNotMatch(bookingFields, /external/i);
   assert.doesNotMatch(publicEvents, /featuredExternalUrl|safeHttpUrl/);
   assert.match(actions, /booking_mode: z\.enum\(\["none", "website"\]\)/);
+  assert.match(publicEvents, /events\.find\(\(event\) => event\.booking_enabled && event\.available_places > 0\)/);
+  assert.match(publicEvents, /advanceBooking/);
+  assert.match(publicEvents, /featured\.available_places > 0[\s\S]*View event details/);
+  assert.match(publicEvents, /<EventsCarousel events=\{more\}/);
+  assert.match(eventsCarousel, /const EVENTS_PER_VIEW = 3/);
+  assert.match(eventsCarousel, /Previous three events/);
+  assert.match(eventsCarousel, /Next three events/);
+  assert.match(eventsCarousel, /id=\{`event-\$\{event\.id\}`\}/);
+  assert.match(await read("app/events/[id]/book/page.tsx"), /href=\{`\/events#event-\$\{event\.id\}`\}/);
 });
 
 test("automatically archives workshops after their scheduled date", async () => {
