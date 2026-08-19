@@ -3,8 +3,8 @@
 alter table public.configs
   add column if not exists email text not null default 'secretary@yorkmodelengineers.co.uk',
   add column if not exists club_address jsonb not null default jsonb_build_object(
-    'address_line_one', 'Dringhouses',
-    'address_line_two', '',
+    'address_line_one', 'Rear of The Pastures',
+    'address_line_two', 'North Lane',
     'city', 'York',
     'postcode', 'YO24 2JE',
     'country', 'United Kingdom'
