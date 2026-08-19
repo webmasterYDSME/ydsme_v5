@@ -33,6 +33,17 @@ export type EventRecord = {
   available_places: number;
 };
 
+export type MemberEventTeaserRecord = {
+  id: number;
+  name: string;
+  descriptions: string;
+  file_url: string;
+  start_date: string;
+  end_date: string;
+  start_time: string;
+  end_time: string;
+};
+
 export type CommitteeRecord = {
   id: number;
   name: string;
@@ -172,6 +183,23 @@ export async function getPublicEvents() {
       available_places: event.booking_capacity ? Math.max(0, event.booking_capacity - bookedPlaces) : 0,
     };
   }) as EventRecord[];
+}
+
+export async function getPublicMemberEventTeasers(limit = 3) {
+  await connection();
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await createPublicClient()
+    .from("public_member_event_teasers")
+    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time")
+    .gte("end_date", today)
+    .order("start_date", { ascending: true })
+    .order("start_time", { ascending: true })
+    .limit(limit);
+  // An additive deployment can briefly serve the app before the new view is
+  // available. In that window, omit teasers instead of querying private data.
+  if (isMissingProjection(error)) return [] as MemberEventTeaserRecord[];
+  if (error) throw new Error("Unable to load member event previews.");
+  return (data ?? []) as MemberEventTeaserRecord[];
 }
 
 export async function getBookableEvent(id: number) {
@@ -347,6 +375,10 @@ export async function getDonationSettings() {
 
 export function eventImage(path?: string | null) {
   return publicStorageUrl(path, "images") ?? "/images/engine.webp";
+}
+
+export function memberEventImage(path?: string | null) {
+  return publicStorageUrl(path, "images") ?? "/images/member-event-default.webp";
 }
 
 export function committeeImage(path?: string | null) {

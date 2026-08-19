@@ -28,6 +28,7 @@ import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { AnnouncementFields } from "@/app/components/AnnouncementFields";
+import { EventAudienceFields } from "@/app/components/EventAudienceFields";
 import { EventBookingFields } from "@/app/components/EventBookingFields";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
@@ -39,7 +40,7 @@ const EVENT_PAGE_SIZE = 12;
 const WORKSHOP_PAGE_SIZE = 5;
 
 type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:LifecycleStatus; updated_at:string };
+type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; public_teaser_enabled:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:LifecycleStatus; updated_at:string };
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
@@ -52,11 +53,12 @@ function EventForm({ event }: { event?: EventRow }) {
     <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
     <label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label>
     <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
-    <label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label>
-    <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
-    <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
-    <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
-    <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
+    <EventAudienceFields initialAudience={event?.event_type} initialPublicTeaserEnabled={event?.public_teaser_enabled}>
+      <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
+      <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
+      <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
+      <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
+    </EventAudienceFields>
     <PendingSubmitButton className="button dark" pendingLabel={event ? "Saving changes…" : "Creating event…"}>{event ? "Save changes" : "Create event"}</PendingSubmitButton>
   </form>;
 }
@@ -136,7 +138,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const eventStatuses = ["published", "draft", "cancelled", "archived"] as const;
     let eventQuery = admin.from("events")
-      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,booking_enabled,booking_mode,booking_capacity,lifecycle_status,updated_at", { count: "exact" })
+      .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,public_teaser_enabled,booking_enabled,booking_mode,booking_capacity,lifecycle_status,updated_at", { count: "exact" })
       .eq("lifecycle_status", status);
     if (status === "published") {
       eventQuery = eventQuery.order("start_date").order("start_time").order("id");

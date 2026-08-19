@@ -479,6 +479,7 @@ export type Database = {
           is_ticket_required: boolean
           lifecycle_status: string
           name: string
+          public_teaser_enabled: boolean
           reservation_link: string
           start_date: string
           start_time: string
@@ -502,6 +503,7 @@ export type Database = {
           is_ticket_required?: boolean
           lifecycle_status?: string
           name?: string
+          public_teaser_enabled?: boolean
           reservation_link?: string
           start_date: string
           start_time: string
@@ -525,6 +527,7 @@ export type Database = {
           is_ticket_required?: boolean
           lifecycle_status?: string
           name?: string
+          public_teaser_enabled?: boolean
           reservation_link?: string
           start_date?: string
           start_time?: string
@@ -1217,6 +1220,19 @@ export type Database = {
           lifecycle_status: string | null
           name: string | null
           reservation_link: string | null
+          start_date: string | null
+          start_time: string | null
+        }
+        Relationships: []
+      }
+      public_member_event_teasers: {
+        Row: {
+          descriptions: string | null
+          end_date: string | null
+          end_time: string | null
+          file_url: string | null
+          id: number | null
+          name: string | null
           start_date: string | null
           start_time: string | null
         }

@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, FileText, Megaphone, Plus, ShoppingBag, Wrench } from "lucide-react";
+import { ArrowUpRight, CalendarDays, ChevronDown, FileText, Megaphone, Plus, ShoppingBag, Wrench } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireUser, canManageContent } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createMessage, deleteMessage, joinWorkshop, leaveWorkshop, restoreMessage } from "@/lib/actions/content";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
+import { ResponsiveDashboardCard } from "@/app/components/ResponsiveDashboardCard";
 import { safeHttpUrl } from "@/lib/security-input";
 
 export const dynamic = "force-dynamic";
@@ -45,31 +46,36 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const latestNewMember = feedSnapshot.latest_user;
   const featuredFeedIds = new Set([...featuredFeeds.flatMap(({ feed }) => feed ? [feed.id] : []), ...(latestNewMember ? [latestNewMember.id] : [])]);
   const earlierFeeds = feeds.filter(feed => !featuredFeedIds.has(feed.id));
+  const renderEvent = (event: (typeof events)[number]) => <article key={event.id}>
+    <time dateTime={event.start_date}><strong>{format(parseISO(event.start_date), "dd")}</strong>{format(parseISO(event.start_date), "MMM")}</time>
+    <div><h3>{event.name}</h3><p>{event.event_type === "member_only" ? "Members only" : "Public event"} · {event.start_time.slice(0, 5)}</p></div>
+  </article>;
+  const renderWorkshop = (workshop: (typeof workshops)[number]) => {
+    const signedUp = ownWorkshopIds.has(workshop.id);
+    const places = placesByWorkshop.get(workshop.id) ?? 0;
+    const full = !signedUp && places >= workshop.maximum_participants;
+    return <article key={workshop.id}>
+      <h3>{workshop.title}</h3>
+      <p>{format(parseISO(workshop.date), "d MMM")} · {workshop.start_time.slice(0, 5)}<br/>{workshop.venue}</p>
+      <span>{places}/{workshop.maximum_participants} places</span>
+      <form action={signedUp ? leaveWorkshop : joinWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton disabled={full} pendingLabel={signedUp ? "Leaving…" : "Reserving…"}>{signedUp ? "Leave workshop" : full ? "Workshop full" : "Reserve place"}</PendingSubmitButton></form>
+    </article>;
+  };
 
   return <>
     {latestNewMember ? <NewMemberMarquee title={latestNewMember.title || "Welcome our newest member"} message={latestNewMember.message}/> : null}
     <div className="portal-content">
-    <header className="portal-heading">
+    <header className="portal-heading dashboard-heading">
       <div>
         <p className="eyebrow dark">Members’ signal box</p>
         <h1>Good to see you.</h1>
         <p>The live Society board — member-only event dates, documents, workshops and notices.</p>
       </div>
-      <Link href="/events" prefetch={false} className="button outline">Public website</Link>
+      <Link href="/events" prefetch={false} className="button outline dashboard-public-link"><span>Public website</span><ArrowUpRight aria-hidden="true"/></Link>
     </header>
 
     {query.error ? <p className="form-message error">{query.error}</p> : null}
     {query.notice ? <p className="form-message success">Update complete.</p> : null}
-
-    <section className="dashboard-merch-card" aria-labelledby="club-store-heading">
-      <span className="dashboard-merch-icon" aria-hidden="true"><ShoppingBag/></span>
-      <div>
-        <p className="eyebrow">Club shop</p>
-        <h2 id="club-store-heading">Wear the Society colours.</h2>
-        <p>Browse York Model Engineers clothing and club merchandise at Inglis Works.</p>
-      </div>
-      <a className="button dashboard-merch-link" href="https://www.inglisworks.co.uk/ysme" target="_blank" rel="noreferrer" aria-label="Visit the York Model Engineers store at Inglis Works (opens in a new tab)">Visit the club store <ArrowUpRight/></a>
-    </section>
 
     <div className="dashboard-section-grid">
       <section className="portal-card dashboard-primary-card" aria-labelledby="upcoming-running-days">
@@ -78,12 +84,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           {canManageContent(role) ? <Link href="/admin/events" prefetch={false}>Manage <Plus/></Link> : null}
         </div>
         <div className="compact-list">
-          {events.map(event => <article key={event.id}>
-            <time dateTime={event.start_date}><strong>{format(parseISO(event.start_date), "dd")}</strong>{format(parseISO(event.start_date), "MMM")}</time>
-            <div><h3>{event.name}</h3><p>{event.event_type === "member_only" ? "Members only" : "Public event"} · {event.start_time.slice(0, 5)}</p></div>
-          </article>)}
+          {events.slice(0, 3).map(renderEvent)}
           {!events.length ? <p>No upcoming dates are listed.</p> : null}
         </div>
+        {events.length > 3 ? <details className="dashboard-more-list"><summary>Show {events.length - 3} more dates <ChevronDown aria-hidden="true"/></summary><div className="compact-list">{events.slice(3).map(renderEvent)}</div></details> : null}
       </section>
 
       <section className="portal-card dashboard-latest-card" aria-labelledby="latest-club-update">
@@ -109,38 +113,37 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </section>
     </div>
 
+    <section className="dashboard-merch-card" aria-labelledby="club-store-heading">
+      <span className="dashboard-merch-icon" aria-hidden="true"><ShoppingBag/></span>
+      <div>
+        <p className="eyebrow">Club shop</p>
+        <h2 id="club-store-heading">Wear the Society colours.</h2>
+        <p>Browse York Model Engineers clothing and club merchandise at Inglis Works.</p>
+      </div>
+      <a className="button dashboard-merch-link" href="https://www.inglisworks.co.uk/ysme" target="_blank" rel="noreferrer" aria-label="Visit the York Model Engineers store at Inglis Works (opens in a new tab)"><span>Visit the club store</span><ArrowUpRight/></a>
+    </section>
+
     <div className="dashboard-section-grid">
       <section className="portal-card" aria-labelledby="workshop-bench">
         <div className="card-heading"><div><p className="eyebrow dark">Workshop bench</p><h2 id="workshop-bench">Learn &amp; make</h2></div></div>
         <div className="workshop-list">
-          {workshops.map(workshop => {
-            const signedUp = ownWorkshopIds.has(workshop.id);
-            const places = placesByWorkshop.get(workshop.id) ?? 0;
-            const full = !signedUp && places >= workshop.maximum_participants;
-            return <article key={workshop.id}>
-              <h3>{workshop.title}</h3>
-              <p>{format(parseISO(workshop.date), "d MMM")} · {workshop.start_time.slice(0, 5)}<br/>{workshop.venue}</p>
-              <span>{places}/{workshop.maximum_participants} places</span>
-              <form action={signedUp ? leaveWorkshop : joinWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton disabled={full} pendingLabel={signedUp ? "Leaving…" : "Reserving…"}>{signedUp ? "Leave workshop" : full ? "Workshop full" : "Reserve place"}</PendingSubmitButton></form>
-            </article>;
-          })}
+          {workshops.slice(0, 2).map(renderWorkshop)}
           {!workshops.length ? <p>No workshops are currently scheduled.</p> : null}
         </div>
+        {workshops.length > 2 ? <details className="dashboard-more-list"><summary>Show {workshops.length - 2} more workshops <ChevronDown aria-hidden="true"/></summary><div className="workshop-list">{workshops.slice(2).map(renderWorkshop)}</div></details> : null}
       </section>
 
-      <section className="portal-card dashboard-snapshot" aria-labelledby="society-snapshot">
-        <div className="card-heading"><div><p className="eyebrow dark">At a glance</p><h2 id="society-snapshot">Society snapshot</h2></div></div>
+      <ResponsiveDashboardCard className="dashboard-snapshot" eyebrow="At a glance" heading="Club overview" headingId="society-snapshot">
         <dl>
           <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventsResult.count ?? 0}</dd></div>
           <div><dt><Wrench/>Open workshops</dt><dd>{workshopsResult.count ?? 0}</dd></div>
           <div><dt><FileText/>Club documents</dt><dd>{docsResult.count ?? 0}</dd></div>
         </dl>
-      </section>
+      </ResponsiveDashboardCard>
     </div>
 
     <div className="dashboard-section-grid dashboard-community-grid">
-      <section id="earlier-updates" className="portal-card" aria-labelledby="earlier-club-updates">
-        <div className="card-heading"><div><p className="eyebrow dark">Notice archive</p><h2 id="earlier-club-updates">Earlier updates</h2></div></div>
+      <ResponsiveDashboardCard id="earlier-updates" eyebrow="Notice archive" heading="Earlier updates" headingId="earlier-club-updates">
         {earlierFeeds.length ? <div className="feed-list">
           {earlierFeeds.map(feed => {
             const url = safeHttpUrl(feed.url);
@@ -153,7 +156,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             </article>;
           })}
         </div> : <p className="dashboard-empty-note">You’re all caught up.</p>}
-      </section>
+      </ResponsiveDashboardCard>
 
       <section className="portal-card dashboard-compose-card" aria-labelledby="add-member-notice">
         <p className="eyebrow dark">Post to members</p>

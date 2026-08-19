@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, FileText, FileUp, Gauge, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
+import { CalendarDays, FileText, Gauge, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import type { AppRole } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
@@ -31,7 +31,6 @@ const contentLinks: PortalLink[] = [
 
 const administratorLinks: PortalLink[] = [
   { href: "/admin/members", label: "Members", icon: UsersRound },
-  { href: "/administrator/member-import", label: "MemberMojo import", icon: FileUp },
   { href: "/admin/donations", label: "Donations", icon: HandCoins },
   { href: "/admin/audit", label: "Audit history", icon: History },
   { href: "/settings", label: "Committee & site", icon: Settings },
@@ -76,7 +75,7 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
       }
     }
 
-    const mobileNavigation = window.matchMedia("(max-width: 720px)");
+    const mobileNavigation = window.matchMedia("(max-width: 1024px)");
     function closeAtDesktopWidth(event: MediaQueryListEvent) {
       if (!event.matches) setOpen(false);
     }
