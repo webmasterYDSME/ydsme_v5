@@ -25,7 +25,7 @@ const interests = [
 ];
 
 export default async function Home() {
-  const [publicEvents, donations, announcements] = await Promise.all([getPublicEvents(), getDonationSettings(), getCarriageAnnouncements(6)]);
+  const [publicEvents, donations, announcements] = await Promise.all([getPublicEvents(), getDonationSettings(), getCarriageAnnouncements(1)]);
   const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>

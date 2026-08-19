@@ -2,7 +2,7 @@ import { format } from "date-fns";
 import { Megaphone } from "lucide-react";
 import { Reveal } from "@/app/components/RailSite";
 import { PageShell } from "@/app/components/PageShell";
-import { getPublicAnnouncements } from "@/lib/data";
+import { getNewsAnnouncements } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const metadata = publicPageMetadata({
 });
 
 export default async function News() {
-  const announcements = await getPublicAnnouncements();
+  const announcements = await getNewsAnnouncements(5);
 
   return <PageShell headerTheme="light">
     <section className="section news-board" aria-labelledby="news-heading">

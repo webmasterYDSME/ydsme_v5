@@ -101,12 +101,14 @@ test("keeps scheduled maintenance inside Supabase", async () => {
   assert.doesNotMatch(environment, /CRON_SECRET/);
 });
 
-test("publishes announcements through a safe public projection and staff-only actions", async () => {
-  const [migration, limitsMigration, descriptionMigration, limits, actions, data, home, train, sitemap, adminPage, news] = await Promise.all([
+test("publishes and caches announcements through safe active and news projections with staff-only actions", async () => {
+  const [migration, newsArchiveMigration, limitsMigration, descriptionMigration, limits, cacheTags, actions, data, home, train, sitemap, adminPage, news] = await Promise.all([
     read("supabase/migrations/202608180016_public_announcements.sql"),
+    read("supabase/migrations/202608190001_public_news_archive.sql"),
     read("supabase/migrations/202608180017_announcement_carriage_limits.sql"),
     read("supabase/migrations/202608180018_announcement_description_length.sql"),
     read("lib/announcements.ts"),
+    read("lib/cache-tags.ts"),
     read("lib/actions/content.ts"),
     read("lib/data.ts"),
     read("app/page.tsx"),
@@ -119,16 +121,28 @@ test("publishes announcements through a safe public projection and staff-only ac
   assert.match(migration, /revoke all on table public\.announcements from public, anon, authenticated/);
   assert.match(migration, /view public\.public_announcements/);
   assert.match(migration, /where lifecycle_status = 'published'/);
+  assert.match(newsArchiveMigration, /view public\.public_news_announcements/);
+  assert.match(newsArchiveMigration, /published_at is not null/);
+  assert.match(newsArchiveMigration, /lifecycle_status in \('published', 'archived'\)/);
+  assert.match(newsArchiveMigration, /grant select on public\.public_news_announcements to anon, authenticated/);
   assert.match(actions, /saveAnnouncement[\s\S]*requireRole\(\["administrator", "committee"\]\)/);
   assert.match(actions, /archiveAnnouncement[\s\S]*requireRole\(\["administrator", "committee"\]\)/);
+  assert.match(actions, /deleteOldArchivedAnnouncements[\s\S]*requireRole\(\["administrator"\]\)[\s\S]*\.delete\(\)[\s\S]*\.eq\("lifecycle_status", "archived"\)[\s\S]*\.lt\("archived_at", cutoff\.toISOString\(\)\)/);
+  assert.match(actions, /announcements\.archives-purged/);
   assert.match(limitsMigration, /between 2 and 26/);
   assert.match(limitsMigration, /between 2 and 120/);
   assert.match(descriptionMigration, /between 2 and 120/);
   assert.match(limits, /ANNOUNCEMENT_TITLE_MAX_LENGTH = 26/);
   assert.match(limits, /ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH = 120/);
+  assert.match(cacheTags, /ANNOUNCEMENTS_CACHE_TAG = "announcements"/);
   assert.match(data, /from\("public_announcements"\)/);
+  assert.match(data, /loadNewsAnnouncements\(limit: number\)[\s\S]*from\("public_news_announcements"\)[\s\S]*\.limit\(limit\)/);
+  assert.match(data, /unstable_cache\([\s\S]*tags: \[ANNOUNCEMENTS_CACHE_TAG\], revalidate: 3600/);
+  assert.match(actions, /saveAnnouncement[\s\S]*updateTag\(ANNOUNCEMENTS_CACHE_TAG\)/);
+  assert.match(actions, /archiveAnnouncement[\s\S]*updateTag\(ANNOUNCEMENTS_CACHE_TAG\)/);
+  assert.match(actions, /restoreAnnouncement[\s\S]*updateTag\(ANNOUNCEMENTS_CACHE_TAG\)/);
   assert.match(data, /isMissingProjection\(error\)[\s\S]*return \[\] as AnnouncementRecord\[\]/);
-  assert.match(home, /getCarriageAnnouncements\(6\)/);
+  assert.match(home, /getCarriageAnnouncements\(1\)/);
   assert.match(home, /<InteractiveSteamTrain announcements=/);
   assert.match(train, /setInterval\([\s\S]*setAnnouncementIndex/);
   assert.match(train, /announcement \? <Link className="train-banner" href="\/news"/);
@@ -136,7 +150,9 @@ test("publishes announcements through a safe public projection and staff-only ac
   assert.doesNotMatch(train, /const nav = \[[^\n]*News/);
   assert.match(train, /Footer navigation[\s\S]*href="\/news"/);
   assert.match(sitemap, /path: "\/news"/);
-  assert.match(news, /getPublicAnnouncements\(\)/);
+  assert.match(news, /getNewsAnnouncements\(5\)/);
+  assert.match(adminPage, /session\.role === "administrator"[\s\S]*action=\{deleteOldArchivedAnnouncements\}[\s\S]*confirmMessage=/);
+  assert.match(adminPage, /oldArchiveCountResult\.count[\s\S]*Delete old archives/);
   assert.match(adminPage, /section === "announcements"/);
 });
 
