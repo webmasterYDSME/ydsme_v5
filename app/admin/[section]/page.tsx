@@ -28,6 +28,7 @@ import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { AnnouncementFields } from "@/app/components/AnnouncementFields";
+import { EventAudienceFields } from "@/app/components/EventAudienceFields";
 import { EventBookingFields } from "@/app/components/EventBookingFields";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
@@ -52,12 +53,12 @@ function EventForm({ event }: { event?: EventRow }) {
     <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
     <label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label>
     <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
-    <label>Audience<select name="event_type" defaultValue={event?.event_type || "member_only"}><option value="member_only">Members only</option><option value="public">Public</option></select></label>
-    <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
-    <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
-    <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
-    <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
-    <label className="check wide"><input type="checkbox" name="public_teaser_enabled" defaultChecked={event?.public_teaser_enabled}/>Promote this members-only event on the public events page <small>Only applies when the audience is Members only. The public teaser shows the event title, date, description and image.</small></label>
+    <EventAudienceFields initialAudience={event?.event_type} initialPublicTeaserEnabled={event?.public_teaser_enabled}>
+      <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
+      <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
+      <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
+      <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
+    </EventAudienceFields>
     <PendingSubmitButton className="button dark" pendingLabel={event ? "Saving changes…" : "Creating event…"}>{event ? "Save changes" : "Create event"}</PendingSubmitButton>
   </form>;
 }

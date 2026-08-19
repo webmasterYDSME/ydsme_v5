@@ -20,12 +20,13 @@ test("protects member routes with verified Supabase claims", async () => {
 });
 
 test("exposes only explicitly selected member event teasers through a limited public view", async () => {
-  const [data, events, home, migration, admin, actions] = await Promise.all([
+  const [data, events, home, migration, admin, audienceFields, actions] = await Promise.all([
     read("lib/data.ts"),
     read("app/events/page.tsx"),
     read("app/page.tsx"),
     read("supabase/migrations/202608190002_public_member_event_teasers.sql"),
     read("app/admin/[section]/page.tsx"),
+    read("app/components/EventAudienceFields.tsx"),
     read("lib/actions/content.ts"),
   ]);
   assert.match(data, /\.eq\("event_type", "public"\)/);
@@ -41,7 +42,8 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(migration, /public_teaser_enabled = true/);
   assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
   assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
-  assert.match(admin, /name="public_teaser_enabled"/);
+  assert.match(admin, /EventAudienceFields/);
+  assert.match(audienceFields, /audience === "member_only"[\s\S]*name="public_teaser_enabled"/);
   assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
 
