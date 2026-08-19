@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - preview
 
 permissions:
   contents: read
@@ -14,6 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  promotion-path:
+    name: Validate promotion path
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require feature to preview to main
+        env:
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if [[ "$BASE_BRANCH" == "preview" && "$HEAD_BRANCH" != "main" && "$HEAD_BRANCH" != "preview" ]]; then
+            exit 0
+          fi
+
+          if [[ "$BASE_BRANCH" == "main" && "$HEAD_BRANCH" == "preview" ]]; then
+            exit 0
+          fi
+
+          echo "Invalid promotion path: $HEAD_BRANCH -> $BASE_BRANCH"
+          echo "Required path: feature branch -> preview -> main"
+          exit 1
+
   verify:
     name: Verify deployment
     runs-on: ubuntu-latest

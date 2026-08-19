@@ -1,0 +1,38 @@
+name: Delete merged feature branches
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  contents: write
+
+jobs:
+  delete-branch:
+    name: Delete merged feature branch
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != 'main' &&
+      github.event.pull_request.head.ref != 'preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Delete source branch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            try {
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `heads/${context.payload.pull_request.head.ref}`,
+              });
+            } catch (error) {
+              if (error.status === 422) {
+                core.info("The merged feature branch was already deleted.");
+              } else {
+                throw error;
+              }
+            }
