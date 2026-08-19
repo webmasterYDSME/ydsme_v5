@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, Clock3, MapPin, ShieldCheck, UsersRound } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { notFound } from "next/navigation";
 import { BookingForm } from "@/app/components/BookingForm";
 import { PageShell } from "@/app/components/PageShell";
-import { getBookableEvent } from "@/lib/data";
+import { eventImage, getBookableEvent } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -23,7 +24,8 @@ export default async function EventBookingPage({ params }: { params: Promise<{ i
 
   return <PageShell><section className="booking-page">
     <div className="booking-event-panel">
-      <Link href="/events" className="booking-back"><ArrowLeft/>All events</Link>
+      {event.file_url ? <div className="booking-event-banner" aria-hidden="true"><Image src={eventImage(event.file_url)} alt="" fill sizes="(max-width: 1180px) 100vw, 55vw" quality={75} preload/></div> : null}
+      <Link href={`/events#event-${event.id}`} className="booking-back"><ArrowLeft/>All events</Link>
       <div><p className="eyebrow">Visitor booking</p><h1>{event.name}</h1><p>{event.descriptions}</p></div>
       <dl className="booking-facts">
         <div><dt><CalendarDays/>Date</dt><dd>{format(parseISO(event.start_date), "EEEE d MMMM yyyy")}</dd></div>
@@ -36,7 +38,7 @@ export default async function EventBookingPage({ params }: { params: Promise<{ i
     <div className="booking-form-panel">
       {event.available_places > 0
         ? <BookingForm eventId={event.id} availablePlaces={event.available_places}/>
-        : <div className="booking-sold-out"><p className="eyebrow dark">Passenger list full</p><h2>This event is<br/><em>fully booked.</em></h2><p>Please check the events page for another public running day.</p><Link className="button dark" href="/events">See other events</Link></div>}
+        : <div className="booking-sold-out"><p className="eyebrow dark">Passenger list full</p><h2>This event is<br/><em>fully booked.</em></h2><p>Please check the events page for another public running day.</p><Link className="button dark" href="/events#event-list">See other events</Link></div>}
     </div>
   </section></PageShell>;
 }
