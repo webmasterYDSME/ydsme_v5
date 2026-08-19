@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createMessage, deleteMessage, joinWorkshop, leaveWorkshop, restoreMessage } from "@/lib/actions/content";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
+import { ResponsiveDashboardCard } from "@/app/components/ResponsiveDashboardCard";
 import { safeHttpUrl } from "@/lib/security-input";
 
 export const dynamic = "force-dynamic";
@@ -132,19 +133,17 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         {workshops.length > 2 ? <details className="dashboard-more-list"><summary>Show {workshops.length - 2} more workshops <ChevronDown aria-hidden="true"/></summary><div className="workshop-list">{workshops.slice(2).map(renderWorkshop)}</div></details> : null}
       </section>
 
-      <section className="portal-card dashboard-snapshot" aria-labelledby="society-snapshot">
-        <div className="card-heading"><div><p className="eyebrow dark">At a glance</p><h2 id="society-snapshot">Society snapshot</h2></div></div>
+      <ResponsiveDashboardCard className="dashboard-snapshot" eyebrow="At a glance" heading="Society snapshot" headingId="society-snapshot">
         <dl>
           <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventsResult.count ?? 0}</dd></div>
           <div><dt><Wrench/>Open workshops</dt><dd>{workshopsResult.count ?? 0}</dd></div>
           <div><dt><FileText/>Club documents</dt><dd>{docsResult.count ?? 0}</dd></div>
         </dl>
-      </section>
+      </ResponsiveDashboardCard>
     </div>
 
     <div className="dashboard-section-grid dashboard-community-grid">
-      <section id="earlier-updates" className="portal-card" aria-labelledby="earlier-club-updates">
-        <div className="card-heading"><div><p className="eyebrow dark">Notice archive</p><h2 id="earlier-club-updates">Earlier updates</h2></div></div>
+      <ResponsiveDashboardCard id="earlier-updates" eyebrow="Notice archive" heading="Earlier updates" headingId="earlier-club-updates">
         {earlierFeeds.length ? <div className="feed-list">
           {earlierFeeds.map(feed => {
             const url = safeHttpUrl(feed.url);
@@ -157,7 +156,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
             </article>;
           })}
         </div> : <p className="dashboard-empty-note">You’re all caught up.</p>}
-      </section>
+      </ResponsiveDashboardCard>
 
       <section className="portal-card dashboard-compose-card" aria-labelledby="add-member-notice">
         <p className="eyebrow dark">Post to members</p>
