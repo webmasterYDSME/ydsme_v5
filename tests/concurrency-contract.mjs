@@ -9,7 +9,7 @@ const env = Object.fromEntries(status.split("\n").flatMap((line) => {
   const match = line.match(/^([A-Z_]+)="(.*)"$/);
   return match ? [[match[1], match[2]]] : [];
 }));
-assert.equal(env.API_URL, "http://127.0.0.1:54321", "Concurrency tests may run only against local Supabase.");
+assert.equal(env.API_URL, "http://127.0.0.1:55321", "Concurrency tests may run only against local Supabase.");
 
 const admin = createClient(env.API_URL, env.SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 const { data: profiles, error: profileError } = await admin.from("users")

@@ -12,7 +12,7 @@ npm run supabase:start
 npm run dev -- --port 3010
 ```
 
-Open the website at [http://localhost:3010](http://localhost:3010), local Supabase Studio at [http://127.0.0.1:54323](http://127.0.0.1:54323), and captured local email at [http://127.0.0.1:54324](http://127.0.0.1:54324).
+Open the website at [http://localhost:3010](http://localhost:3010), local Supabase Studio at [http://127.0.0.1:55323](http://127.0.0.1:55323), and captured local email at [http://127.0.0.1:55324](http://127.0.0.1:55324).
 
 Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Stripe, Facebook, production SMTP and production webhooks should remain disabled during local development.
 
