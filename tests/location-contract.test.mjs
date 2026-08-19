@@ -23,6 +23,8 @@ test("publishes the exact club entrance and directions target", async () => {
   assert.match(footer, /footer-address-link/);
   assert.match(footer, /destination=53\.94183%2C-1\.11166/);
   assert.match(footer, /Get directions to the exact club entrance coordinates/);
+  assert.match(footer, /footer-social-link/);
+  assert.match(footer, /SocialIcon name=\{link\.name\}/);
   assert.match(data, /address_line_one: "Rear of The Pastures"/);
   assert.match(data, /address_line_two: "North Lane"/);
   assert.match(migration, /update public\.configs/);

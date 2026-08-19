@@ -4,7 +4,7 @@ import {ReactNode, useEffect, useRef, useState} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUpRight, Globe2, MapPin, Menu, X } from "lucide-react";
 import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
 const nav = [["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
@@ -134,6 +134,18 @@ function AddressLines({ address }: { address: PostalAddress }) {
   return <>{address.address_line_one}<br/>{address.address_line_two ? <>{address.address_line_two}<br/></> : null}{locality}{address.country ? <><br/>{address.country}</> : null}</>;
 }
 
+function CompactAddressLines({ address }: { address: PostalAddress }) {
+  const street = [address.address_line_one, address.address_line_two].filter(Boolean).join(", ");
+  const locality = [address.city, address.postcode].filter(Boolean).join(" · ");
+  const place = [locality, address.country].filter(Boolean).join(", ");
+  return <>{street}<br/>{place}</>;
+}
+
+function SocialIcon({ name }: { name: string }) {
+  if (name.toLowerCase().includes("facebook")) return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M13.6 21v-8h2.8l.4-3h-3.2V8.1c0-.9.3-1.6 1.7-1.6H17V3.8c-.8-.1-1.6-.2-2.4-.2-2.5 0-4.1 1.5-4.1 4.2V10H8v3h2.5v8h3.1Z"/></svg>;
+  return <Globe2 aria-hidden="true"/>;
+}
+
 export function RailSiteFrame({children, siteConfig, headerTheme="overlay"}:{children:ReactNode;siteConfig:PublicSiteConfig;headerTheme?:"overlay"|"light"}) {
   const path=usePathname(); const [open,setOpen]=useState(false);
   useEffect(()=>{
@@ -154,7 +166,20 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay"}:{chi
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
     <main id="main-content">{children}</main>
-    <footer><div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><h2>Made by hand.<br/><em>Moved by steam.</em></h2></div><div><h3>Visit</h3><address><a className="footer-address-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)"><AddressLines address={siteConfig.clubAddress}/></a></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</div><nav aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}{siteConfig.socialLinks.map(link=><a key={`${link.name}-${link.url}`} href={link.url} rel="noreferrer">{link.name}</a>)}</nav><nav aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav><div className="footer-small"><div><h3>Registered</h3><p>{siteConfig.registeredName}<br/>Company no. {siteConfig.companyNumber}</p><address><AddressLines address={siteConfig.registeredAddress}/></address></div><p>© {new Date().getFullYear()} {siteConfig.shortName}</p></div></footer>
+    <footer className="site-footer">
+      <div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><div><h2>Made by hand.<br/><em>Moved by steam.</em></h2><p>Miniature railways and model engineering in York since 1929.</p></div></div>
+      <section className="footer-visit" aria-labelledby="footer-visit-title"><h3 id="footer-visit-title">Visit</h3><address><a className="footer-address-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)"><MapPin aria-hidden="true"/><span><AddressLines address={siteConfig.clubAddress}/></span><ArrowUpRight aria-hidden="true"/></a></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</section>
+      <nav className="footer-navigation" aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{nav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}</nav>
+      <nav className="footer-navigation" aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav>
+      <section className="footer-social" aria-labelledby="footer-social-title"><h3 id="footer-social-title">Follow</h3><div>{siteConfig.socialLinks.map(link=><a className="footer-social-link" key={`${link.name}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" aria-label={`${link.name} (opens in a new tab)`}><span className="footer-social-icon"><SocialIcon name={link.name}/></span><span>{link.name}</span><ArrowUpRight aria-hidden="true"/></a>)}</div></section>
+      <div className="footer-bottom">
+        <div className="footer-registration">
+          <div className="footer-registration-item"><span>Registered society</span><p>{siteConfig.registeredName}<br/>Company no. {siteConfig.companyNumber}</p></div>
+          <div className="footer-registration-item"><span>Registered office</span><address><CompactAddressLines address={siteConfig.registeredAddress}/></address></div>
+        </div>
+        <div className="footer-meta"><p className="footer-copyright">© {new Date().getFullYear()} {siteConfig.shortName}</p><p className="footer-credit">Website by <a href="https://nomen.hunkymonkey.net" target="_blank" rel="author noreferrer">Nomen Ama</a></p></div>
+      </div>
+    </footer>
   </>;
 }
 
