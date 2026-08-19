@@ -482,9 +482,10 @@ test("records retention and delivery retry state without changing Auth", async (
 });
 
 test("exposes normalized public configuration through a limited view", async () => {
-  const [migration, writers, data] = await Promise.all([
+  const [migration, writers, safeReplacement, data] = await Promise.all([
     read("supabase/migrations/202608180006_normalized_public_configuration.sql"),
     read("supabase/migrations/202608180007_configuration_write_functions.sql"),
+    read("supabase/migrations/202608190004_safe_public_link_replacement.sql"),
     read("lib/data.ts"),
   ]);
   assert.match(migration, /create table if not exists public\.site_social_links/);
@@ -492,6 +493,8 @@ test("exposes normalized public configuration through a limited view", async () 
   assert.match(migration, /create table if not exists public\.donation_campaigns/);
   assert.match(migration, /view public\.public_site_links/);
   assert.match(writers, /replace_public_site_links/);
+  assert.match(safeReplacement, /delete from public\.site_social_links where true/);
+  assert.match(safeReplacement, /delete from public\.site_affiliates where true/);
   assert.match(data, /from\("donation_campaigns"\)/);
   assert.doesNotMatch(data, /createPublicClient\(\)[\s\S]*from\("configs"\)/);
 });
