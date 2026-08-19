@@ -1,4 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run verify"
+  "buildCommand": "npm run verify",
+  "git": {
+    "deploymentEnabled": {
+      "*": false,
+      "main": true,
+      "preview": true
+    }
+  }
 }
