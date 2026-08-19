@@ -5,7 +5,7 @@ const local = Object.fromEntries(status.split("\n").flatMap((line) => {
   const match = line.match(/^([A-Z_]+)="(.*)"$/);
   return match ? [[match[1], match[2]]] : [];
 }));
-if (local.API_URL !== "http://127.0.0.1:54321" || !local.PUBLISHABLE_KEY || !local.SERVICE_ROLE_KEY) {
+if (local.API_URL !== "http://127.0.0.1:55321" || !local.PUBLISHABLE_KEY || !local.SERVICE_ROLE_KEY) {
   throw new Error("The isolated local Supabase stack is not available.");
 }
 

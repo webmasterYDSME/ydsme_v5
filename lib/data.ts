@@ -1,6 +1,8 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { connection } from "next/server";
+import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
 import { createPublicClient, publicStorageUrl } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { defaultDonationSettings } from "@/lib/donations";
@@ -219,8 +221,7 @@ export async function getCommittees() {
   return (projection.data ?? []) as CommitteeRecord[];
 }
 
-export async function getPublicAnnouncements(limit?: number) {
-  await connection();
+async function loadPublicAnnouncements(limit?: number) {
   const supabase = createPublicClient();
   let query = supabase
     .from("public_announcements")
@@ -232,6 +233,43 @@ export async function getPublicAnnouncements(limit?: number) {
   if (isMissingProjection(error)) return [] as AnnouncementRecord[];
   if (error) throw new Error("Unable to load public announcements.");
   return (data ?? []) as AnnouncementRecord[];
+}
+
+const getCachedPublicAnnouncements = unstable_cache(
+  loadPublicAnnouncements,
+  ["public-announcements"],
+  { tags: [ANNOUNCEMENTS_CACHE_TAG], revalidate: 3600 },
+);
+
+export async function getPublicAnnouncements(limit?: number) {
+  await connection();
+  return getCachedPublicAnnouncements(limit);
+}
+
+async function loadNewsAnnouncements(limit: number) {
+  const supabase = createPublicClient();
+  const { data, error } = await supabase
+    .from("public_news_announcements")
+    .select("id,title,body,published_at,updated_at")
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  // During a rolling deployment, keep showing active announcements until the
+  // archive-aware public projection is available.
+  if (isMissingProjection(error)) return loadPublicAnnouncements(limit);
+  if (error) throw new Error("Unable to load news announcements.");
+  return (data ?? []) as AnnouncementRecord[];
+}
+
+const getCachedNewsAnnouncements = unstable_cache(
+  loadNewsAnnouncements,
+  ["news-announcements"],
+  { tags: [ANNOUNCEMENTS_CACHE_TAG], revalidate: 3600 },
+);
+
+export async function getNewsAnnouncements(limit = 5) {
+  await connection();
+  return getCachedNewsAnnouncements(limit);
 }
 
 export async function getCarriageAnnouncements(limit = 6) {

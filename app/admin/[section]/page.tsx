@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, FileUp, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, FileUp, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   cancelWorkshopReservation,
   archiveAnnouncement,
+  deleteOldArchivedAnnouncements,
   deleteEvent,
   deleteMember,
   deleteWorkshop,
@@ -74,7 +75,7 @@ function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
 }
 
 function statusNotice(value?: string) {
-  const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "event-saved": "Event saved.", "event-archived": "Event moved to the archive.", "event-restored": "Event restored as a draft.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
+  const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "old-announcements-deleted": "Announcements archived more than one year ago were permanently deleted.", "event-saved": "Event saved.", "event-archived": "Event moved to the archive.", "event-restored": "Event restored as a draft.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
   return value ? messages[value] : null;
 }
 
@@ -91,15 +92,20 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const requestedPage = Number(query.page);
     const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     const announcementStatuses = ["published", "draft", "archived"] as const;
-    const [announcementResult, ...announcementCountResults] = await Promise.all([
+    const archiveCutoff = new Date();
+    archiveCutoff.setUTCFullYear(archiveCutoff.getUTCFullYear() - 1);
+    const [announcementResult, announcementCountResults, oldArchiveCountResult] = await Promise.all([
       admin.from("announcements")
         .select("id,title,body,lifecycle_status,published_at,updated_at", { count: "exact" })
         .eq("lifecycle_status", status)
         .order("updated_at", { ascending: false })
         .range((currentPage - 1) * ANNOUNCEMENT_PAGE_SIZE, currentPage * ANNOUNCEMENT_PAGE_SIZE - 1),
-      ...announcementStatuses.map((value) => admin.from("announcements").select("id", { count: "exact", head: true }).eq("lifecycle_status", value)),
+      Promise.all(announcementStatuses.map((value) => admin.from("announcements").select("id", { count: "exact", head: true }).eq("lifecycle_status", value))),
+      session.role === "administrator"
+        ? admin.from("announcements").select("id", { count: "exact", head: true }).eq("lifecycle_status", "archived").not("archived_at", "is", null).lt("archived_at", archiveCutoff.toISOString())
+        : Promise.resolve({ count: 0, error: null }),
     ]);
-    if (announcementResult.error || announcementCountResults.some((result) => result.error)) throw new Error("Unable to load announcements.");
+    if (announcementResult.error || announcementCountResults.some((result) => result.error) || oldArchiveCountResult.error) throw new Error("Unable to load announcements.");
     const visibleAnnouncements = (announcementResult.data ?? []) as AnnouncementRow[];
     const statusCounts = Object.fromEntries(announcementStatuses.map((value, index) => [value, announcementCountResults[index].count ?? 0])) as Record<(typeof announcementStatuses)[number], number>;
     const pageCount = Math.max(1, Math.ceil((announcementResult.count ?? 0) / ANNOUNCEMENT_PAGE_SIZE));
@@ -117,6 +123,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
         <Link prefetch={false} href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
         <Link prefetch={false} href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{statusCounts.archived}</span></Link>
       </nav>
+      {status === "archived" && session.role === "administrator" ? <aside className="archive-cleanup" aria-label="Archived announcement cleanup"><div><strong>Archive retention</strong><p>{oldArchiveCountResult.count ? `${oldArchiveCountResult.count} announcement${oldArchiveCountResult.count === 1 ? " is" : "s are"} older than one year and can be permanently deleted.` : "There are no archived announcements older than one year."}</p></div><form action={deleteOldArchivedAnnouncements}><PendingSubmitButton className="danger-button" pendingLabel="Deleting…" disabled={!oldArchiveCountResult.count} confirmMessage={`Permanently delete ${oldArchiveCountResult.count ?? 0} archived announcement${oldArchiveCountResult.count === 1 ? "" : "s"} older than one year? This cannot be undone.`}><Trash2/>Delete old archives</PendingSubmitButton></form></aside> : null}
       <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
       {!visibleAnnouncements.length ? <div className="empty-state"><Megaphone/><h2>No {status} announcements</h2><p>{status === "archived" ? "Archived announcements will appear here." : `Create or move an announcement into ${status} status to see it here.`}</p></div> : null}
       <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={announcementResult.count ?? 0} itemLabel="announcements" href={pageHref} ariaLabel="Announcement pages"/>

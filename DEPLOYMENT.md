@@ -8,7 +8,7 @@ The application follows one promotion path: feature branch → `preview` → `ma
 2. Run `npm run verify` before merging and require the `Verify deployment` check when repository-plan settings allow required checks.
 3. Do not merge with a failing code, build, or security-contract check. Feature branches do not deploy to Vercel; the merged result is reviewed at the stable `preview` deployment.
 4. Delete feature branches after they merge into `preview`. The cleanup workflow does this automatically and explicitly preserves `preview` and `main`.
-5. Never run seeds, fixtures, resets, or data-writing tests against remote Supabase. Data-writing tests must use the loopback stack at `http://127.0.0.1:54321`.
+5. Never run seeds, fixtures, resets, or data-writing tests against remote Supabase. Data-writing tests must use the loopback stack at `http://127.0.0.1:55321`.
 6. Database changes must use expand-and-contract deployment:
    - Expand: add and locally validate new tables, columns, views, policies, and grants without removing behavior used by the live application.
    - Migrate: apply the reviewed additive migration through the explicitly authorized production migration process before deploying code that requires it.

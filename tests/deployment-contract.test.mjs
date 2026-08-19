@@ -19,7 +19,7 @@ test("runs the same deployment verification locally, in GitHub, and on Vercel", 
   assert.equal(packageJson.scripts.verify, "npm run lint && npm test");
   assert.equal(vercel.buildCommand, "npm run verify");
   assert.deepEqual(vercel.git.deploymentEnabled, {
-    "*": false,
+    "**": false,
     main: true,
     preview: true,
   });

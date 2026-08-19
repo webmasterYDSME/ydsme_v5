@@ -3,7 +3,7 @@ import { updateSession } from "@/lib/supabase/proxy";
 import { HOLDING_PAGE_PATH, shouldShowHoldingPage } from "@/lib/deployment-visibility.mjs";
 
 const isDevelopment = process.env.NODE_ENV === "development";
-const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):54321(?:\/|$)/.test(
+const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):55321(?:\/|$)/.test(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
 );
 
@@ -16,9 +16,9 @@ function contentSecurityPolicy(nonce: string) {
     "object-src 'none'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDevelopment ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com`,
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob: https://*.supabase.co${usesLocalSupabase ? " http://127.0.0.1:54321" : ""}`,
+    `img-src 'self' data: blob: https://*.supabase.co${usesLocalSupabase ? " http://127.0.0.1:55321" : ""}`,
     "font-src 'self' data:",
-    `connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com${usesLocalSupabase ? " http://127.0.0.1:54321 ws://127.0.0.1:54321" : ""}`,
+    `connect-src 'self' https://*.supabase.co https://challenges.cloudflare.com${usesLocalSupabase ? " http://127.0.0.1:55321 ws://127.0.0.1:55321" : ""}`,
     "frame-src https://challenges.cloudflare.com",
     ...(isDevelopment || usesLocalSupabase ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
