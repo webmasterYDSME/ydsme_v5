@@ -133,7 +133,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         {workshops.length > 2 ? <details className="dashboard-more-list"><summary>Show {workshops.length - 2} more workshops <ChevronDown aria-hidden="true"/></summary><div className="workshop-list">{workshops.slice(2).map(renderWorkshop)}</div></details> : null}
       </section>
 
-      <ResponsiveDashboardCard className="dashboard-snapshot" eyebrow="At a glance" heading="Society snapshot" headingId="society-snapshot">
+      <ResponsiveDashboardCard className="dashboard-snapshot" eyebrow="At a glance" heading="Club overview" headingId="society-snapshot">
         <dl>
           <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventsResult.count ?? 0}</dd></div>
           <div><dt><Wrench/>Open workshops</dt><dd>{workshopsResult.count ?? 0}</dd></div>
