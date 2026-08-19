@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, MapPin, Sparkles, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, Globe2, Handshake, MapPin, Sparkles, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
@@ -19,9 +19,9 @@ export const metadata = publicPageMetadata({
 });
 
 const interests = [
-  "2.5–7.25 inch locomotives", "Stationary engines", "Traction engines",
-  "16mm & Gauge 1 railways", "Decorative woodworking", "Clocks & mechanisms",
-  "Kit building & 3D printing",
+  { name: "2.5–7.25 inch locomotives" }, { name: "Stationary engines" }, { name: "Traction engines" },
+  { name: "16mm & Gauge 1 railways" }, { name: "Decorative woodworking" }, { name: "Clocks & mechanisms" },
+  { name: "Kit building & 3D printing" }, { name: "Brook Moor Railway", detail: "G gauge railway", isNew: true },
 ];
 
 export default async function Home() {
@@ -59,7 +59,27 @@ export default async function Home() {
 
       <section className="section">
         <Reveal><div className="section-heading-row"><SectionHeading>Find your <em>fascination.</em></SectionHeading><p>Old-school craft meets new-school making. There is always another skill to learn—and someone happy to share it.</p></div></Reveal>
-        <div className="interest-rail">{interests.map((item, i)=><Reveal key={item} delay={i*.04}><div className="interest"><span>{String(i+1).padStart(2,"0")}</span><p>{item}</p><Gauge size={18}/></div></Reveal>)}</div>
+        <div className="interest-rail">{interests.map((item, i)=><Reveal key={item.name} delay={i*.04}><div className={item.isNew ? "interest interest-new" : "interest"}><span className="interest-number">{String(i+1).padStart(2,"0")}</span><div className="interest-copy"><div className="interest-title-row"><p>{item.name}</p>{item.isNew ? <span className="interest-new-badge"><Sparkles aria-hidden="true"/>New</span> : null}</div>{item.detail ? <small>{item.detail}</small> : null}</div><Gauge className="interest-gauge" size={18}/></div></Reveal>)}</div>
+      </section>
+
+      <section className="twinning-panel" aria-labelledby="twinning-title">
+        <div className="twinning-visual" aria-hidden="true">
+          <span className="twinning-kicker">York ↔ New South Wales</span>
+          <div className="twinning-globe">
+            <Globe2 strokeWidth={0.7}/>
+            <span className="twinning-route-line"/>
+            <span className="twinning-place twinning-york"><i/>York<small>England</small></span>
+            <span className="twinning-place twinning-galston"><i/>Galston<small>NSW · Australia</small></span>
+          </div>
+          <p>Two clubs <i/> one shared passion</p>
+        </div>
+        <div className="twinning-copy">
+          <p className="eyebrow">Friends across the world</p>
+          <h2 id="twinning-title">One craft.<br/><em>Two hemispheres.</em></h2>
+          <p>We are proud to be twinned with <strong>Hornsby Model Engineers</strong>, home of the Galston Valley Railway in New South Wales, Australia.</p>
+          <div className="twinning-note"><Handshake aria-hidden="true"/><span><strong>Proudly twinned</strong> by friendship, craftsmanship and a shared love of miniature railways.</span></div>
+          <a className="button twinning-link" href="https://www.hme.org.au/" target="_blank" rel="noreferrer" aria-label="Visit Hornsby Model Engineers (opens in a new tab)">Visit Hornsby Model Engineers <ArrowUpRight size={17}/></a>
+        </div>
       </section>
 
       <section className="visit-panel">
