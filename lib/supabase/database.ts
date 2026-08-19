@@ -1181,6 +1181,16 @@ export type Database = {
         }
         Relationships: []
       }
+      public_news_announcements: {
+        Row: {
+          body: string | null
+          id: number | null
+          published_at: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
       public_committee_roster: {
         Row: {
           email: string | null

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { canManageContent, requireRole, requireUser } from "@/lib/auth";
@@ -17,6 +17,7 @@ import {
   ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
 } from "@/lib/announcements";
+import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
 
 const text = (min = 1, max = 5000) => z.string().trim().min(min).max(max);
 const idString = z.string().min(1).max(100);
@@ -184,6 +185,7 @@ export async function saveAnnouncement(formData: FormData) {
     before,
     after: { title: values.title, lifecycle_status: values.lifecycle_status },
   });
+  updateTag(ANNOUNCEMENTS_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
@@ -202,6 +204,7 @@ export async function archiveAnnouncement(formData: FormData) {
     .maybeSingle();
   if (error) redirect("/admin/announcements?error=The+announcement+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.archived", entityType: "announcement", entityId: id, summary: data.title });
+  updateTag(ANNOUNCEMENTS_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
@@ -219,8 +222,39 @@ export async function restoreAnnouncement(formData: FormData) {
     .maybeSingle();
   if (error || !data) redirect("/admin/announcements?error=The+announcement+could+not+be+restored.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "announcement.restored", entityType: "announcement", entityId: id, summary: data.title, after: { lifecycle_status: "draft" } });
+  updateTag(ANNOUNCEMENTS_CACHE_TAG);
+  revalidatePath("/");
+  revalidatePath("/news");
   revalidatePath("/admin/announcements");
   redirect("/admin/announcements?status=draft&notice=announcement-restored");
+}
+
+export async function deleteOldArchivedAnnouncements() {
+  const { user, role } = await requireRole(["administrator"]);
+  const cutoff = new Date();
+  cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1);
+  const { data, error } = await createAdminClient().from("announcements")
+    .delete()
+    .eq("lifecycle_status", "archived")
+    .not("archived_at", "is", null)
+    .lt("archived_at", cutoff.toISOString())
+    .select("id");
+  if (error) redirect("/admin/announcements?status=archived&error=Old+archived+announcements+could+not+be+deleted.");
+  const deletedIds = (data ?? []).map((announcement) => announcement.id);
+  await writeAudit({
+    actorUserId: user.id,
+    actorRole: role,
+    action: "announcements.archives-purged",
+    entityType: "announcement-retention",
+    entityId: crypto.randomUUID(),
+    summary: `${deletedIds.length} archived announcement${deletedIds.length === 1 ? "" : "s"} permanently deleted.`,
+    before: { cutoff: cutoff.toISOString(), announcement_ids: deletedIds },
+  });
+  updateTag(ANNOUNCEMENTS_CACHE_TAG);
+  revalidatePath("/");
+  revalidatePath("/news");
+  revalidatePath("/admin/announcements");
+  redirect("/admin/announcements?status=archived&notice=old-announcements-deleted");
 }
 
 export async function deleteWorkshop(formData: FormData) {
