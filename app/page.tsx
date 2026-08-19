@@ -1,4 +1,4 @@
-import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, Globe2, Handshake, MapPin, Sparkles, Users } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, Globe2, Handshake, MapPin, Navigation, Sparkles, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
@@ -84,7 +84,7 @@ export default async function Home() {
 
       <section className="visit-panel">
         <div className="visit-image"><Image src="/images/entrance.webp" alt="Entrance to York Model Engineers" fill quality={35} sizes="(max-width: 800px) 100vw, 50vw" /></div>
-        <div className="visit-copy"><p className="eyebrow">Your day on the rails</p><h2>Come curious.<br/><em>Leave inspired.</em></h2><div className="quick-facts"><p><MapPin/> Dringhouses, York · YO24 2JE</p><p><Sparkles/> Free entry · donations welcome</p><p><CalendarDays/> Public open days & special events</p><p><Users/> Wheelchair-friendly paths</p></div><Link className="button brass" href="/visitors">Visitor information <ArrowRight size={17}/></Link></div>
+        <div className="visit-copy"><p className="eyebrow">Your day on the rails</p><h2>Come curious.<br/><em>Leave inspired.</em></h2><div className="quick-facts"><p><MapPin/> Rear of The Pastures, North Lane · Dringhouses, York YO24 2JE</p><p><Sparkles/> Free entry · donations welcome</p><p><CalendarDays/> Public open days & special events</p><p><Users/> Wheelchair-friendly paths</p></div><div className="visit-actions"><a className="button brass" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)">Get Directions <Navigation size={17}/></a><Link className="button ghost" href="/visitors">Visitor information <ArrowRight size={17}/></Link></div></div>
       </section>
 
       {nextEvent ? <section className="section event-tease"><p className="eyebrow dark">On the platform</p><div className="event-title"><span>{format(parseISO(nextEvent.start_date), "dd.MM.yy")}</span><h2>{nextEvent.name}</h2><p>{format(parseISO(nextEvent.start_date), "EEEE")} · {nextEvent.start_time.slice(0,5)}<br/>{nextEvent.is_ticket_required ? "Advance booking required" : "Free entrance & rides"}<br/>Hot food & drinks available</p></div><Link href="/events" className="circle-link" aria-label="See all events"><ArrowRight/></Link></section> : null}
