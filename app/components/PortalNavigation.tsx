@@ -76,7 +76,7 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
       }
     }
 
-    const mobileNavigation = window.matchMedia("(max-width: 720px)");
+    const mobileNavigation = window.matchMedia("(max-width: 1024px)");
     function closeAtDesktopWidth(event: MediaQueryListEvent) {
       if (!event.matches) setOpen(false);
     }
