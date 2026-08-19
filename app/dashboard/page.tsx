@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarDays, FileText, Megaphone, Plus, Wrench } from "lucide-react";
+import { ArrowUpRight, CalendarDays, FileText, Megaphone, Plus, ShoppingBag, Wrench } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireUser, canManageContent } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -60,6 +60,16 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
     {query.error ? <p className="form-message error">{query.error}</p> : null}
     {query.notice ? <p className="form-message success">Update complete.</p> : null}
+
+    <section className="dashboard-merch-card" aria-labelledby="club-store-heading">
+      <span className="dashboard-merch-icon" aria-hidden="true"><ShoppingBag/></span>
+      <div>
+        <p className="eyebrow">Club shop</p>
+        <h2 id="club-store-heading">Wear the Society colours.</h2>
+        <p>Browse York Model Engineers clothing and club merchandise at Inglis Works.</p>
+      </div>
+      <a className="button dashboard-merch-link" href="https://www.inglisworks.co.uk/ysme" target="_blank" rel="noreferrer" aria-label="Visit the York Model Engineers store at Inglis Works (opens in a new tab)">Visit the club store <ArrowUpRight/></a>
+    </section>
 
     <div className="dashboard-section-grid">
       <section className="portal-card dashboard-primary-card" aria-labelledby="upcoming-running-days">
