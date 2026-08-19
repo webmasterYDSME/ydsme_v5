@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):54321(?:\/|$)/.test(
+const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):55321(?:\/|$)/.test(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
 );
 
@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },
       ...(usesLocalSupabase
-        ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "54321", pathname: "/storage/v1/object/public/**" }]
+        ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "55321", pathname: "/storage/v1/object/public/**" }]
         : []),
     ],
   },

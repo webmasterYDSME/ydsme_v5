@@ -12,5 +12,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 - Treat every non-loopback Supabase endpoint as production data.
 - Never run seeds, fixtures, database resets, or test-data scripts against a remote Supabase project.
-- Data-writing tests must obtain their endpoint from `supabase status -o env` and refuse anything other than `http://127.0.0.1:54321`.
+- Data-writing tests must obtain their endpoint from `supabase status -o env` and refuse anything other than `http://127.0.0.1:55321`.
 - Keep `.env.local` pointed at the local Supabase stack. `.env.prod` is the remote configuration and must be used only for deployment or explicitly authorized, read-only auditing.

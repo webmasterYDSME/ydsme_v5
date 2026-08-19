@@ -12,7 +12,7 @@ const env = Object.fromEntries(status.split("\n").flatMap((line) => {
   const match = line.match(/^([A-Z_]+)="(.*)"$/);
   return match ? [[match[1], match[2]]] : [];
 }));
-assert.equal(env.API_URL, "http://127.0.0.1:54321", "Journey fixtures may run only against local Supabase.");
+assert.equal(env.API_URL, "http://127.0.0.1:55321", "Journey fixtures may run only against local Supabase.");
 assert.ok(env.SERVICE_ROLE_KEY && env.ANON_KEY, "Local Supabase keys are unavailable.");
 
 const password = process.env.JOURNEY_TEST_PASSWORD;
