@@ -20,12 +20,12 @@ test("protects member routes with verified Supabase claims", async () => {
 });
 
 test("exposes only explicitly selected member event teasers through a limited public view", async () => {
-  const [data, events, home, migration, admin, audienceFields, actions] = await Promise.all([
+  const [data, events, home, migration, eventEditor, audienceFields, actions] = await Promise.all([
     read("lib/data.ts"),
     read("app/events/page.tsx"),
     read("app/page.tsx"),
     read("supabase/migrations/202608190002_public_member_event_teasers.sql"),
-    read("app/admin/[section]/page.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
     read("app/components/EventAudienceFields.tsx"),
     read("lib/actions/content.ts"),
   ]);
@@ -42,7 +42,7 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(migration, /public_teaser_enabled = true/);
   assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
   assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
-  assert.match(admin, /EventAudienceFields/);
+  assert.match(eventEditor, /EventAudienceFields/);
   assert.match(audienceFields, /audience === "member_only"[\s\S]*name="public_teaser_enabled"/);
   assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
@@ -199,6 +199,54 @@ test("requires action-level roles before privileged writes", async () => {
   assert.match(supabaseConfig, /\[storage\.buckets\.images\][\s\S]*file_size_limit = "8MiB"/);
   assert.match(storageLimitMigration, /file_size_limit[\s\S]*8 \* 1024 \* 1024/);
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
+});
+
+test("reviews and standardizes event images before secure upload", async () => {
+  const [field, editor, admin, styles] = await Promise.all([
+    read("app/components/EventImageUploadField.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(admin, /<EventEditorDialog/);
+  assert.match(editor, /<EventImageUploadField/);
+  assert.match(field, /OUTPUT_WIDTH = 1800/);
+  assert.match(field, /OUTPUT_HEIGHT = 1200/);
+  assert.match(field, /drawCrop\(canvas, image/);
+  assert.match(field, /createUploadIntent\(\{ kind: "event-image"/);
+  assert.match(field, /uploadToSignedUrl/);
+  assert.match(field, /previewMode === "desktop"/);
+  assert.match(field, /previewMode === "mobile"/);
+  assert.match(field, /Keep important details inside this area/);
+  assert.match(field, /navigator\.clipboard\.writeText\(aiPrompt\)/);
+  assert.match(field, /Do not include text, logos, borders or watermarks/);
+  assert.match(field, /preventUnconfirmedImage/);
+  assert.match(styles, /event-image-card-media[^}]*aspect-ratio:23\/16/);
+  assert.match(styles, /event-image-card-preview\.is-mobile \.event-image-card-media\{aspect-ratio:8\/5\}/);
+});
+
+test("edits events in an accessible two-section modal", async () => {
+  const [dialog, editor, admin, styles] = await Promise.all([
+    read("app/components/EditorDialog.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(dialog, /<dialog/);
+  assert.match(dialog, /dialog\.showModal\(\)/);
+  assert.match(dialog, /onCancel=/);
+  assert.match(dialog, /discard the unsaved changes/);
+  assert.match(dialog, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(editor, /Event details/);
+  assert.match(editor, /Artwork & preview/);
+  assert.match(editor, /action=\{saveEvent\}/);
+  assert.match(editor, /noValidate/);
+  assert.match(editor, /form\.checkValidity\(\)/);
+  assert.match(editor, /imageReviewState === "pending"/);
+  assert.match(admin, /intent="create"/);
+  assert.doesNotMatch(admin, /<EventForm/);
+  assert.match(styles, /\.editor-dialog::backdrop/);
+  assert.match(styles, /\.event-editor-panel\[hidden\]\{display:none\}/);
 });
 
 test("uses exactly three database-backed application roles", async () => {

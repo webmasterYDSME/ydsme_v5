@@ -18,20 +18,18 @@ import {
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  saveEvent,
   saveAnnouncement,
   saveWorkshop,
   suspendMember,
   updateMemberRole,
 } from "@/lib/actions/content";
-import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { AnnouncementFields } from "@/app/components/AnnouncementFields";
-import { EventAudienceFields } from "@/app/components/EventAudienceFields";
-import { EventBookingFields } from "@/app/components/EventBookingFields";
+import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
+import { eventImage } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
@@ -40,28 +38,10 @@ const EVENT_PAGE_SIZE = 12;
 const WORKSHOP_PAGE_SIZE = 5;
 
 type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; public_teaser_enabled:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:LifecycleStatus; updated_at:string };
+type EventRow = EventEditorRecord;
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function EventForm({ event }: { event?: EventRow }) {
-  const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
-  return <form action={saveEvent} className="editor-form">
-    {event ? <input type="hidden" name="id" value={event.id}/> : null}
-    <label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label>
-    <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
-    <label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label>
-    <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
-    <EventAudienceFields initialAudience={event?.event_type} initialPublicTeaserEnabled={event?.public_teaser_enabled}>
-      <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
-      <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
-      <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
-      <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
-    </EventAudienceFields>
-    <PendingSubmitButton className="button dark" pendingLabel={event ? "Saving changes…" : "Creating event…"}>{event ? "Save changes" : "Create event"}</PendingSubmitButton>
-  </form>;
-}
 
 function AnnouncementForm({ announcement }: { announcement?: AnnouncementRow }) {
   return <form action={saveAnnouncement} className="editor-form">
@@ -156,7 +136,6 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(eventStatuses.map((value, index) => [value, eventCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
     const pageCount = Math.max(1, Math.ceil((eventResult.count ?? 0) / EVENT_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/events?status=${status}&page=${pageCount}`);
-    const eventTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/events?status=${status}&page=${page}`;
     const emptyCopy: Record<string, string> = {
       published: "Publish an event to add it to the upcoming timetable.",
@@ -166,10 +145,9 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div><EventEditorDialog intent="create" triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!eventTotal}><summary><Plus/>Create an event</summary><EventForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter events by status">
         <Link prefetch={false} href="/admin/events?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/events?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
@@ -178,7 +156,8 @@ export default async function AdminSection({ params, searchParams }: { params: P
       </nav>
       <div className="admin-list event-admin-list">{visibleEvents.map(event => {
         const isPast = event.end_date < new Date().toISOString().slice(0, 10);
-        return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions">{event.lifecycle_status === "archived" ? <><details><summary><Pencil/>{isPast ? "Reschedule" : "Edit"}</summary><div className="popover-editor"><EventForm event={event}/></div></details>{!isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null}</> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>;
+        const editorIntent = event.lifecycle_status === "archived" && isPast ? "reschedule" : "edit";
+        return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions"><EventEditorDialog event={event} currentImage={event.file_url ? eventImage(event.file_url) : undefined} intent={editorIntent}/>{event.lifecycle_status === "archived" ? !isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null : <form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form>}</div></article>;
       })}</div>
       {!visibleEvents.length ? <div className="empty-state"><CalendarDays/><h2>No {status === "published" ? "upcoming" : status} events</h2><p>{emptyCopy[status]}</p></div> : null}
       <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={eventResult.count ?? 0} itemLabel="events" href={pageHref} ariaLabel="Event pages"/>
