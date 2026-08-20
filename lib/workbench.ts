@@ -207,6 +207,29 @@ export async function getWorkbenchProjects({
   });
 }
 
+export async function getPendingPublicFeatureRequests() {
+  const client = await createClient();
+  const { data, error } = await client.from("member_project_feature_requests")
+    .select("project_id,submitted_at,show_owner_name,member_projects(title,project_status,archived_at)")
+    .eq("status", "pending")
+    .order("submitted_at");
+  if (error) throw new Error("Unable to load public feature reviews.");
+  return (data ?? []).flatMap((request) => {
+    const project = request.member_projects as unknown as {
+      title: string;
+      project_status: ProjectStatus;
+      archived_at: string | null;
+    } | null;
+    return project && !project.archived_at ? [{
+      project_id: request.project_id,
+      submitted_at: request.submitted_at,
+      show_owner_name: request.show_owner_name,
+      title: project.title,
+      project_status: project.project_status,
+    }] : [];
+  });
+}
+
 export type WorkbenchProjectDetail = ProjectRow & {
   owner_name: string;
   cover_image_url: string | null;
@@ -214,6 +237,15 @@ export type WorkbenchProjectDetail = ProjectRow & {
   follower_count: number;
   updates: Array<UpdateRow & { photos: Array<PhotoRow & { image_url: string | null }> }>;
   comments: Array<CommentRow & { author_name: string }>;
+  public_feature: {
+    status: "pending" | "approved" | "rejected" | "withdrawn";
+    show_owner_name: boolean;
+    owner_consented_at: string | null;
+    submitted_at: string;
+    reviewed_at: string | null;
+    review_note: string;
+    public_slug: string | null;
+  } | null;
 };
 
 export async function getWorkbenchProject(projectId: string, userId: string): Promise<WorkbenchProjectDetail | null> {
@@ -226,12 +258,14 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
   if (error) throw new Error("Unable to load the project.");
   if (!data) return null;
   const project = data as ProjectRow;
-  const [updatesResult, commentsResult, followsResult] = await Promise.all([
+  const [updatesResult, commentsResult, followsResult, featureResult, publicationResult] = await Promise.all([
     client.from("member_project_updates").select("id,project_id,author_id,title,body,help_type,created_at,updated_at").eq("project_id", project.id).order("created_at", { ascending: false }),
     client.from("member_project_comments").select("id,project_id,update_id,author_id,body,created_at").eq("project_id", project.id).is("archived_at", null).order("created_at"),
     client.from("member_project_follows").select("project_id,user_id").eq("project_id", project.id),
+    client.from("member_project_feature_requests").select("status,show_owner_name,owner_consented_at,submitted_at,reviewed_at,review_note").eq("project_id", project.id).maybeSingle(),
+    client.from("public_featured_projects").select("slug").eq("project_id", project.id).maybeSingle(),
   ]);
-  if (updatesResult.error || commentsResult.error || followsResult.error) throw new Error("Unable to prepare the project.");
+  if (updatesResult.error || commentsResult.error || followsResult.error || featureResult.error || publicationResult.error) throw new Error("Unable to prepare the project.");
   const updates = (updatesResult.data ?? []) as UpdateRow[];
   const updateIds = updates.map((update) => update.id);
   const { data: photoData, error: photoError } = updateIds.length
@@ -260,5 +294,10 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
       photos: photos.filter((photo) => photo.update_id === update.id).map((photo) => ({ ...photo, image_url: imageUrls.get(photo.storage_path) ?? null })),
     })),
     comments: comments.map((comment) => ({ ...comment, author_name: memberAttribution(comment.author_id, authors) })),
+    public_feature: featureResult.data ? {
+      ...featureResult.data,
+      status: featureResult.data.status as "pending" | "approved" | "rejected" | "withdrawn",
+      public_slug: publicationResult.data?.slug ?? null,
+    } : null,
   };
 }

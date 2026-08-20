@@ -2,15 +2,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
-import { Archive, ArrowLeft, CircleHelp, Eye, Hammer, ImageIcon, MessageCircle, Pencil, Plus, UserRound } from "lucide-react";
+import { Archive, ArrowLeft, CheckCircle2, CircleHelp, Eye, Globe2, Hammer, ImageIcon, MessageCircle, Pencil, Plus, ShieldCheck, UserRound, XCircle } from "lucide-react";
 import { canManageContent, requireUser } from "@/lib/auth";
 import {
   addProjectComment,
   addProjectUpdate,
+  approvePublicProjectFeature,
   archiveProject,
   archiveProjectComment,
+  rejectPublicProjectFeature,
+  requestPublicProjectFeature,
   toggleProjectFollow,
   updateProject,
+  withdrawPublicProjectFeature,
 } from "@/lib/actions/workbench";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { ProjectImageUploadField } from "@/app/components/ProjectImageUploadField";
@@ -31,6 +35,10 @@ const noticeMessages: Record<string, string> = {
   "project-updated": "The project details were updated.",
   "progress-posted": "The progress update was added.",
   "comment-posted": "Your comment was added.",
+  "feature-requested": "Your consent was recorded and the project is awaiting committee review.",
+  "feature-withdrawn": "Public featuring consent was withdrawn.",
+  "feature-approved": "The completed project is now published in the public showcase.",
+  "feature-rejected": "The public feature was removed or returned to its owner.",
 };
 
 export default async function WorkbenchProjectPage({
@@ -85,6 +93,35 @@ export default async function WorkbenchProjectPage({
       </form>
       <form action={archiveProject} className="workbench-archive-form"><input type="hidden" name="project_id" value={project.id}/><PendingSubmitButton confirmMessage="Archive this project? It will be removed from the Workbench." pendingLabel="Archiving…"><Archive/>Archive project</PendingSubmitButton></form>
     </details> : null}
+
+    {(isOwner || (canManageContent(role) && project.public_feature)) ? <section id="public-feature" className="portal-card workbench-public-feature" aria-labelledby="public-feature-heading">
+      <header><div><p className="eyebrow dark">Owner-controlled publication</p><h2 id="public-feature-heading">Public featuring</h2></div><Globe2 aria-hidden="true"/></header>
+      <div className="workbench-public-feature-copy">
+        <p>The private Workbench remains members-only. A public feature contains a reviewed snapshot of this project’s title, summary, progress updates and photographs—never its comments, followers or member account details.</p>
+        {project.public_feature ? <span className={`workbench-feature-status status-${project.public_feature.status}`}>{project.public_feature.status}</span> : null}
+      </div>
+
+      {isOwner ? <div className="workbench-feature-owner">
+        {project.project_status !== "completed" ? <p className="workbench-feature-note"><CircleHelp/>Mark the project as completed before requesting public featuring.</p> : null}
+        {project.project_status === "completed" && (!project.public_feature || ["withdrawn", "rejected"].includes(project.public_feature.status)) ? <form action={requestPublicProjectFeature} className="workbench-feature-request-form">
+          <input type="hidden" name="project_id" value={project.id}/>
+          {project.public_feature?.status === "rejected" && project.public_feature.review_note ? <p className="form-message error"><strong>Review note:</strong> {project.public_feature.review_note}</p> : null}
+          <label className="workbench-feature-consent"><input type="checkbox" name="consent" value="yes" required/><span>I consent to this completed project and its current photographs being reviewed for public featuring.</span></label>
+          <label className="workbench-feature-consent optional"><input type="checkbox" name="show_owner_name" value="yes" defaultChecked={project.public_feature?.show_owner_name}/><span>Show my Society display name publicly. Otherwise use “York Model Engineers member”.</span></label>
+          <PendingSubmitButton className="button dark" pendingLabel="Submitting for review…"><ShieldCheck/>Submit for committee review</PendingSubmitButton>
+        </form> : null}
+        {project.public_feature?.status === "pending" ? <div className="workbench-feature-state"><p><ShieldCheck/>Consent recorded. A committee member must review the exact public snapshot before it can appear.</p><form action={withdrawPublicProjectFeature}><input type="hidden" name="project_id" value={project.id}/><PendingSubmitButton confirmMessage="Withdraw consent for public featuring?" pendingLabel="Withdrawing…">Withdraw consent</PendingSubmitButton></form></div> : null}
+        {project.public_feature?.status === "approved" ? <div className="workbench-feature-state approved"><p><CheckCircle2/>Approved and public. You can withdraw consent at any time.</p>{project.public_feature.public_slug ? <Link href={`/projects/${project.public_feature.public_slug}`} className="button outline">View public page</Link> : null}<form action={withdrawPublicProjectFeature}><input type="hidden" name="project_id" value={project.id}/><PendingSubmitButton confirmMessage="Remove this project from the public showcase?" pendingLabel="Removing…">Withdraw and unpublish</PendingSubmitButton></form></div> : null}
+      </div> : null}
+
+      {canManageContent(role) && !isOwner && project.public_feature?.status === "pending" ? <div className="workbench-feature-review">
+        <div><ShieldCheck/><p><strong>Independent committee review required.</strong><br/>Check the title, text and every photograph above for personal information, unsuitable material and safety concerns.</p></div>
+        <form action={approvePublicProjectFeature} className="editor-form"><input type="hidden" name="project_id" value={project.id}/><label>Internal approval note (optional)<textarea name="review_note" maxLength={500} rows={3}/></label><PendingSubmitButton className="button dark" pendingLabel="Publishing approved snapshot…"><CheckCircle2/>Approve public feature</PendingSubmitButton></form>
+        <form action={rejectPublicProjectFeature} className="editor-form workbench-feature-reject"><input type="hidden" name="project_id" value={project.id}/><label>Reason for returning it to the owner<textarea name="review_note" maxLength={500} rows={3} required/></label><PendingSubmitButton confirmMessage="Reject this public feature request?" pendingLabel="Returning request…"><XCircle/>Reject request</PendingSubmitButton></form>
+      </div> : null}
+
+      {canManageContent(role) && !isOwner && project.public_feature?.status === "approved" ? <div className="workbench-feature-review published"><p><CheckCircle2/>This reviewed snapshot is currently public.</p>{project.public_feature.public_slug ? <Link href={`/projects/${project.public_feature.public_slug}`} className="button outline">View public page</Link> : null}<form action={rejectPublicProjectFeature} className="editor-form"><input type="hidden" name="project_id" value={project.id}/><label>Reason for removing the public feature<textarea name="review_note" maxLength={500} rows={3} required/></label><PendingSubmitButton confirmMessage="Remove this project from the public showcase?" pendingLabel="Removing public feature…"><XCircle/>Remove public feature</PendingSubmitButton></form></div> : null}
+    </section> : null}
 
     {isOwner ? <section className="portal-card workbench-progress-composer" aria-labelledby="add-progress-heading">
       <header><div><p className="eyebrow dark">From your bench</p><h2 id="add-progress-heading">Add a progress update</h2></div><Plus/></header>
