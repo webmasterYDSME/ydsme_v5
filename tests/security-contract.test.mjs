@@ -584,6 +584,15 @@ test("exposes normalized public configuration through a limited view", async () 
   assert.doesNotMatch(data, /createPublicClient\(\)[\s\S]*from\("configs"\)/);
 });
 
+test("initializes the Society settings singleton on fresh databases", async () => {
+  const migration = await read("supabase/migrations/202608200018_ensure_society_settings.sql");
+  assert.match(migration, /insert into public\.configs/);
+  assert.match(migration, /where not exists \(select 1 from public\.configs\)/);
+  assert.match(migration, /get diagnostics inserted_count = row_count/);
+  assert.match(migration, /if inserted_count = 1 then[\s\S]*insert into public\.site_social_links/);
+  assert.match(migration, /insert into public\.donation_campaigns/);
+});
+
 test("keeps club and registered-office addresses distinct in the configured footer", async () => {
   const [migration, settings, actions, data, shell, pageShell] = await Promise.all([
     read("supabase/migrations/202608180019_public_society_information.sql"),

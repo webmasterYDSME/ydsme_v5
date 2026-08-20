@@ -726,6 +726,234 @@ export type Database = {
           },
         ]
       }
+      member_project_comments: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          project_id: string
+          update_id: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          project_id: string
+          update_id?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          update_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_project_comments_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_comments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "member_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_comments_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: false
+            referencedRelation: "member_project_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_project_follows: {
+        Row: {
+          created_at: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_project_follows_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "member_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_follows_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_project_photos: {
+        Row: {
+          caption: string
+          created_at: string
+          id: string
+          sort_order: number
+          storage_path: string
+          update_id: string
+        }
+        Insert: {
+          caption?: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          storage_path: string
+          update_id: string
+        }
+        Update: {
+          caption?: string
+          created_at?: string
+          id?: string
+          sort_order?: number
+          storage_path?: string
+          update_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_project_photos_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: false
+            referencedRelation: "member_project_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_project_updates: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          help_type: string | null
+          id: string
+          project_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          help_type?: string | null
+          id?: string
+          project_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          help_type?: string | null
+          id?: string
+          project_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_project_updates_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_updates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "member_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_projects: {
+        Row: {
+          archived_at: string | null
+          category: string
+          completed_at: string | null
+          cover_image_path: string | null
+          created_at: string
+          id: string
+          owner_id: string
+          project_status: string
+          summary: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          category: string
+          completed_at?: string | null
+          cover_image_path?: string | null
+          created_at?: string
+          id?: string
+          owner_id: string
+          project_status?: string
+          summary: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          category?: string
+          completed_at?: string | null
+          cover_image_path?: string | null
+          created_at?: string
+          id?: string
+          owner_id?: string
+          project_status?: string
+          summary?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_projects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       participants: {
         Row: {
           cancelled_at: string | null
@@ -1349,6 +1577,16 @@ export type Database = {
           reference_code: string | null
         }[]
       }
+      create_member_project_update: {
+        Args: {
+          p_body: string
+          p_help_type: string
+          p_photo_paths?: string[]
+          p_project_id: string
+          p_title: string
+        }
+        Returns: string
+      }
       custom_access_token_hook: { Args: { event: Json }; Returns: Json }
       dashboard_feed_snapshot: {
         Args: { p_limit?: number }
@@ -1405,6 +1643,13 @@ export type Database = {
           portal_membership_status: string
           portal_user_id: string
           review_decision: string
+        }[]
+      }
+      workbench_member_names: {
+        Args: { p_user_ids: string[] }
+        Returns: {
+          full_name: string
+          id: string
         }[]
       }
       record_workshop_email_attempt: {
