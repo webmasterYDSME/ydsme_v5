@@ -9,9 +9,9 @@ const nextConfig: NextConfig = {
     qualities: [35, 55, 75],
     dangerouslyAllowLocalIP: usesLocalSupabase,
     remotePatterns: [
-      { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },
+      { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/**" },
       ...(usesLocalSupabase
-        ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "55321", pathname: "/storage/v1/object/public/**" }]
+        ? [{ protocol: "http" as const, hostname: "127.0.0.1", port: "55321", pathname: "/storage/v1/object/**" }]
         : []),
     ],
   },

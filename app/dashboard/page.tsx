@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, CalendarDays, ChevronDown, FileText, Megaphone, Plus, ShoppingBag, Wrench } from "lucide-react";
+import { ArrowUpRight, CalendarDays, ChevronDown, FileText, Hammer, Megaphone, Plus, ShoppingBag, Wrench } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { requireUser, canManageContent } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +8,8 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
 import { ResponsiveDashboardCard } from "@/app/components/ResponsiveDashboardCard";
 import { safeHttpUrl } from "@/lib/security-input";
+import { ProjectCard } from "@/app/dashboard/workbench/ProjectCard";
+import { getWorkbenchProjects } from "@/lib/workbench";
 
 export const dynamic = "force-dynamic";
 
@@ -15,11 +17,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [eventsResult, workshopsResult, feedSnapshotResult, docsResult] = await Promise.all([
+  const [eventsResult, workshopsResult, feedSnapshotResult, docsResult, workbenchProjects] = await Promise.all([
     supabase.from("events").select("id,name,start_date,start_time,event_type", { count: "exact" }).eq("lifecycle_status", "published").gte("end_date", today).order("start_date").limit(6),
     supabase.from("workshops").select("id,title,date,start_time,venue,maximum_participants", { count: "exact" }).eq("lifecycle_status", "published").gte("date", today).order("date").limit(4),
     supabase.rpc("dashboard_feed_snapshot", { p_limit: 12 }),
     supabase.from("documents").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published"),
+    getWorkbenchProjects({ userId: user.id, limit: 3 }),
   ]);
   const events = eventsResult.data ?? [];
   const workshops = workshopsResult.data ?? [];
@@ -121,6 +124,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <p>Browse York Model Engineers clothing and club merchandise at Inglis Works.</p>
       </div>
       <a className="button dashboard-merch-link" href="https://www.inglisworks.co.uk/ysme" target="_blank" rel="noreferrer" aria-label="Visit the York Model Engineers store at Inglis Works (opens in a new tab)"><span>Visit the club store</span><ArrowUpRight/></a>
+    </section>
+
+    <section className="dashboard-workbench" aria-labelledby="dashboard-workbench-heading">
+      <header>
+        <div><p className="eyebrow dark">From members’ benches</p><h2 id="dashboard-workbench-heading">Projects taking shape</h2><p>See the latest builds, restorations and requests for help from across the Society.</p></div>
+        <Link href="/dashboard/workbench" prefetch={false}>Open Project Workbench <ArrowUpRight/></Link>
+      </header>
+      {workbenchProjects.length ? <div className="workbench-project-grid dashboard-workbench-grid">{workbenchProjects.map((project) => <ProjectCard project={project} key={project.id}/>)}</div> : <div className="dashboard-workbench-empty"><Hammer/><div><strong>The benches are ready.</strong><p>Start the first member project journal.</p></div><Link href="/dashboard/workbench/new" className="button dark">Start a project</Link></div>}
     </section>
 
     <div className="dashboard-section-grid">

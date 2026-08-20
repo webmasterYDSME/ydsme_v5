@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, FileText, Gauge, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
+import { CalendarDays, FileText, Gauge, Hammer, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import type { AppRole } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
@@ -17,6 +17,7 @@ type PortalLink = {
 
 const memberLinks: PortalLink[] = [
   { href: "/dashboard", label: "Overview", icon: Gauge },
+  { href: "/dashboard/workbench", label: "Project Workbench", icon: Hammer },
   { href: "/dashboard/minutes", label: "Minutes", icon: FileText },
   { href: "/dashboard/publications", label: "Publications", icon: FileText },
   { href: "/dashboard/resources", label: "Resources", icon: FileText },
@@ -36,7 +37,7 @@ const administratorLinks: PortalLink[] = [
   { href: "/settings", label: "Committee & site", icon: Settings },
 ];
 
-export function PortalNavigation({ role, name, canViewContent, administrator }: { role: AppRole; name: string; canViewContent: boolean; administrator: boolean }) {
+export function PortalNavigation({ role, name, canViewContent, administrator, membershipOfficer }: { role: AppRole; name: string; canViewContent: boolean; administrator: boolean; membershipOfficer: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -44,6 +45,7 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
   const links = [
     ...memberLinks,
     ...(canViewContent ? contentLinks : []),
+    ...(membershipOfficer ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound }] : []),
     ...(administrator ? administratorLinks : []),
   ];
 

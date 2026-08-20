@@ -6,6 +6,8 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { resolveMemberMojoPortalAccessReview } from "@/lib/actions/member-imports";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { membershipBillingEnabled } from "@/lib/features";
+import { redirect } from "next/navigation";
 
 type Query = { error?: string; notice?: string };
 
@@ -15,6 +17,7 @@ const notices: Record<string, string> = {
 };
 
 export default async function MemberImportPage({ searchParams }: { searchParams: Promise<Query> }) {
+  if (membershipBillingEnabled()) redirect("/admin/memberships");
   const [query, { user }] = await Promise.all([searchParams, requireCapability("members.manage")]);
   const admin = createAdminClient();
   const { data: reviews, count, error } = await admin

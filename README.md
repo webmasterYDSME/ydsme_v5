@@ -23,13 +23,15 @@ The local database currently contains a private production snapshot for developm
 - Public: `/`, `/visitors`, `/events`, `/club-history`, `/committees`, `/membership`
 - Public event booking: `/events/[id]/book`
 - Authentication: `/signin`, `/reset-password`, `/auth/callback`
-- Members: `/dashboard`, `/dashboard/minutes`, `/dashboard/publications`, `/dashboard/resources`, `/account`
+- Members: `/dashboard`, `/dashboard/workbench`, `/dashboard/minutes`, `/dashboard/publications`, `/dashboard/resources`, `/account`
 - Committee: `/admin/events`, `/admin/bookings`, `/admin/workshops`
 - Administrator: `/admin/members`, `/settings`
 
 Public events and committee members load from Supabase. Member-only events are only rendered inside the authenticated dashboard.
 
 Public events can optionally use capacity-limited booking. Configure `RESEND_API_KEY` and a verified `BOOKINGS_FROM_EMAIL` sender to deliver confirmations; the booking and reference are still recorded if email delivery is temporarily unavailable. Each confirmation includes a unique 1080 × 1920 mobile PNG ticket, both inline and attached, with an event-specific design and a QR code that opens the protected staff lookup. Site control can search references and check groups in at `/admin/bookings`.
+
+The member-only Project Workbench lets active members create project journals, add private photographs and progress updates, request practical help, follow projects and discuss work with other members. Project images are kept in a private Storage bucket and delivered through short-lived signed links.
 
 ## Access model
 

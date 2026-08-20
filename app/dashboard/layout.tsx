@@ -5,6 +5,6 @@ import { PortalShell } from "@/app/components/PortalShell";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
-  const { user, role, fullName } = await requireUser();
-  return <PortalShell role={role} name={fullName || user.email || "Member"}>{children}</PortalShell>;
+  const { user, role, fullName, membershipOfficer } = await requireUser();
+  return <PortalShell role={role} name={fullName || user.email || "Member"} membershipOfficer={membershipOfficer}>{children}</PortalShell>;
 }

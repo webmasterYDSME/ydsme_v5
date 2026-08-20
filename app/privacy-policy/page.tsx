@@ -12,7 +12,7 @@ export default function PrivacyPolicy() {
     eyebrow="Legal · Your information"
     title="Privacy notice"
     summary="A plain-English account of the personal information the Society uses, why we use it, and the choices and rights available to you."
-    updated="18 August 2026"
+    updated="20 August 2026"
   >
     <section>
       <h2>Who we are</h2>
@@ -28,8 +28,10 @@ export default function PrivacyPolicy() {
         <li>Membership information, including membership status, Society role, rules agreement and account identifiers.</li>
         <li>Account and security information used to authenticate you and protect the members’ area. We do not have access to your password in readable form.</li>
         <li>Event and workshop participation, documents or notices you submit, and associated authorship records.</li>
-        <li>Membership application, renewal and subscription records managed through membermojo, including membership type, status, renewal dates and related payment references.</li>
-        <li>If you make a donation through Stripe, we may receive limited transaction information such as the donation amount, date, status and payment reference. Full payment-card details are entered into and retained by Stripe, not this website.</li>
+        <li>Membership applications and eligibility information, including date of birth, student declaration and, for junior members, guardian name, email address and consent. We do not request uploaded eligibility documents.</li>
+        <li>Membership terms, honorary entitlements and audited officer decisions, renewal settings, cash receipt references, Stripe customer/subscription references and payment or reversal status.</li>
+        <li>If you pay membership fees or make a donation through Stripe, we receive limited transaction information such as the amount, date, status and provider reference. Full payment-card or bank details are entered into and retained by Stripe, not this website.</li>
+        <li>Read-only source identifiers and dates retained from the final membermojo migration for reconciliation, retention and legal-hold purposes.</li>
       </ul>
       <h3>Public visitors and correspondents</h3>
       <ul>
@@ -45,8 +47,8 @@ export default function PrivacyPolicy() {
       <div className="legal-table-wrap"><table>
         <thead><tr><th>Purpose</th><th>Typical lawful basis</th></tr></thead>
         <tbody>
-          <tr><td>Process applications and administer membership, renewals, member access and benefits through membermojo</td><td>Performance of the membership agreement and the Society’s legitimate interests in running the club</td></tr>
-          <tr><td>Collect membership subscriptions through membermojo, process voluntary donations through Stripe and maintain financial records</td><td>Performance of the membership agreement, the Society’s legitimate interests and compliance with legal obligations</td></tr>
+          <tr><td>Process applications and administer paid, cash and honorary membership, renewals, member access and benefits through the Society website</td><td>Performance of the membership agreement and the Society’s legitimate interests in running the club</td></tr>
+          <tr><td>Collect online membership subscriptions and voluntary donations through Stripe, confirm complete cash payments and maintain financial records</td><td>Performance of the membership agreement, the Society’s legitimate interests and compliance with legal obligations</td></tr>
           <tr><td>Manage event capacity, issue visitor booking confirmations, verify arrivals, organise workshops and coordinate Society activities</td><td>Legitimate interests in operating safe, appropriately attended events; consent where the law requires it</td></tr>
           <tr><td>Protect accounts, prevent abuse and investigate security incidents</td><td>Legitimate interests in keeping members, systems and information secure</td></tr>
           <tr><td>Meet safety, insurance, governance and other legal requirements, or establish and defend legal claims</td><td>Legal obligation and legitimate interests</td></tr>
@@ -58,7 +60,7 @@ export default function PrivacyPolicy() {
 
     <section>
       <h2>Where information comes from</h2>
-      <p>We normally receive information directly from you, including when you reserve event places, from a parent or guardian where appropriate, or from a Society officer acting on an application or existing membership record. Membership application, renewal and subscription updates may also be received from membermojo. Donation-payment confirmations may be received from Stripe.</p>
+      <p>We normally receive information directly from you, including when you reserve event places, from a parent or guardian where appropriate, or from a Society officer acting on an application, cash payment or honorary entitlement. Membership-payment, renewal, refund and dispute confirmations may be received from Stripe. Historical membership details may come from the Society’s final membermojo export.</p>
     </section>
 
     <section>
@@ -67,9 +69,8 @@ export default function PrivacyPolicy() {
       <ul>
         <li><strong>Supabase</strong> for authentication, database and file storage;</li>
         <li><strong>Vercel</strong> for website hosting, delivery and operational logs;</li>
-        <li><strong>membermojo Ltd</strong> for membership applications, renewals, subscription collection and membership record administration;</li>
-        <li><strong>Stripe</strong> solely for processing voluntary donations and associated fraud prevention and payment records; and</li>
-        <li><strong>Resend</strong> for transactional visitor-booking confirmation emails; and</li>
+        <li><strong>Stripe</strong> for hosted online membership subscriptions, payment-method management, voluntary donations, fraud prevention and associated payment records;</li>
+        <li><strong>Resend</strong> for transactional membership, account and visitor-booking emails; and</li>
         <li><strong>Cloudflare Turnstile</strong> to distinguish genuine booking, sign-in and recovery attempts from automated abuse.</li>
       </ul>
       <p>We may disclose information to insurers, professional advisers, regulators, law-enforcement bodies or other parties where the law requires or permits it. We do not sell personal information.</p>
