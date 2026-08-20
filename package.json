@@ -12,9 +12,12 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
-    "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs",
+    "test": "npm run test:unit",
+    "test:unit": "node tests/run-unit-tests.mjs",
+    "test:database": "node tests/run-database-integration.mjs",
+    "test:browser": "node tests/run-browser-smoke.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern supabase/.temp --ignore-pattern supabase/.branches",
-    "verify": "npm run lint && npm test"
+    "verify": "npm run lint && npm run build && npm run test:unit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
@@ -36,6 +39,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@next/eslint-plugin-next": "^16.3.1",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/qrcode": "^1.5.6",

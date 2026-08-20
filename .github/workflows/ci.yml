@@ -17,11 +17,11 @@ concurrency:
 jobs:
   promotion-path:
     name: Validate promotion path
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
       - name: Require feature to preview to main
+        if: github.event_name == 'pull_request'
         env:
           BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
           HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
@@ -38,19 +38,84 @@ jobs:
           echo "Required path: feature branch -> preview -> main"
           exit 1
 
+  migration-safety:
+    name: Validate migration safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out complete migration history
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.13.0
+      - name: Reject rewritten or destructive migrations
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/check-migration-safety.mjs "$BASE_SHA" "$HEAD_SHA"
+
   verify:
-    name: Verify deployment
+    name: Verify source and production build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - name: Use Node.js 22
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.13.0
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Lint, build, and test
-        run: npm run verify
+      - name: Lint source
+        run: npm run lint
+      - name: Run unit and source-contract tests
+        run: npm run test:unit
+      - name: Build and type-check the production application
+        run: npm run build
+
+  database-and-browser:
+    name: Verify database and browser journeys
+    needs:
+      - promotion-path
+      - migration-safety
+      - verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JOURNEY_TEST_PASSWORD: local-ci-journey-password
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Use Node.js 22
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.13.0
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start isolated local Supabase
+        run: npx supabase start
+      - name: Run database integration contracts
+        run: npm run test:database
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build and smoke-test public journeys
+        run: npm run test:browser
+      - name: Upload browser failure report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop isolated local Supabase
+        if: always()
+        run: npx supabase stop --no-backup
