@@ -25,7 +25,7 @@ export default async function PublicProjectsPage() {
     <section className="section public-projects-page" aria-labelledby="public-projects-heading">
       <header className="public-projects-heading">
         <div><p className="eyebrow dark">Made by Society members</p><h1 id="public-projects-heading">From the workbench.</h1></div>
-        <p>Completed builds, restorations and workshop stories shared by their owners and reviewed by the Society.</p>
+        <p>Completed builds, restorations and workshop stories shared by their owners.</p>
       </header>
 
       {projects.length ? <div className="public-project-grid">
