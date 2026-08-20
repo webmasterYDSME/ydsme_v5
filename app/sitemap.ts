@@ -10,6 +10,7 @@ const routes: Array<{
   { path: "/visitors", changeFrequency: "monthly", priority: 0.9 },
   { path: "/events", changeFrequency: "weekly", priority: 0.9 },
   { path: "/news", changeFrequency: "weekly", priority: 0.8 },
+  { path: "/projects", changeFrequency: "weekly", priority: 0.8 },
   { path: "/club-history", changeFrequency: "yearly", priority: 0.7 },
   { path: "/committees", changeFrequency: "monthly", priority: 0.7 },
   { path: "/membership", changeFrequency: "monthly", priority: 0.8 },

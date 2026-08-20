@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { ArrowUpRight, Globe2, MapPin, Menu, X } from "lucide-react";
 import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
-const nav = [["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
+const nav = [["Visitors","/visitors"],["Events","/events"],["Projects","/projects"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
 
 export function Reveal({children, delay=0}:{children:ReactNode;delay?:number}) {
   const ref=useRef<HTMLDivElement>(null);

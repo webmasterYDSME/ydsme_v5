@@ -41,6 +41,35 @@ async function removeProjectImages(paths: string[]) {
   if (paths.length) await createAdminClient().storage.from("project-images").remove(paths);
 }
 
+function publicProjectImagePath(projectIdValue: string, label: string, sourcePath: string) {
+  const sourceName = sourcePath.split("/").at(-1) || "image";
+  const safeName = sourceName.replace(/[^a-zA-Z0-9._-]/g, "-").slice(-120);
+  return `projects/${projectIdValue}/${label}-${safeName}`;
+}
+
+async function removePublicProjectImages(projectIdValue: string) {
+  const storage = createAdminClient().storage.from("public-project-images");
+  const prefix = `projects/${projectIdValue}`;
+  const { data, error } = await storage.list(prefix, { limit: 1000 });
+  if (error) throw error;
+  const paths = (data ?? []).filter((item) => item.name).map((item) => `${prefix}/${item.name}`);
+  if (paths.length) {
+    const { error: removeError } = await storage.remove(paths);
+    if (removeError) throw removeError;
+  }
+}
+
+async function copyPublicProjectImage(sourcePath: string, destinationPath: string) {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from("project-images").download(sourcePath);
+  if (error || !data) throw error ?? new Error("Project image download failed.");
+  const { error: uploadError } = await admin.storage.from("public-project-images").upload(destinationPath, data, {
+    contentType: data.type || undefined,
+    upsert: true,
+  });
+  if (uploadError) throw uploadError;
+}
+
 export async function createProject(formData: FormData) {
   const { user } = await requireUser();
   const client = await createClient();
@@ -208,4 +237,126 @@ export async function archiveProjectComment(formData: FormData) {
   if (error) redirect(`${workbenchPath(id.data)}?error=The+comment+could+not+be+removed.`);
   revalidatePath(workbenchPath());
   revalidatePath(workbenchPath(id.data));
+}
+
+export async function requestPublicProjectFeature(formData: FormData) {
+  const { user } = await requireUser();
+  const id = projectId.safeParse(formData.get("project_id"));
+  if (!id.success) redirect(`${workbenchPath()}?error=Project+not+found.`);
+  if (formData.get("consent") !== "yes") redirect(`${workbenchPath(id.data)}?error=Explicit+owner+consent+is+required.`);
+  const client = await createClient();
+  const { data: project } = await client.from("member_projects")
+    .select("owner_id,project_status,archived_at")
+    .eq("id", id.data)
+    .maybeSingle();
+  if (!project || project.owner_id !== user.id || project.project_status !== "completed" || project.archived_at) {
+    redirect(`${workbenchPath(id.data)}?error=Only+a+completed+project+owner+can+request+public+featuring.`);
+  }
+
+  const { error } = await client.rpc("request_public_project_feature", {
+    p_project_id: id.data,
+    p_show_owner_name: formData.get("show_owner_name") === "yes",
+  });
+  if (error) redirect(`${workbenchPath(id.data)}?error=The+public+feature+request+could+not+be+submitted.`);
+  await removePublicProjectImages(id.data).catch(() => undefined);
+  revalidatePath(workbenchPath(id.data));
+  revalidatePath("/projects");
+  redirect(`${workbenchPath(id.data)}?notice=feature-requested#public-feature`);
+}
+
+export async function withdrawPublicProjectFeature(formData: FormData) {
+  const { user } = await requireUser();
+  const id = projectId.safeParse(formData.get("project_id"));
+  if (!id.success) redirect(`${workbenchPath()}?error=Project+not+found.`);
+  const client = await createClient();
+  const { data: project } = await client.from("member_projects").select("owner_id").eq("id", id.data).maybeSingle();
+  if (!project || project.owner_id !== user.id) redirect(`${workbenchPath(id.data)}?error=Only+the+project+owner+can+withdraw+consent.`);
+
+  const { error } = await client.rpc("withdraw_public_project_feature", { p_project_id: id.data });
+  if (error) redirect(`${workbenchPath(id.data)}?error=Public+featuring+could+not+be+withdrawn.`);
+  await removePublicProjectImages(id.data).catch(() => undefined);
+  revalidatePath(workbenchPath(id.data));
+  revalidatePath("/projects");
+  redirect(`${workbenchPath(id.data)}?notice=feature-withdrawn#public-feature`);
+}
+
+export async function approvePublicProjectFeature(formData: FormData) {
+  const { role } = await requireUser();
+  const id = projectId.safeParse(formData.get("project_id"));
+  if (!id.success || !canManageContent(role)) redirect(`${workbenchPath()}?error=You+cannot+review+public+features.`);
+  const client = await createClient();
+  const [projectResult, requestResult, updatesResult] = await Promise.all([
+    client.from("member_projects")
+      .select("id,cover_image_path,project_status,completed_at,archived_at")
+      .eq("id", id.data)
+      .maybeSingle(),
+    client.from("member_project_feature_requests")
+      .select("status,owner_consented_at")
+      .eq("project_id", id.data)
+      .maybeSingle(),
+    client.from("member_project_updates").select("id").eq("project_id", id.data),
+  ]);
+  const project = projectResult.data;
+  const request = requestResult.data;
+  if (projectResult.error || requestResult.error || updatesResult.error || !project || !request
+    || request.status !== "pending" || !request.owner_consented_at
+    || project.project_status !== "completed" || !project.completed_at || project.archived_at) {
+    redirect(`${workbenchPath(id.data)}?error=This+project+is+not+ready+for+approval.`);
+  }
+
+  const updateIds = (updatesResult.data ?? []).map((update) => update.id);
+  const photosResult = updateIds.length
+    ? await client.from("member_project_photos").select("id,storage_path").in("update_id", updateIds)
+    : { data: [], error: null };
+  if (photosResult.error) redirect(`${workbenchPath(id.data)}?error=The+project+photographs+could+not+be+prepared.`);
+
+  let publicCoverPath: string | null = null;
+  const publicPhotoPaths: Record<string, string> = {};
+  try {
+    await removePublicProjectImages(id.data);
+    if (project.cover_image_path) {
+      publicCoverPath = publicProjectImagePath(id.data, "cover", project.cover_image_path);
+      await copyPublicProjectImage(project.cover_image_path, publicCoverPath);
+    }
+    for (const photo of photosResult.data ?? []) {
+      const destination = publicProjectImagePath(id.data, `photo-${photo.id}`, photo.storage_path);
+      await copyPublicProjectImage(photo.storage_path, destination);
+      publicPhotoPaths[photo.id] = destination;
+    }
+  } catch {
+    await removePublicProjectImages(id.data).catch(() => undefined);
+    redirect(`${workbenchPath(id.data)}?error=The+approved+photographs+could+not+be+published.`);
+  }
+
+  const { data: slug, error } = await client.rpc("approve_public_project_feature", {
+    p_project_id: id.data,
+    p_cover_image_path: publicCoverPath ?? undefined,
+    p_photo_paths: publicPhotoPaths,
+    p_review_note: String(formData.get("review_note") || "").trim().slice(0, 500),
+  });
+  if (error || !slug) {
+    await removePublicProjectImages(id.data).catch(() => undefined);
+    redirect(`${workbenchPath(id.data)}?error=The+public+feature+could+not+be+approved.`);
+  }
+
+  revalidatePath(workbenchPath(id.data));
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${slug}`);
+  redirect(`${workbenchPath(id.data)}?notice=feature-approved#public-feature`);
+}
+
+export async function rejectPublicProjectFeature(formData: FormData) {
+  const { role } = await requireUser();
+  const id = projectId.safeParse(formData.get("project_id"));
+  if (!id.success || !canManageContent(role)) redirect(`${workbenchPath()}?error=You+cannot+review+public+features.`);
+  const client = await createClient();
+  const { error } = await client.rpc("reject_public_project_feature", {
+    p_project_id: id.data,
+    p_review_note: String(formData.get("review_note") || "").trim().slice(0, 500),
+  });
+  if (error) redirect(`${workbenchPath(id.data)}?error=The+public+feature+could+not+be+removed.`);
+  await removePublicProjectImages(id.data).catch(() => undefined);
+  revalidatePath(workbenchPath(id.data));
+  revalidatePath("/projects");
+  redirect(`${workbenchPath(id.data)}?notice=feature-rejected#public-feature`);
 }
