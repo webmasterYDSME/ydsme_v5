@@ -56,9 +56,17 @@ if (currentRemoteSha() !== releaseSha) {
   process.exit(0);
 }
 
+run(["functions", "deploy", "--project-ref", process.env.SUPABASE_PROJECT_ID, "--yes"]);
+
+if (currentRemoteSha() !== releaseSha) {
+  console.log("Edge Functions deployed, but a newer branch commit now exists; the newer release will deploy the application.");
+  output("stale", "true");
+  process.exit(0);
+}
+
 const response = await fetch(hook, { method: "POST", redirect: "error" });
 assert.ok(response.ok, `Vercel rejected the deploy hook with HTTP ${response.status}.`);
 
 output("stale", "false");
 output("released_sha", releaseSha);
-console.log(`Applied pending migrations and triggered the ${process.env.RELEASE_BRANCH} deployment.`);
+console.log(`Applied pending migrations, deployed Edge Functions and triggered the ${process.env.RELEASE_BRANCH} deployment.`);
