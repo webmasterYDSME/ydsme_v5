@@ -183,16 +183,21 @@ test("publishes and caches announcements through safe active and news projection
 });
 
 test("requires action-level roles before privileged writes", async () => {
-  const [actions, uploads, uploadField] = await Promise.all([
+  const [actions, uploads, uploadField, supabaseConfig, storageLimitMigration] = await Promise.all([
     read("lib/actions/content.ts"),
     read("lib/actions/uploads.ts"),
     read("app/components/SignedUploadField.tsx"),
+    read("supabase/config.toml"),
+    read("supabase/migrations/202608200001_align_image_upload_limit.sql"),
   ]);
   assert.match(actions, /requireRole\(\["administrator", "committee"\]\)/);
   assert.match(actions, /requireRole\(\["administrator"\]\)/);
   assert.match(actions, /finalizeQuarantinedUpload/);
   assert.match(uploads, /createSignedUploadUrl/);
+  assert.match(uploads, /maximum: 8 \* 1024 \* 1024/);
   assert.match(uploadField, /uploadToSignedUrl/);
+  assert.match(supabaseConfig, /\[storage\.buckets\.images\][\s\S]*file_size_limit = "8MiB"/);
+  assert.match(storageLimitMigration, /file_size_limit[\s\S]*8 \* 1024 \* 1024/);
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
 });
 
