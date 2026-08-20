@@ -11,6 +11,7 @@ test("runs staged verification, migration and deployment automation", async () =
     vercelSource,
     workflow,
     releaseWorkflow,
+    releaseScript,
     cleanupWorkflow,
     deploymentGuide,
     localSupabaseStart,
@@ -20,6 +21,7 @@ test("runs staged verification, migration and deployment automation", async () =
     read("vercel.json"),
     read(".github/workflows/ci.yml"),
     read(".github/workflows/release.yml"),
+    read("scripts/release-hosted-environment.mjs"),
     read(".github/workflows/delete-merged-feature-branches.yml"),
     read("DEPLOYMENT.md"),
     read("scripts/start-local-supabase.mjs"),
@@ -57,6 +59,9 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.match(releaseWorkflow, /SUPABASE_PRODUCTION_PROJECT_ID/);
   assert.match(releaseWorkflow, /node scripts\/release-hosted-environment\.mjs/);
   assert.match(releaseWorkflow, /Mirror verified production source/);
+  assert.match(releaseScript, /\["functions", "deploy", "--project-ref", process\.env\.SUPABASE_PROJECT_ID, "--yes"\]/);
+  assert.ok(releaseScript.indexOf('["db", "push", "--linked", "--yes", "--skip-vault"]') < releaseScript.indexOf('["functions", "deploy"'));
+  assert.ok(releaseScript.indexOf('["functions", "deploy"') < releaseScript.indexOf("fetch(hook"));
   assert.match(cleanupWorkflow, /pull_request\.head\.ref != 'main'/);
   assert.match(cleanupWorkflow, /pull_request\.head\.ref != 'preview'/);
   assert.match(cleanupWorkflow, /pull_request\.merged == true/);
