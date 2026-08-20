@@ -14,6 +14,7 @@
 /coverage
 /playwright-report
 /test-results
+/.supabase-test/
 *.tsbuildinfo
 
 # next.js

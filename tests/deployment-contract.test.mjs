@@ -6,13 +6,24 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("runs staged verification, migration and deployment automation", async () => {
-  const [packageSource, vercelSource, workflow, releaseWorkflow, cleanupWorkflow, deploymentGuide] = await Promise.all([
+  const [
+    packageSource,
+    vercelSource,
+    workflow,
+    releaseWorkflow,
+    cleanupWorkflow,
+    deploymentGuide,
+    localSupabaseStart,
+    localSupabaseStop,
+  ] = await Promise.all([
     read("package.json"),
     read("vercel.json"),
     read(".github/workflows/ci.yml"),
     read(".github/workflows/release.yml"),
     read(".github/workflows/delete-merged-feature-branches.yml"),
     read("DEPLOYMENT.md"),
+    read("scripts/start-local-supabase.mjs"),
+    read("scripts/stop-local-supabase.mjs"),
   ]);
   const packageJson = JSON.parse(packageSource);
   const vercel = JSON.parse(vercelSource);
@@ -34,6 +45,12 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.match(workflow, /Validate migration safety/);
   assert.match(workflow, /run: npm run test:database/);
   assert.match(workflow, /run: npm run test:browser/);
+  assert.match(workflow, /SUPABASE_TEST_WORKDIR: \.supabase-test/);
+  assert.match(workflow, /node scripts\/start-local-supabase\.mjs/);
+  assert.match(workflow, /node scripts\/stop-local-supabase\.mjs/);
+  assert.match(localSupabaseStart, /Expected at least three active administrators before rollout/);
+  assert.match(localSupabaseStart, /http:\/\/127\.0\.0\.1:55321/);
+  assert.match(localSupabaseStop, /--no-backup/);
   assert.match(releaseWorkflow, /workflow_run:/);
   assert.match(releaseWorkflow, /github\.event\.workflow_run\.conclusion == 'success'/);
   assert.match(releaseWorkflow, /SUPABASE_PREVIEW_PROJECT_ID/);

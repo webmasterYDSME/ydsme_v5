@@ -4,7 +4,16 @@ import { execFileSync } from "node:child_process";
 export const LOCAL_SUPABASE_URL = "http://127.0.0.1:55321";
 
 export function readLocalSupabaseEnvironment(purpose) {
-  const status = execFileSync("npx", ["supabase", "status", "-o", "env"], {
+  const testWorkdir = process.env.SUPABASE_TEST_WORKDIR;
+  if (testWorkdir) {
+    assert.equal(
+      testWorkdir,
+      ".supabase-test",
+      "The isolated Supabase test workdir must remain repository-local.",
+    );
+  }
+  const workdirArgs = testWorkdir ? ["--workdir", testWorkdir] : [];
+  const status = execFileSync("npx", ["supabase", "status", ...workdirArgs, "-o", "env"], {
     encoding: "utf8",
   });
   const environment = Object.fromEntries(status.split("\n").flatMap((line) => {

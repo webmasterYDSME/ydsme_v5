@@ -88,6 +88,7 @@ jobs:
     timeout-minutes: 30
     env:
       JOURNEY_TEST_PASSWORD: local-ci-journey-password
+      SUPABASE_TEST_WORKDIR: .supabase-test
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -99,7 +100,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Start isolated local Supabase
-        run: npx supabase start
+        run: node scripts/start-local-supabase.mjs
       - name: Run database integration contracts
         run: npm run test:database
       - name: Install Chromium
@@ -118,4 +119,4 @@ jobs:
           retention-days: 7
       - name: Stop isolated local Supabase
         if: always()
-        run: npx supabase stop --no-backup
+        run: node scripts/stop-local-supabase.mjs
