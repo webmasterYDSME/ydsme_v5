@@ -341,18 +341,36 @@ test("defers document delivery and rejects active PDF content", async () => {
 });
 
 test("keeps the supplied logo and local member login", async () => {
-  const [shell, signIn, signInCard, authActions] = await Promise.all([
+  const [shell, pageShell, signIn, signInCard, authActions] = await Promise.all([
     read("app/components/RailSite.tsx"),
+    read("app/components/PageShell.tsx"),
     read("app/signin/page.tsx"),
     read("app/components/SignInCard.tsx"),
     read("lib/actions/auth.ts"),
   ]);
   assert.match(shell, /\/ydsme-logo\.png/);
-  assert.match(shell, /href="\/signin"/);
+  assert.match(shell, /isAuthenticated\?"\/dashboard":"\/signin"/);
+  assert.match(shell, /isAuthenticated\?"Member area":"Member login"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);
+  assert.match(pageShell, /getCurrentUser/);
+  assert.match(pageShell, /isAuthenticated=\{Boolean\(user\)\}/);
   assert.match(signIn, /<SignInCard/);
+  assert.match(signIn, /isMagicLinkSent[\s\S]*?auth-link-confirmation/);
+  assert.match(signIn, /If that email belongs to an active member account/);
+  assert.match(signIn, /isPasswordResetSent = query\.sent === "password-reset"/);
+  assert.match(signIn, /Password reset instructions are on their way/);
+  assert.match(signIn, /initialMode=\{initialMode\}/);
+  assert.match(signInCard, /auth-flip-front[\s\S]*?<form action=\{sendMagicLink\}/);
+  assert.match(signInCard, /SubmitOnEnterInput[\s\S]*?enterKeyHint="go"/);
+  assert.match(signInCard, /showBack\("password"\)[\s\S]*?Sign in with email and password/);
+  assert.match(signInCard, /backMode === "password-reset" \? "Back to password sign in"/);
+  assert.match(signInCard, /action=\{signInWithPassword\}[\s\S]*?showBack\("password-reset"\)[\s\S]*?Forgotten your password/);
   assert.match(signInCard, /minLength=\{6\}/);
   assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
+  assert.match(authActions, /method: "password"/);
+  assert.match(authActions, /passwordAuthError\("We could not sign you in/);
+  assert.match(authActions, /method: "password-reset"/);
+  assert.match(authActions, /passwordResetAuthError\("We could not send the reset email/);
   assert.match(authActions, /newPasswordSchema = z\.string\(\)\.min\(8\)/);
 });
 

@@ -19,15 +19,29 @@ function authError(message: string): never {
   redirect(`/signin?error=${encodeURIComponent(message)}`);
 }
 
+function passwordAuthError(message: string, formData: FormData): never {
+  const query = new URLSearchParams({
+    error: message,
+    method: "password",
+    next: safeNext(formData.get("next")),
+  });
+  redirect(`/signin?${query.toString()}`);
+}
+
+function passwordResetAuthError(message: string): never {
+  const query = new URLSearchParams({ error: message, method: "password-reset" });
+  redirect(`/signin?${query.toString()}`);
+}
+
 export async function signInWithPassword(formData: FormData) {
   const parsed = z.object({ email: emailSchema, password: existingPasswordSchema }).safeParse({
     email: formData.get("email"), password: formData.get("password"),
   });
-  if (!parsed.success) authError("Enter a valid email address and password.");
+  if (!parsed.success) passwordAuthError("Enter a valid email address and password.", formData);
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ ...parsed.data, options: { captchaToken: String(formData.get("captchaToken") || "") } });
-  if (error) authError("We could not sign you in. Check your details and try again.");
+  if (error) passwordAuthError("We could not sign you in. Check your details and try again.", formData);
   redirect(safeNext(formData.get("next")));
 }
 
@@ -46,14 +60,14 @@ export async function sendMagicLink(formData: FormData) {
 
 export async function sendPasswordReset(formData: FormData) {
   const parsed = emailSchema.safeParse(formData.get("email"));
-  if (!parsed.success) authError("Enter a valid email address.");
+  if (!parsed.success) passwordResetAuthError("Enter a valid email address.");
   const origin = getTrustedAppOrigin();
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
     redirectTo: `${origin}/auth/callback?next=/reset-password`,
     captchaToken: String(formData.get("captchaToken") || ""),
   });
-  if (error) authError("We could not send the reset email. Please try again.");
+  if (error) passwordResetAuthError("We could not send the reset email. Please try again.");
   redirect("/signin?sent=password-reset");
 }
 
