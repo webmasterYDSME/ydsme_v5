@@ -219,7 +219,7 @@ test("reviews and standardizes event images before secure upload", async () => {
   assert.match(field, /previewMode === "mobile"/);
   assert.match(field, /Keep important details inside this area/);
   assert.match(field, /navigator\.clipboard\.writeText\(aiPrompt\)/);
-  assert.match(field, /Do not include text, logos, borders or watermarks/);
+  assert.match(field, /Leave comfortable space around the subject/);
   assert.match(field, /preventUnconfirmedImage/);
   assert.match(styles, /event-image-card-media[^}]*aspect-ratio:23\/16/);
   assert.match(styles, /event-image-card-preview\.is-mobile \.event-image-card-media\{aspect-ratio:8\/5\}/);
