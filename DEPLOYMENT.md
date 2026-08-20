@@ -1,23 +1,39 @@
 # Deployment rules
 
-The application follows one promotion path: feature branch → `preview` → `main`. Vercel deploys only the persistent `preview` and `main` branches. A successful build is necessary, but it does not prove that the hosted Supabase schema is ready. Treat application deployment and database migration as two coordinated, separately verified operations.
+The application follows one promotion path: feature branch → `preview` → `main`. Git-triggered Vercel deployments are disabled. After a branch push passes GitHub CI, the `Release` workflow applies pending migrations to that branch's Supabase project and only then calls its branch-specific Vercel deploy hook. This keeps application deployment and database migration ordered as one release operation.
 
 ## Required rules
 
 1. Merge through pull requests in order: feature branches target `preview`, and only `preview` targets `main`. The `Validate promotion path` check rejects every other route.
-2. Run `npm run verify` before merging and require the `Verify deployment` check when repository-plan settings allow required checks.
-3. Do not merge with a failing code, build, or security-contract check. Feature branches do not deploy to Vercel; the merged result is reviewed at the stable `preview` deployment.
+2. Run `npm run verify` before merging and inspect every GitHub check. The current GitHub plan cannot enforce required checks, so branch discipline remains an explicit team responsibility.
+3. Do not merge with a failing promotion, migration-safety, source/build, database-integration, or browser check. Feature branches do not deploy to Vercel; the merged result is reviewed at the stable `preview` deployment.
 4. Delete feature branches after they merge into `preview`. The cleanup workflow does this automatically and explicitly preserves `preview` and `main`.
 5. Never run seeds, fixtures, resets, or data-writing tests against remote Supabase. Data-writing tests must use the loopback stack at `http://127.0.0.1:55321`.
-6. Database changes must use expand-and-contract deployment:
+6. Database changes must use expand-and-contract deployment. Existing migration files are immutable, and migrations containing `DROP TABLE`, `DROP SCHEMA`, `TRUNCATE`, or `ALTER TABLE ... DROP COLUMN` are rejected from automatic release:
    - Expand: add and locally validate new tables, columns, views, policies, and grants without removing behavior used by the live application.
    - Migrate: apply the reviewed additive migration through the explicitly authorized production migration process before deploying code that requires it.
    - Deploy: release code that works with both the existing and expanded schema when practical. Public pages must degrade safely while an additive public projection is unavailable.
    - Verify: smoke-test the affected public and authenticated routes against production.
    - Contract: remove obsolete schema or compatibility code only in a later deployment after production verification.
-7. Do not place production credentials in GitHub Actions, repository files, logs, or PR comments. `.env.prod` is for an explicitly authorized production deployment or read-only audit only.
-8. Do not map a custom domain or consider a release complete until the production-alias smoke tests pass.
-9. Scheduled data lifecycle work belongs to Supabase Cron. Quarantine file cleanup must use the `cleanup-quarantine` Edge Function and the Storage API; do not delete rows directly from `storage.objects`.
+7. Store hosted deployment credentials only as encrypted GitHub repository secrets. Never place their values in workflow source, repository files, logs, or PR comments. `.env.prod` remains for an explicitly authorized production deployment or read-only audit only.
+8. Preview and production must use separate Supabase projects. The release script refuses identical project references and never includes seed data or writes Vault configuration.
+9. Do not map a custom domain or consider a release complete until the production-alias smoke tests pass.
+10. Scheduled data lifecycle work belongs to Supabase Cron. Quarantine file cleanup must use the `cleanup-quarantine` Edge Function and the Storage API; do not delete rows directly from `storage.objects`.
+
+## Release automation setup
+
+Create two Vercel deploy hooks: one linked to `preview`, and one linked to `main`. Store their complete URLs as repository secrets; the URLs are credentials and must never appear in source or logs. Do not enable Vercel's automatic Git branch deployments because they would race the database migration.
+
+Configure these GitHub repository secrets before merging the release workflow:
+
+- `SUPABASE_PREVIEW_ACCESS_TOKEN`, `SUPABASE_PREVIEW_DB_PASSWORD`, `SUPABASE_PREVIEW_PROJECT_ID`
+- `SUPABASE_PRODUCTION_ACCESS_TOKEN`, `SUPABASE_PRODUCTION_DB_PASSWORD`, `SUPABASE_PRODUCTION_PROJECT_ID`
+- `VERCEL_PREVIEW_DEPLOY_HOOK`, `VERCEL_PRODUCTION_DEPLOY_HOOK`
+- `YDSME_V5_REPO_DEPLOY_KEY` for the existing public source mirror
+
+The two project IDs must differ. A missing secret, a failed `supabase db push --dry-run`, a failed migration, or a rejected deploy hook fails closed: Vercel is not triggered and production source is not mirrored. Supabase applies each pending migration once using its migration-history table. Never repair hosted migration history automatically; investigate and explicitly review any `migration repair` operation.
+
+For the one-time rollout of this workflow, configure all secrets and hooks first, then promote the workflow to `main`. GitHub loads `workflow_run` definitions from the default branch, so the first preview release will not start until `release.yml` exists on `main`; rerun the latest successful preview CI workflow after that promotion.
 
 ## Membership billing rollout
 
@@ -41,20 +57,22 @@ Before applying `202608180021_event_management_lifecycle.sql` to a hosted projec
 
 1. Review the PR diff, especially `supabase/migrations/`, authorization checks, public projections, and rollback behavior.
 2. Create a feature branch from `preview`, then open a pull request back to `preview`.
-3. Run `npm run verify` locally. GitHub CI runs the same command for pull requests and pushes to `preview` and `main`.
-4. If the release contains a migration, validate it on the local Supabase stack and record the exact production migration and rollback plan in the PR.
-5. Before merging code that requires new schema, explicitly authorize and apply the reviewed additive production migration. If migration timing must remain separate, the application needs a tested compatibility path for the old schema.
-6. Merge the feature PR only after both GitHub checks pass, then smoke-test the stable `preview` deployment.
-7. Open a `preview` to `main` pull request and merge it only after both checks pass.
-8. Wait for the Vercel production deployment to report success.
-9. Smoke-test these routes against the production alias:
+3. Run `npm run verify` locally. If Supabase is running on `http://127.0.0.1:55321`, also run `JOURNEY_TEST_PASSWORD=<local-test-password> npm run test:database` and `npm run test:browser`.
+4. GitHub CI starts a fresh, seedless local Supabase stack, applies every migration, runs the database contracts, builds the application, and runs Chromium smoke tests. It never receives hosted Supabase credentials.
+5. If the release contains a migration, record the exact production migration and rollback plan in the PR. High-risk destructive changes require a separately authorized manual rollout and cannot use the automatic release path.
+6. Merge the feature PR only after all GitHub checks pass. A successful `preview` push CI run automatically applies pending preview migrations and triggers the preview deploy hook.
+7. Wait for the Vercel preview deployment to report success, then smoke-test the stable preview deployment.
+8. Open a `preview` to `main` pull request and merge it only after all checks pass.
+9. A successful `main` push CI run automatically applies pending production migrations, triggers the production deploy hook, and mirrors that released source commit to the public repository.
+10. Wait for the Vercel production deployment to report success.
+11. Smoke-test these routes against the production alias:
    - `/`
    - `/events`
    - `/news`
    - `/membership`
    - `/signin`
-10. Verify the feature-specific authenticated path after its schema is available. For announcements, verify `/admin/announcements` as an administrator or committee member.
-11. If any critical public route returns a 5xx response, roll back the Vercel deployment or ship a narrowly scoped compatibility fix before continuing the database rollout.
+12. Verify the feature-specific authenticated path after its schema is available. For announcements, verify `/admin/announcements` as an administrator or committee member.
+13. If any critical public route returns a 5xx response, roll back the Vercel deployment or ship a narrowly scoped compatibility fix before continuing the database rollout.
 
 ## Rollback rule
 

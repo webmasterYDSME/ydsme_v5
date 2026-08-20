@@ -3,9 +3,7 @@
   "buildCommand": "npm run verify",
   "git": {
     "deploymentEnabled": {
-      "**": false,
-      "main": true,
-      "preview": true
+      "**": false
     }
   }
 }

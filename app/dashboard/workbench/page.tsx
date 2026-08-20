@@ -1,10 +1,11 @@
 import Form from "next/form";
 import Link from "next/link";
-import { CircleHelp, Hammer, Plus, SlidersHorizontal } from "lucide-react";
-import { requireUser } from "@/lib/auth";
+import { CircleHelp, Globe2, Hammer, Plus, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { canManageContent, requireUser } from "@/lib/auth";
 import { ProjectCard } from "@/app/dashboard/workbench/ProjectCard";
 import {
   categoryLabels,
+  getPendingPublicFeatureRequests,
   getWorkbenchProjects,
   projectCategories,
   projectStatuses,
@@ -18,12 +19,15 @@ export const dynamic = "force-dynamic";
 type WorkbenchQuery = { category?: string; status?: string; scope?: string; help?: string; error?: string; notice?: string };
 
 export default async function WorkbenchPage({ searchParams }: { searchParams: Promise<WorkbenchQuery> }) {
-  const [{ user }, query] = await Promise.all([requireUser(), searchParams]);
+  const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
   const category = projectCategories.includes(query.category as ProjectCategory) ? query.category as ProjectCategory : undefined;
   const status = projectStatuses.includes(query.status as ProjectStatus) ? query.status as ProjectStatus : undefined;
   const scope = query.scope === "mine" || query.scope === "following" ? query.scope : undefined;
   const helpOnly = query.help === "yes";
-  const projects = await getWorkbenchProjects({ userId: user.id, category, status, scope, helpOnly });
+  const [projects, publicFeatureReviews] = await Promise.all([
+    getWorkbenchProjects({ userId: user.id, category, status, scope, helpOnly }),
+    canManageContent(role) ? getPendingPublicFeatureRequests() : Promise.resolve([]),
+  ]);
 
   return <div className="portal-content workbench-page">
     <header className="portal-heading workbench-heading">
@@ -32,6 +36,11 @@ export default async function WorkbenchPage({ searchParams }: { searchParams: Pr
     </header>
     {query.error ? <p className="form-message error">The requested Workbench change could not be completed.</p> : null}
     {query.notice ? <p className="form-message success">The Workbench has been updated.</p> : null}
+
+    {publicFeatureReviews.length ? <section className="workbench-feature-queue" aria-labelledby="feature-review-queue-heading">
+      <header><ShieldCheck aria-hidden="true"/><div><p className="eyebrow dark">Committee review queue</p><h2 id="feature-review-queue-heading">Public feature requests</h2></div><span>{publicFeatureReviews.length}</span></header>
+      <div>{publicFeatureReviews.map((request) => <Link href={`/dashboard/workbench/${request.project_id}#public-feature`} key={request.project_id}><Globe2 aria-hidden="true"/><span><strong>{request.title}</strong><small>{request.show_owner_name ? "Named owner byline consented" : "Anonymous Society member byline"}</small></span><span>Review</span></Link>)}</div>
+    </section> : null}
 
     <nav className="workbench-scope-tabs" aria-label="Project view">
       <Link href="/dashboard/workbench" aria-current={!scope && !helpOnly ? "page" : undefined}>All projects</Link>

@@ -788,6 +788,57 @@ export type Database = {
           },
         ]
       }
+      member_project_feature_requests: {
+        Row: {
+          owner_consented_at: string | null
+          project_id: string
+          review_note: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          show_owner_name: boolean
+          status: string
+          submitted_at: string
+          updated_at: string
+        }
+        Insert: {
+          owner_consented_at?: string | null
+          project_id: string
+          review_note?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          show_owner_name?: boolean
+          status?: string
+          submitted_at?: string
+          updated_at?: string
+        }
+        Update: {
+          owner_consented_at?: string | null
+          project_id?: string
+          review_note?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          show_owner_name?: boolean
+          status?: string
+          submitted_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_project_feature_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "member_projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_project_feature_requests_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_project_follows: {
         Row: {
           created_at: string
@@ -1080,6 +1131,120 @@ export type Database = {
           name?: string | null
         }
         Relationships: []
+      }
+      public_featured_project_photos: {
+        Row: {
+          caption: string
+          id: string
+          sort_order: number
+          storage_path: string
+          update_id: string
+        }
+        Insert: {
+          caption?: string
+          id: string
+          sort_order: number
+          storage_path: string
+          update_id: string
+        }
+        Update: {
+          caption?: string
+          id?: string
+          sort_order?: number
+          storage_path?: string
+          update_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "public_featured_project_photos_update_id_fkey"
+            columns: ["update_id"]
+            isOneToOne: false
+            referencedRelation: "public_featured_project_updates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      public_featured_project_updates: {
+        Row: {
+          body: string
+          created_at: string
+          help_type: string | null
+          id: string
+          project_id: string
+          sort_order: number
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at: string
+          help_type?: string | null
+          id: string
+          project_id: string
+          sort_order: number
+          title: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          help_type?: string | null
+          id?: string
+          project_id?: string
+          sort_order?: number
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "public_featured_project_updates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "public_featured_projects"
+            referencedColumns: ["project_id"]
+          },
+        ]
+      }
+      public_featured_projects: {
+        Row: {
+          category: string
+          completed_at: string
+          cover_image_path: string | null
+          owner_byline: string
+          project_id: string
+          published_at: string
+          slug: string
+          summary: string
+          title: string
+        }
+        Insert: {
+          category: string
+          completed_at: string
+          cover_image_path?: string | null
+          owner_byline: string
+          project_id: string
+          published_at?: string
+          slug: string
+          summary: string
+          title: string
+        }
+        Update: {
+          category?: string
+          completed_at?: string
+          cover_image_path?: string | null
+          owner_byline?: string
+          project_id?: string
+          published_at?: string
+          slug?: string
+          summary?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "public_featured_projects_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "member_projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       rate_limits: {
         Row: {
@@ -1496,6 +1661,15 @@ export type Database = {
         Args: { p_actor_id?: string; p_claim_token?: string; p_user_id: string }
         Returns: boolean
       }
+      approve_public_project_feature: {
+        Args: {
+          p_cover_image_path?: string | null
+          p_photo_paths?: Json
+          p_project_id: string
+          p_review_note?: string
+        }
+        Returns: string
+      }
       claim_expired_portal_accounts: {
         Args: { p_limit?: number }
         Returns: {
@@ -1612,6 +1786,10 @@ export type Database = {
         Args: { p_booking_id: string; p_error: string; p_sent: boolean }
         Returns: boolean
       }
+      reject_public_project_feature: {
+        Args: { p_project_id: string; p_review_note?: string }
+        Returns: boolean
+      }
       register_membermojo_import_preview: {
         Args: {
           p_actor_id: string
@@ -1672,6 +1850,10 @@ export type Database = {
           reserved_places: number
         }[]
       }
+      request_public_project_feature: {
+        Args: { p_project_id: string; p_show_owner_name?: boolean }
+        Returns: string
+      }
       run_dashboard_retention: { Args: never; Returns: Json }
       run_dashboard_retention_core: { Args: never; Returns: Json }
       target_donation_total_pence: { Args: never; Returns: number }
@@ -1695,6 +1877,10 @@ export type Database = {
           reference_id: string
           reserved_count: number
         }[]
+      }
+      withdraw_public_project_feature: {
+        Args: { p_project_id: string }
+        Returns: boolean
       }
     }
     Enums: {
