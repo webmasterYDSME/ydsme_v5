@@ -68,7 +68,7 @@ begin
     make_date(p_membership_year,12,31), make_date(p_membership_year+1,3,1),
     'paid', p_amount_pence, p_amount_pence, 'renewal'
   )
-  on conflict(member_id, membership_year) do update set
+  on conflict on constraint membership_terms_member_id_membership_year_key do update set
     plan_price_id = excluded.plan_price_id, status = 'paid',
     amount_due_pence = excluded.amount_due_pence, amount_paid_pence = excluded.amount_paid_pence,
     source = 'renewal', updated_at = now()
@@ -99,7 +99,7 @@ begin
       p_current_period_start, p_current_period_end,
       case when p_cancel_at_period_end then null else p_current_period_end end,
       p_stripe_event_created_at
-    ) on conflict(member_id) do update set
+    ) on conflict on constraint membership_subscriptions_member_id_key do update set
       stripe_customer_id=excluded.stripe_customer_id,
       stripe_subscription_id=excluded.stripe_subscription_id,
       stripe_price_id=excluded.stripe_price_id, status=excluded.status,
@@ -112,7 +112,7 @@ begin
   else
     update public.membership_subscriptions
     set cancel_at_period_end=true, next_charge_at=null, updated_at=now()
-    where member_id=p_member_id;
+    where public.membership_subscriptions.member_id=p_member_id;
   end if;
 
   if v_member.effective_state not in ('suspended','archived') then
@@ -122,8 +122,9 @@ begin
   end if;
 
   update public.membership_notifications set email_status='cancelled', updated_at=now()
-  where member_id=p_member_id and email_status in ('queued','failed')
-    and kind in ('membership.renewal-upcoming','membership.renewal-overdue');
+  where public.membership_notifications.member_id=p_member_id
+    and public.membership_notifications.email_status in ('queued','failed')
+    and public.membership_notifications.kind in ('membership.renewal-upcoming','membership.renewal-overdue');
   insert into public.membership_notifications(
     member_id, recipient_user_id, recipient_email, kind, title, body, action_href, deduplication_key
   ) values (

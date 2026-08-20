@@ -174,7 +174,8 @@ begin
   select v_member.id, officer.user_id, 'membership.payment-review-officer',
     'Membership payment needs review',
     case when p_disputed then 'Stripe reported a disputed membership payment.' else 'Stripe reported a full or partial membership refund.' end,
-    '/admin/memberships?queue=payment-review', 'membership-reversal-officer-' || p_stripe_event_id || '-' || officer.user_id::text
+    '/admin/memberships?queue=payment-review', 'cancelled',
+    'membership-reversal-officer-' || p_stripe_event_id || '-' || officer.user_id::text
   from (
     select role.user_id from public.user_roles role where role.role = 'administrator'
     union

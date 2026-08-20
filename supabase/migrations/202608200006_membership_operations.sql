@@ -65,7 +65,8 @@ begin
     select v_notification.member_id, v_notification.application_id, officer.user_id,
       'membership.delivery-failure-officer', 'Membership email delivery failed',
       'A membership email exhausted all automatic retries. Review the delivery queue and contact details.',
-      '/admin/memberships?queue=delivery-failures', 'membership-delivery-exhausted-' || v_notification.id::text || '-' || officer.user_id::text
+      '/admin/memberships?queue=delivery-failures', 'cancelled',
+      'membership-delivery-exhausted-' || v_notification.id::text || '-' || officer.user_id::text
     from (
       select role.user_id from public.user_roles role where role.role='administrator'
       union

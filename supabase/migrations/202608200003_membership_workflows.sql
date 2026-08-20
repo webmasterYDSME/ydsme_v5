@@ -127,7 +127,7 @@ begin
       coalesce(p_stripe_subscription_status, 'active'), p_cancel_at_period_end,
       p_current_period_end, case when p_cancel_at_period_end then null else p_current_period_end end
     )
-    on conflict(member_id) do update set
+    on conflict on constraint membership_subscriptions_member_id_key do update set
       stripe_customer_id = excluded.stripe_customer_id,
       stripe_subscription_id = excluded.stripe_subscription_id,
       stripe_price_id = excluded.stripe_price_id,
