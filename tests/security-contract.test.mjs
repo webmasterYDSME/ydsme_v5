@@ -217,6 +217,20 @@ test("uses exactly three database-backed application roles", async () => {
   assert.match(migration, /Expected at least three active administrators/);
 });
 
+test("retires bulk member archiving in favour of reviewed lifecycle controls", async () => {
+  const [admin, actions, memberImport] = await Promise.all([
+    read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
+    read("app/administrator/member-import/page.tsx"),
+  ]);
+  assert.doesNotMatch(admin, /Bulk archive|\/administrator\/delete-members/);
+  assert.doesNotMatch(actions, /bulkDeleteMembers|members\.bulk-archived|ARCHIVE MEMBERS/);
+  assert.match(actions, /export async function deleteMember/);
+  assert.match(actions, /export async function restoreMember/);
+  assert.match(memberImport, /resolveMemberMojoPortalAccessReview/);
+  await assert.rejects(stat(new URL("app/administrator/delete-members/page.tsx", root)), { code: "ENOENT" });
+});
+
 test("ships database and HTTP defence in depth", async () => {
   const [migration, secureMigration, config, proxy] = await Promise.all([
     read("supabase/migrations/202608170001_security_hardening.sql"),
