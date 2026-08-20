@@ -105,8 +105,12 @@ test("publishes only owner-consented and independently reviewed project snapshot
   assert.match(publicData, /Only paths already present in the sanitised public projection/);
   assert.match(publicData, /createSignedUrls\(uniquePaths, 5 \* 60\)/);
   assert.match(publicIndex, /From the workbench/);
+  assert.match(publicIndex, /robots: \{ index: true, follow: true \}/);
   assert.match(publicDetail, /reviewed before publication/);
+  assert.match(publicDetail, /robots: \{ index: true, follow: true \}/);
   assert.doesNotMatch(navigation, /const headerNav = [^\n]*Projects/);
   assert.match(navigation, /const footerNav = \[\["Projects","\/projects"\],\.\.\.headerNav\]/);
   assert.match(sitemap, /path: "\/projects"/);
+  assert.match(sitemap, /getPublicFeaturedProjectSitemapEntries/);
+  assert.match(sitemap, /`\$\{SITE_URL\}\/projects\/\$\{project\.slug\}`/);
 });

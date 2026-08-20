@@ -8,12 +8,15 @@ import { categoryLabels } from "@/lib/workbench";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
-export const metadata = publicPageMetadata({
-  title: "Completed Member Projects",
-  description: "Explore completed model engineering projects shared publicly by York Model Engineers members.",
-  path: "/projects",
-  keywords: ["model engineering projects", "miniature railway projects", "member workshop projects"],
-});
+export const metadata = {
+  ...publicPageMetadata({
+    title: "Completed Member Projects",
+    description: "Explore completed model engineering projects shared publicly by York Model Engineers members.",
+    path: "/projects",
+    keywords: ["model engineering projects", "miniature railway projects", "member workshop projects"],
+  }),
+  robots: { index: true, follow: true },
+};
 
 export default async function PublicProjectsPage() {
   const projects = await getPublicFeaturedProjects();

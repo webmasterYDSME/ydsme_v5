@@ -54,6 +54,15 @@ export type PublicFeaturedProjectCard = PublicProjectRow & {
   cover_image_url: string | null;
 };
 
+export const getPublicFeaturedProjectSitemapEntries = cache(async () => {
+  const client = await createClient();
+  const { data, error } = await client.from("public_featured_projects")
+    .select("slug,published_at")
+    .order("published_at", { ascending: false });
+  if (error) throw new Error("Unable to load featured project sitemap entries.");
+  return (data ?? []) as Array<{ slug: string; published_at: string }>;
+});
+
 export const getPublicFeaturedProjects = cache(async (limit = 24): Promise<PublicFeaturedProjectCard[]> => {
   const client = await createClient();
   const { data, error } = await client.from("public_featured_projects")

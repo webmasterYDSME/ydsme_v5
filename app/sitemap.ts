@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
+import { getPublicFeaturedProjectSitemapEntries } from "@/lib/public-projects";
 import { SITE_URL } from "@/lib/seo";
+
+export const dynamic = "force-dynamic";
 
 const routes: Array<{
   path: string;
@@ -18,10 +21,18 @@ const routes: Array<{
   { path: "/cookie-policy", changeFrequency: "yearly", priority: 0.3 },
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  return routes.map(({ path, changeFrequency, priority }) => ({
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const projects = await getPublicFeaturedProjectSitemapEntries();
+  const staticRoutes: MetadataRoute.Sitemap = routes.map(({ path, changeFrequency, priority }) => ({
     url: `${SITE_URL}${path}`,
     changeFrequency,
     priority,
   }));
+  const projectRoutes: MetadataRoute.Sitemap = projects.map((project) => ({
+    url: `${SITE_URL}/projects/${project.slug}`,
+    lastModified: project.published_at,
+    changeFrequency: "monthly",
+    priority: 0.7,
+  }));
+  return [...staticRoutes, ...projectRoutes];
 }
