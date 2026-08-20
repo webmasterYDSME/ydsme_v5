@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createServiceClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const projectCategories = [
   "locomotive",
@@ -104,10 +104,12 @@ type CommentRow = {
 
 type UserRow = { id: string; full_name: string | null };
 
-async function signedProjectImages(paths: Array<string | null | undefined>) {
+type WorkbenchClient = Awaited<ReturnType<typeof createClient>>;
+
+async function signedProjectImages(client: WorkbenchClient, paths: Array<string | null | undefined>) {
   const uniquePaths = [...new Set(paths.filter((path): path is string => Boolean(path)))];
   if (!uniquePaths.length) return new Map<string, string>();
-  const { data, error } = await createServiceClient().storage.from("project-images").createSignedUrls(uniquePaths, 60 * 60);
+  const { data, error } = await client.storage.from("project-images").createSignedUrls(uniquePaths, 60 * 60);
   if (error) return new Map<string, string>();
   return new Map((data ?? []).flatMap((item) => item.signedUrl && item.path ? [[item.path, item.signedUrl] as const] : []));
 }
@@ -137,7 +139,7 @@ export async function getWorkbenchProjects({
   helpOnly?: boolean;
   limit?: number;
 }) {
-  const client = createServiceClient();
+  const client = await createClient();
   let eligibleProjectIds: string[] | null = null;
 
   if (scope === "following") {
@@ -172,11 +174,11 @@ export async function getWorkbenchProjects({
   const ids = projects.map((project) => project.id);
   const ownerIds = [...new Set(projects.map((project) => project.owner_id))];
   const [usersResult, updatesResult, commentsResult, followsResult, imageUrls] = await Promise.all([
-    client.from("users").select("id,full_name").in("id", ownerIds),
+    client.rpc("workbench_member_names", { p_user_ids: ownerIds }),
     client.from("member_project_updates").select("id,project_id,title,created_at,help_type").in("project_id", ids).order("created_at", { ascending: false }),
     client.from("member_project_comments").select("project_id").in("project_id", ids).is("archived_at", null),
     client.from("member_project_follows").select("project_id,user_id").in("project_id", ids),
-    signedProjectImages(projects.map((project) => project.cover_image_path)),
+    signedProjectImages(client, projects.map((project) => project.cover_image_path)),
   ]);
   if (usersResult.error || updatesResult.error || commentsResult.error || followsResult.error) throw new Error("Unable to prepare Project Workbench.");
   const owners = new Map(((usersResult.data ?? []) as UserRow[]).map((user) => [user.id, user.full_name || "Society member"]));
@@ -211,7 +213,7 @@ export type WorkbenchProjectDetail = ProjectRow & {
 };
 
 export async function getWorkbenchProject(projectId: string, userId: string): Promise<WorkbenchProjectDetail | null> {
-  const client = createServiceClient();
+  const client = await createClient();
   const { data, error } = await client.from("member_projects")
     .select("id,owner_id,title,summary,category,project_status,cover_image_path,created_at,updated_at,completed_at,archived_at")
     .eq("id", projectId)
@@ -220,13 +222,12 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
   if (error) throw new Error("Unable to load the project.");
   if (!data) return null;
   const project = data as ProjectRow;
-  const [ownerResult, updatesResult, commentsResult, followsResult] = await Promise.all([
-    client.from("users").select("id,full_name").eq("id", project.owner_id).maybeSingle(),
+  const [updatesResult, commentsResult, followsResult] = await Promise.all([
     client.from("member_project_updates").select("id,project_id,author_id,title,body,help_type,created_at,updated_at").eq("project_id", project.id).order("created_at", { ascending: false }),
     client.from("member_project_comments").select("id,project_id,update_id,author_id,body,created_at").eq("project_id", project.id).is("archived_at", null).order("created_at"),
     client.from("member_project_follows").select("project_id,user_id").eq("project_id", project.id),
   ]);
-  if (ownerResult.error || updatesResult.error || commentsResult.error || followsResult.error) throw new Error("Unable to prepare the project.");
+  if (updatesResult.error || commentsResult.error || followsResult.error) throw new Error("Unable to prepare the project.");
   const updates = (updatesResult.data ?? []) as UpdateRow[];
   const updateIds = updates.map((update) => update.id);
   const { data: photoData, error: photoError } = updateIds.length
@@ -235,18 +236,16 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
   if (photoError) throw new Error("Unable to load project photographs.");
   const photos = (photoData ?? []) as PhotoRow[];
   const comments = (commentsResult.data ?? []) as CommentRow[];
-  const authorIds = [...new Set(comments.map((comment) => comment.author_id))];
-  const { data: authorData, error: authorError } = authorIds.length
-    ? await client.from("users").select("id,full_name").in("id", authorIds)
-    : { data: [], error: null };
+  const authorIds = [...new Set([project.owner_id, ...comments.map((comment) => comment.author_id)])];
+  const { data: authorData, error: authorError } = await client.rpc("workbench_member_names", { p_user_ids: authorIds });
   if (authorError) throw new Error("Unable to load project contributors.");
   const authors = new Map(((authorData ?? []) as UserRow[]).map((author) => [author.id, author.full_name || "Society member"]));
-  const imageUrls = await signedProjectImages([project.cover_image_path, ...photos.map((photo) => photo.storage_path)]);
+  const imageUrls = await signedProjectImages(client, [project.cover_image_path, ...photos.map((photo) => photo.storage_path)]);
   const follows = followsResult.data ?? [];
 
   return {
     ...project,
-    owner_name: (ownerResult.data as UserRow | null)?.full_name || "Society member",
+    owner_name: authors.get(project.owner_id) ?? "Society member",
     cover_image_url: project.cover_image_path ? imageUrls.get(project.cover_image_path) ?? null : null,
     followed_by_me: follows.some((follow) => follow.user_id === userId),
     follower_count: follows.length,
