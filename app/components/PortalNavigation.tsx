@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, FileText, Gauge, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
+import { CalendarDays, FileText, Gauge, Hammer, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import type { AppRole } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
@@ -17,6 +17,7 @@ type PortalLink = {
 
 const memberLinks: PortalLink[] = [
   { href: "/dashboard", label: "Overview", icon: Gauge },
+  { href: "/dashboard/workbench", label: "Project Workbench", icon: Hammer },
   { href: "/dashboard/minutes", label: "Minutes", icon: FileText },
   { href: "/dashboard/publications", label: "Publications", icon: FileText },
   { href: "/dashboard/resources", label: "Resources", icon: FileText },

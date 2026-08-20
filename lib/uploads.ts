@@ -2,12 +2,13 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type UploadKind = "event-image" | "committee-image" | "document";
+type UploadKind = "event-image" | "committee-image" | "document" | "project-image";
 
 const configs = {
   "event-image": { bucket: "images" as const, maximum: 8 * 1024 * 1024, prefix: "events" },
   "committee-image": { bucket: "images" as const, maximum: 8 * 1024 * 1024, prefix: "committees" },
   document: { bucket: "documents" as const, maximum: 12 * 1024 * 1024, prefix: "files" },
+  "project-image": { bucket: "project-images" as const, maximum: 8 * 1024 * 1024, prefix: "projects" },
 };
 
 function detectedExtension(bytes: Uint8Array, kind: UploadKind) {
