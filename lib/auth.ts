@@ -2,8 +2,9 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { membershipAdministrationEnabled } from "@/lib/features";
 
 export const appRoles = ["member", "committee", "administrator"] as const;
 export type AppRole = (typeof appRoles)[number];
@@ -20,6 +21,7 @@ export const capabilities = [
   "workshops.manage",
   "documents.manage",
   "members.manage",
+  "memberships.manage",
   "settings.manage",
   "donations.view",
   "audit.view",
@@ -61,7 +63,13 @@ export const requireUser = cache(async () => {
     getRole(user.id),
   ]);
   if (profile?.membership_status !== "active") redirect("/signin?error=Your+Society+access+is+not+active.");
-  return { user, role, fullName: profile.full_name };
+  const membershipOfficer = membershipAdministrationEnabled() && (role === "administrator" || (role === "committee" && Boolean((await createServiceClient()
+    .from("user_capabilities")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .eq("capability", "memberships.manage")
+    .maybeSingle()).data)));
+  return { user, role, fullName: profile.full_name, membershipOfficer };
 });
 
 export async function requireRole(allowed: AppRole[]) {
@@ -72,7 +80,13 @@ export async function requireRole(allowed: AppRole[]) {
 
 export async function requireCapability(capability: Capability) {
   const session = await requireUser();
-  if (!hasCapability(session.role, capability)) redirect("/dashboard?notice=not-authorised");
+  if (capability === "memberships.manage" && !membershipAdministrationEnabled()) {
+    redirect("/dashboard?notice=not-authorised");
+  }
+  if (!hasCapability(session.role, capability)
+    && !(capability === "memberships.manage" && session.membershipOfficer)) {
+    redirect("/dashboard?notice=not-authorised");
+  }
   return session;
 }
 

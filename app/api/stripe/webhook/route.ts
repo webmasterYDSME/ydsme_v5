@@ -1,7 +1,11 @@
 import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
 import { writeAudit } from "@/lib/audit";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  ensureMemberPortalInvitation,
+  MEMBERSHIP_INTEGRATION_IDENTIFIER,
+} from "@/lib/membership";
+import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -87,20 +91,246 @@ async function recordRefund(event: Stripe.Event) {
   return data?.some((payment) => payment.campaign === "target") ?? false;
 }
 
+function timestamp(value: number | null | undefined) {
+  return value ? new Date(value * 1000).toISOString() : null;
+}
+
+function subscriptionPeriod(subscription: Stripe.Subscription) {
+  const items = subscription.items.data.filter((item) => !item.deleted);
+  return {
+    start: items.length ? timestamp(Math.min(...items.map((item) => item.current_period_start))) : null,
+    end: items.length ? timestamp(Math.max(...items.map((item) => item.current_period_end))) : null,
+    priceId: items.find((item) => item.price.recurring)?.price.id ?? null,
+  };
+}
+
+function invoiceSubscriptionId(invoice: Stripe.Invoice) {
+  return stripeId(invoice.parent?.subscription_details?.subscription ?? null);
+}
+
+async function invoicePaymentIds(invoiceId: string) {
+  const payments = await getStripe().invoicePayments.list({
+    invoice: invoiceId,
+    limit: 10,
+    expand: ["data.payment.payment_intent.latest_charge"],
+  });
+  const payment = payments.data.find((candidate) => candidate.is_default) ?? payments.data[0];
+  const intent = payment?.payment.payment_intent;
+  const intentId = stripeId(intent ?? null);
+  const chargeId = typeof intent === "object" ? stripeId(intent.latest_charge) : stripeId(payment?.payment.charge ?? null);
+  return { intentId, chargeId };
+}
+
+async function activateMembershipCheckout(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session;
+  if (
+    session.integration_identifier !== MEMBERSHIP_INTEGRATION_IDENTIFIER
+    || session.metadata?.ydsme_integration !== "memberships"
+    || session.mode !== "subscription"
+    || session.payment_status !== "paid"
+    || session.currency !== "gbp"
+  ) return false;
+
+  const applicationId = session.metadata.membership_application_id;
+  const existingMemberId = session.metadata.membership_member_id;
+  const planPriceId = session.metadata.membership_plan_price_id;
+  const membershipYear = Number(session.metadata.membership_year);
+  const expectedAmount = Number(session.metadata.membership_initial_amount_pence);
+  const subscriptionId = stripeId(session.subscription);
+  const customerId = stripeId(session.customer);
+  if ((!applicationId && !existingMemberId) || (applicationId && existingMemberId)
+    || (existingMemberId && !Number.isSafeInteger(membershipYear))
+    || !planPriceId || !Number.isSafeInteger(expectedAmount)
+    || expectedAmount <= 0 || session.amount_total !== expectedAmount || !subscriptionId || !customerId) {
+    throw new Error("Verified membership Checkout metadata is incomplete.");
+  }
+
+  let subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+  if (session.metadata.membership_auto_renew === "false" && !subscription.cancel_at_period_end) {
+    subscription = await getStripe().subscriptions.update(subscription.id, { cancel_at_period_end: true });
+  }
+  const period = subscriptionPeriod(subscription);
+  const invoiceId = stripeId(session.invoice);
+  const paymentIds = invoiceId ? await invoicePaymentIds(invoiceId) : { intentId: stripeId(session.payment_intent), chargeId: null };
+  const admin = createServiceClient();
+  const common = {
+    p_plan_price_id: planPriceId,
+    p_method: "stripe",
+    p_amount_pence: expectedAmount,
+    p_actor_id: null,
+    p_stripe_checkout_session_id: session.id,
+    p_stripe_payment_intent_id: paymentIds.intentId,
+    p_stripe_invoice_id: invoiceId,
+    p_stripe_customer_id: customerId,
+    p_stripe_subscription_id: subscription.id,
+    p_stripe_subscription_status: subscription.status,
+    p_cancel_at_period_end: subscription.cancel_at_period_end,
+    p_current_period_end: period.end,
+  };
+  const { data, error } = applicationId
+    ? await admin.rpc("activate_membership_application", {
+      ...common,
+      p_application_id: applicationId,
+    })
+    : await admin.rpc("activate_membership_renewal", {
+      ...common,
+      p_member_id: existingMemberId,
+      p_membership_year: membershipYear,
+      p_paid_on: new Date(event.created * 1000).toISOString().slice(0, 10),
+      p_current_period_start: period.start,
+      p_stripe_event_created_at: new Date(event.created * 1000).toISOString(),
+    });
+  if (error) throw new Error(`Unable to activate verified membership: ${error.message}`);
+  const memberId = (data as Array<{ member_id: string }> | null)?.[0]?.member_id;
+  if (!memberId) throw new Error("Verified membership activation returned no member.");
+  await createServiceClient().from("membership_subscriptions").update({
+    current_period_start: period.start,
+    stripe_event_created_at: new Date(event.created * 1000).toISOString(),
+  }).eq("member_id", memberId);
+  await ensureMemberPortalInvitation(memberId);
+  return true;
+}
+
+async function recordMembershipCheckoutFailure(event: Stripe.Event) {
+  const session = event.data.object as Stripe.Checkout.Session;
+  if (session.metadata?.ydsme_integration !== "memberships") return false;
+  const applicationId = session.metadata.membership_application_id;
+  const memberId = session.metadata.membership_member_id;
+  if (!applicationId && !memberId) return false;
+  const admin = createServiceClient();
+  const { data: application } = applicationId
+    ? await admin.from("membership_applications")
+      .select("id,contact_email,status").eq("id", applicationId).maybeSingle()
+    : { data: null };
+  if (applicationId && (!application || application.status === "converted")) return true;
+  const { data: member } = memberId
+    ? await admin.from("members").select("id,contact_email,auth_user_id").eq("id", memberId).maybeSingle()
+    : { data: null };
+  await admin.from("membership_notifications").insert({
+    application_id: application?.id ?? null,
+    member_id: member?.id ?? null,
+    recipient_user_id: member?.auth_user_id ?? null,
+    recipient_email: application?.contact_email ?? member?.contact_email ?? null,
+    kind: event.type === "checkout.session.expired" ? "membership.checkout-expired" : "membership.checkout-failed",
+    title: "Membership payment was not completed",
+    body: "Your membership has not been activated because Stripe did not confirm the full payment. Use your existing secure payment link or contact the membership officer.",
+    portal_visible: false,
+    deduplication_key: `membership-checkout-failure-${event.id}`,
+  });
+  return true;
+}
+
+async function reconcileMembershipSubscription(event: Stripe.Event) {
+  const subscription = event.data.object as Stripe.Subscription;
+  if (subscription.metadata?.ydsme_integration !== "memberships") return false;
+  const period = subscriptionPeriod(subscription);
+  const { error } = await createServiceClient().rpc("reconcile_membership_subscription", {
+    p_stripe_subscription_id: subscription.id,
+    p_status: subscription.status,
+    p_cancel_at_period_end: subscription.cancel_at_period_end,
+    p_current_period_start: period.start,
+    p_current_period_end: period.end,
+    p_stripe_price_id: period.priceId,
+    p_event_created_at: new Date(event.created * 1000).toISOString(),
+  });
+  if (error) throw new Error(`Unable to reconcile membership subscription: ${error.message}`);
+  return true;
+}
+
+async function reconcileMembershipInvoice(event: Stripe.Event) {
+  const invoice = event.data.object as Stripe.Invoice;
+  const subscriptionId = invoiceSubscriptionId(invoice);
+  if (!subscriptionId || invoice.currency !== "gbp") return false;
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+  if (subscription.metadata?.ydsme_integration !== "memberships") return false;
+  const paid = event.type === "invoice.paid" || event.type === "invoice.payment_succeeded";
+  const payment = await invoicePaymentIds(invoice.id);
+  const admin = createServiceClient();
+  const { data, error } = await admin.rpc("reconcile_membership_invoice", {
+    p_stripe_invoice_id: invoice.id,
+    p_stripe_subscription_id: subscriptionId,
+    p_stripe_payment_intent_id: payment.intentId,
+    p_stripe_charge_id: payment.chargeId,
+    p_amount_paid_pence: paid ? invoice.amount_paid : invoice.amount_due,
+    p_paid: paid,
+    p_event_created_at: new Date(event.created * 1000).toISOString(),
+  });
+  if (error) throw new Error(`Unable to reconcile membership invoice: ${error.message}`);
+  const memberId = typeof data === "string" ? data : null;
+  if (memberId && invoice.billing_reason !== "subscription_create") {
+    const { data: member } = await admin.from("members")
+      .select("id,auth_user_id,contact_email").eq("id", memberId).maybeSingle();
+    if (member) {
+      const actionRequired = event.type === "invoice.payment_action_required";
+      const finalizationFailed = event.type === "invoice.finalization_failed";
+      await admin.from("membership_notifications").insert({
+        member_id: member.id,
+        recipient_user_id: member.auth_user_id,
+        recipient_email: member.contact_email,
+        kind: paid ? "membership.renewal-paid"
+          : actionRequired ? "membership.payment-action-required"
+            : finalizationFailed ? "membership.invoice-finalization-failed" : "membership.renewal-failed",
+        title: paid ? "Your annual membership renewal is paid"
+          : actionRequired ? "Your membership payment needs action"
+            : finalizationFailed ? "We could not prepare your membership invoice" : "Your membership renewal payment failed",
+        body: paid
+          ? `Stripe confirmed your annual membership payment of £${(invoice.amount_paid / 100).toFixed(2)}.`
+          : "Stripe did not confirm the renewal payment. Portal access remains available during the grace or review period; update your payment method or contact the membership officer.",
+        action_href: "/account",
+        deduplication_key: `membership-invoice-notice-${event.id}`,
+      });
+    }
+  }
+  return true;
+}
+
+async function recordMembershipReversal(event: Stripe.Event) {
+  let chargeId: string | null = null;
+  let paymentIntentId: string | null = null;
+  let refundedPence = 0;
+  let disputed = false;
+  if (event.type === "charge.refunded") {
+    const charge = event.data.object as Stripe.Charge;
+    chargeId = charge.id;
+    paymentIntentId = stripeId(charge.payment_intent);
+    refundedPence = charge.amount_refunded;
+  } else {
+    const dispute = event.data.object as Stripe.Dispute;
+    chargeId = stripeId(dispute.charge);
+    disputed = true;
+  }
+  const { data, error } = await createServiceClient().rpc("mark_membership_payment_reversal", {
+    p_stripe_payment_intent_id: paymentIntentId,
+    p_stripe_charge_id: chargeId,
+    p_refunded_pence: refundedPence,
+    p_disputed: disputed,
+    p_stripe_event_id: event.id,
+  });
+  if (error) throw new Error(`Unable to reconcile membership reversal: ${error.message}`);
+  return Boolean(data);
+}
+
 export async function POST(request: Request) {
   const signature = request.headers.get("stripe-signature");
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!signature || !webhookSecret) {
+  const webhookSecrets = [...new Set([
+    process.env.STRIPE_MEMBERSHIP_WEBHOOK_SECRET,
+    process.env.STRIPE_WEBHOOK_SECRET,
+  ].filter((secret): secret is string => Boolean(secret)))];
+  if (!signature || !webhookSecrets.length) {
     return Response.json({ received: false }, { status: 400 });
   }
 
-  let event: Stripe.Event;
-  try {
-    const payload = await request.text();
-    event = getStripe().webhooks.constructEvent(payload, signature, webhookSecret);
-  } catch {
-    return Response.json({ received: false }, { status: 400 });
+  const payload = await request.text();
+  let event: Stripe.Event | null = null;
+  for (const webhookSecret of webhookSecrets) {
+    try {
+      event = getStripe().webhooks.constructEvent(payload, signature, webhookSecret);
+      break;
+    } catch {
+      // The same handler can receive separately signed donation and membership endpoints.
+    }
   }
+  if (!event) return Response.json({ received: false }, { status: 400 });
 
   try {
     const admin = createAdminClient();
@@ -112,13 +342,23 @@ export async function POST(request: Request) {
     });
     if (claimError?.code === "23505") {
       const { data: existing, error: existingError } = await admin.from("stripe_webhook_events")
-        .select("processing_status")
+        .select("processing_status,claimed_at")
         .eq("stripe_event_id", event.id)
         .single();
       if (existingError) throw new Error("Unable to inspect the existing Stripe event claim.");
       if (existing.processing_status === "processed") return Response.json({ received: true, replay: true });
       if (existing.processing_status === "processing") {
-        return Response.json({ received: false, retry: true }, { status: 409 });
+        const staleBefore = Date.now() - 10 * 60 * 1000;
+        if (!existing.claimed_at || new Date(existing.claimed_at).getTime() > staleBefore) {
+          return Response.json({ received: false, retry: true }, { status: 409 });
+        }
+        const { data: reclaimed, error: reclaimError } = await admin.from("stripe_webhook_events")
+          .update({ claimed_at: new Date().toISOString(), last_error: null })
+          .eq("stripe_event_id", event.id).eq("processing_status", "processing")
+          .lt("claimed_at", new Date(staleBefore).toISOString())
+          .select("stripe_event_id").maybeSingle();
+        if (reclaimError) throw new Error("Unable to recover the stale Stripe event claim.");
+        if (!reclaimed) return Response.json({ received: false, retry: true }, { status: 409 });
       }
       const { data: reclaimed, error: reclaimError } = await admin.from("stripe_webhook_events")
         .update({ processing_status: "processing", claimed_at: new Date().toISOString(), last_error: null })
@@ -132,13 +372,34 @@ export async function POST(request: Request) {
     if (claimError && claimError.code !== "23505") throw new Error("Unable to claim Stripe event for processing.");
 
     let targetChanged = false;
+    let membershipChanged = false;
     if (
       event.type === "checkout.session.completed" ||
       event.type === "checkout.session.async_payment_succeeded"
     ) {
-      targetChanged = await recordCheckoutPayment(event);
+      membershipChanged = await activateMembershipCheckout(event);
+      if (!membershipChanged) targetChanged = await recordCheckoutPayment(event);
+    } else if (event.type === "checkout.session.async_payment_failed" || event.type === "checkout.session.expired") {
+      membershipChanged = await recordMembershipCheckoutFailure(event);
+    } else if (
+      event.type === "customer.subscription.created"
+      || event.type === "customer.subscription.updated"
+      || event.type === "customer.subscription.deleted"
+    ) {
+      membershipChanged = await reconcileMembershipSubscription(event);
+    } else if (
+      event.type === "invoice.paid"
+      || event.type === "invoice.payment_succeeded"
+      || event.type === "invoice.payment_failed"
+      || event.type === "invoice.payment_action_required"
+      || event.type === "invoice.finalization_failed"
+    ) {
+      membershipChanged = await reconcileMembershipInvoice(event);
     } else if (event.type === "charge.refunded") {
       targetChanged = await recordRefund(event);
+      membershipChanged = await recordMembershipReversal(event);
+    } else if (event.type === "charge.dispute.created" || event.type === "charge.dispute.closed") {
+      membershipChanged = await recordMembershipReversal(event);
     }
 
     await writeAudit({
@@ -147,7 +408,7 @@ export async function POST(request: Request) {
       action: `stripe.${event.type}`,
       entityType: "stripe_event",
       entityId: event.id,
-      after: { processed: true, target_campaign_changed: targetChanged },
+      after: { processed: true, target_campaign_changed: targetChanged, membership_changed: membershipChanged },
     });
     const { error: completionError } = await admin.from("stripe_webhook_events")
       .update({ processing_status: "processed", completed_at: new Date().toISOString(), last_error: null })
@@ -157,6 +418,10 @@ export async function POST(request: Request) {
       .single();
     if (completionError) throw new Error("Unable to complete the Stripe event claim.");
     if (targetChanged) revalidatePath("/");
+    if (membershipChanged) {
+      revalidatePath("/account");
+      revalidatePath("/admin/memberships");
+    }
     return Response.json({ received: true });
   } catch (error) {
     await createAdminClient().from("stripe_webhook_events").update({

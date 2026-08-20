@@ -19,6 +19,14 @@ The application follows one promotion path: feature branch → `preview` → `ma
 8. Do not map a custom domain or consider a release complete until the production-alias smoke tests pass.
 9. Scheduled data lifecycle work belongs to Supabase Cron. Quarantine file cleanup must use the `cleanup-quarantine` Edge Function and the Storage API; do not delete rows directly from `storage.objects`.
 
+## Membership billing rollout
+
+Keep both membership flags false until membership migrations `202608200002` through `202608200014` are applied and the notification function is deployed. Then set `ENABLE_MEMBERSHIP_ADMIN=true` while keeping `ENABLE_MEMBERSHIP_BILLING=false`; this opens only the officer console for plan setup, the final cutover, conflict review and reconciliation. Enable public/member journeys only after those checks are approved by setting `ENABLE_MEMBERSHIP_BILLING=true`. Configure separate Stripe test/live restricted keys, signed webhook secrets for the membership and donation endpoint registrations, and Customer Portal payment-method updates. Leave Stripe Tax disabled.
+
+Store `project_url` and `maintenance_secret_key` in Supabase Vault as above, then deploy `deliver-membership-notifications`. Configure `RESEND_API_KEY`, `MEMBERSHIP_FROM_EMAIL`, `MEMBERSHIP_REPLY_TO` and `SITE_URL` as Edge Function secrets. Confirm the membership lifecycle, application-expiry and notification jobs in Supabase Cron.
+
+In Stripe, create or let the officer plan screen create one Product per paid tier and immutable annual Prices. Set `STRIPE_RESTRICTED_KEY` and `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` separately for preview and production; never copy sandbox identifiers into live plan rows. Reconcile plan prices, active paid MemberMojo rows, honorary candidates, shared/missing emails and portal links before switching the flag on. After enabling, replace live MemberMojo journeys and retain the imported source records read-only.
+
 ## Scheduled maintenance setup
 
 Before applying `202608180021_event_management_lifecycle.sql` to a hosted project:
@@ -43,6 +51,7 @@ Before applying `202608180021_event_management_lifecycle.sql` to a hosted projec
    - `/`
    - `/events`
    - `/news`
+   - `/membership`
    - `/signin`
 10. Verify the feature-specific authenticated path after its schema is available. For announcements, verify `/admin/announcements` as an administrator or committee member.
 11. If any critical public route returns a 5xx response, roll back the Vercel deployment or ship a narrowly scoped compatibility fix before continuing the database rollout.

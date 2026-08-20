@@ -36,7 +36,7 @@ const administratorLinks: PortalLink[] = [
   { href: "/settings", label: "Committee & site", icon: Settings },
 ];
 
-export function PortalNavigation({ role, name, canViewContent, administrator }: { role: AppRole; name: string; canViewContent: boolean; administrator: boolean }) {
+export function PortalNavigation({ role, name, canViewContent, administrator, membershipOfficer }: { role: AppRole; name: string; canViewContent: boolean; administrator: boolean; membershipOfficer: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -44,6 +44,7 @@ export function PortalNavigation({ role, name, canViewContent, administrator }: 
   const links = [
     ...memberLinks,
     ...(canViewContent ? contentLinks : []),
+    ...(membershipOfficer ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound }] : []),
     ...(administrator ? administratorLinks : []),
   ];
 

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, FileUp, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import {
   cancelWorkshopReservation,
   archiveAnnouncement,
@@ -30,6 +30,7 @@ import { EventEditorDialog, type EventEditorRecord } from "@/app/components/Even
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
 import { eventImage } from "@/lib/data";
+import { membershipAdministrationEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
@@ -244,47 +245,70 @@ export default async function AdminSection({ params, searchParams }: { params: P
   }
 
   const search = safeSearchTerm(query.q);
-  const status = ["active", "suspended", "archived"].includes(query.status || "") ? query.status! : "active";
+  const membershipEnabled = membershipAdministrationEnabled();
+  const memberStatuses = membershipEnabled
+    ? ["active", "honorary", "lapsed", "suspended", "archived"]
+    : ["active", "suspended", "archived"];
+  const status = memberStatuses.includes(query.status || "") ? query.status! : "active";
   const page = Math.max(1, Number.parseInt(query.page || "1", 10) || 1);
-  let membersQuery = admin.from("users").select("id,title,full_name,email,contact_number,club_rules_agreement,membership_status,archived_at,retention_until,legal_hold,retention_purge_attempts,retention_purge_claimed_at,retention_purge_last_attempt_at", { count: "exact" }).eq("membership_status", status);
+  const canonical = createServiceClient();
+  const { data: honoraryLinks, error: honoraryLinksError } = membershipEnabled
+    ? await canonical.from("members").select("id,auth_user_id")
+      .eq("effective_state", "honorary").not("auth_user_id", "is", null).limit(10000)
+    : { data: [], error: null };
+  if (honoraryLinksError) throw new Error("Unable to load honorary members.");
+  const honoraryUserIds = (honoraryLinks ?? []).flatMap((member) => member.auth_user_id ? [member.auth_user_id] : []);
+  let membersQuery = admin.from("users").select("id,title,full_name,email,contact_number,club_rules_agreement,membership_status,archived_at,retention_until,legal_hold,retention_purge_attempts,retention_purge_claimed_at,retention_purge_last_attempt_at", { count: "exact" });
+  membersQuery = status === "honorary"
+    ? membersQuery.in("id", honoraryUserIds.length ? honoraryUserIds : ["00000000-0000-0000-0000-000000000000"])
+    : membersQuery.eq("membership_status", status);
   if (search) membersQuery = membersQuery.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,contact_number.ilike.%${search}%`);
-  const [membersResult, activeResult, suspendedResult, archivedResult] = await Promise.all([
+  const [membersResult, activeResult, lapsedResult, suspendedResult, archivedResult] = await Promise.all([
     membersQuery.order("full_name").range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
     admin.from("users").select("id", { count: "exact", head: true }).eq("membership_status", "active"),
+    admin.from("users").select("id", { count: "exact", head: true }).eq("membership_status", "lapsed"),
     admin.from("users").select("id", { count: "exact", head: true }).eq("membership_status", "suspended"),
     admin.from("users").select("id", { count: "exact", head: true }).eq("membership_status", "archived"),
   ]);
   const { data: users, count, error } = membersResult;
-  if (error || activeResult.error || suspendedResult.error || archivedResult.error) throw new Error("Unable to load members.");
+  if (error || activeResult.error || lapsedResult.error || suspendedResult.error || archivedResult.error) throw new Error("Unable to load members.");
   const pages = Math.max(1, Math.ceil((count ?? 0) / PAGE_SIZE));
   if (page > pages) {
     const canonical = new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(pages) });
     redirect(`/admin/members?${canonical}`);
   }
   const ids = (users ?? []).map(member => member.id);
-  const [rolesResult, committeeResult, membershipHoldResult] = ids.length
+  const [rolesResult, committeeResult, membershipHoldResult, canonicalMemberResult] = ids.length
     ? await Promise.all([
       admin.from("user_roles").select("user_id,role").in("user_id", ids),
       admin.from("committees").select("user_id").in("user_id", ids),
       admin.from("membership_records").select("auth_user_id").in("auth_user_id", ids).eq("legal_hold", true),
+      membershipEnabled
+        ? canonical.from("members").select("id,auth_user_id,effective_state").in("auth_user_id", ids)
+        : Promise.resolve({ data: [], error: null }),
     ])
-    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
-  if (rolesResult.error || committeeResult.error || membershipHoldResult.error) throw new Error("Unable to load member retention dependencies.");
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  if (rolesResult.error || committeeResult.error || membershipHoldResult.error || canonicalMemberResult.error) throw new Error("Unable to load member retention dependencies.");
   const roles = rolesResult.data;
   const roleMap = new Map((roles ?? []).map(item => [item.user_id, item.role]));
   const committeeUserIds = new Set((committeeResult.data ?? []).flatMap(item => item.user_id ? [item.user_id] : []));
   const membershipHoldUserIds = new Set((membershipHoldResult.data ?? []).flatMap(item => item.auth_user_id ? [item.auth_user_id] : []));
+  const canonicalMemberMap = new Map((canonicalMemberResult.data ?? []).flatMap(item => item.auth_user_id ? [[item.auth_user_id, item]] : []));
   const pageHref = (value: number) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(value) })}`;
   const memberTabHref = (value: string) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status: value })}`;
   return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Members</h1><p>Invite members, manage portal access and assign Society roles from one register.</p></div><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
     <details className="manager-panel"><summary><UserPlus/>Invite a member</summary><form action={inviteMember} className="editor-form"><label>Full name<input name="full_name" required/></label><label>Email address<input type="email" name="email" required/></label><PendingSubmitButton className="button dark" pendingLabel="Sending invitation…">Send secure invitation</PendingSubmitButton></form></details>
     <PortalTabs label="Member status" tabs={[
       { href: memberTabHref("active"), label: "Active", count: activeResult.count ?? 0, current: status === "active" },
+      ...(membershipEnabled ? [
+        { href: memberTabHref("honorary"), label: "Honorary", count: honoraryUserIds.length, current: status === "honorary" },
+        { href: memberTabHref("lapsed"), label: "Lapsed", count: lapsedResult.count ?? 0, current: status === "lapsed" },
+      ] : []),
       { href: memberTabHref("suspended"), label: "Suspended", count: suspendedResult.count ?? 0, current: status === "suspended" },
       { href: memberTabHref("archived"), label: "Archived", count: archivedResult.count ?? 0, current: status === "archived" },
     ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link prefetch={false} href="/administrator/member-import"><FileUp/>MemberMojo import</Link><Link prefetch={false} href="/administrator/add-members">Bulk invite</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
-    <div className="member-table"><div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>{(users ?? []).map(member => <div className={`member-row is-${member.membership_status}`} key={member.id}><div className="member-identity"><div className="member-identity-heading"><strong>{member.full_name || "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold" : ""}</span></div><small>{member.title || "Member"}</small>{member.retention_purge_claimed_at ? <small>Automatic deletion in progress</small> : member.retention_until ? <small>{member.membership_status === "archived" ? (new Date(member.retention_until) < new Date() ? "Automatic deletion is due" : "Automatic deletion after") : "Retained until"} {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}{member.retention_purge_attempts > 0 && member.retention_purge_last_attempt_at ? <small>Retention attempts: {member.retention_purge_attempts} · last {new Date(member.retention_purge_last_attempt_at).toLocaleDateString("en-GB")}</small> : null}{member.membership_status === "archived" && ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}</div><div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div><form className="member-role-form" action={updateMemberRole}><input type="hidden" name="user_id" value={member.id}/><label><span className="member-cell-label">Portal role</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={roleMap.get(member.id) || "member"} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label><PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton></form><div className="member-actions"><span className="member-cell-label">Access control</span>{member.membership_status === "active" ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : member.retention_purge_claimed_at ? <p>Retention deletion is in progress; restoration is temporarily unavailable.</p> : <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form>}{member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>Legal hold prevents deletion.</p> : ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}</div></div>)}</div>
+    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link prefetch={false} href={membershipEnabled ? "/admin/memberships" : "/administrator/member-import"}>{membershipEnabled ? "Membership register" : "MemberMojo final import"}</Link><Link prefetch={false} href="/administrator/add-members">Bulk invite</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
+    <div className="member-table"><div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>{(users ?? []).map(member => <div className={`member-row is-${member.membership_status}`} key={member.id}><div className="member-identity"><div className="member-identity-heading"><strong>{member.full_name || "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{status === "honorary" ? "honorary" : member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold" : ""}</span></div><small>{member.title || "Member"}</small>{canonicalMemberMap.get(member.id) ? <Link href={`/admin/memberships?member=${canonicalMemberMap.get(member.id)?.id}`}>Entitlement and payment history</Link> : null}{member.retention_purge_claimed_at ? <small>Automatic deletion in progress</small> : member.retention_until ? <small>{member.membership_status === "archived" ? (new Date(member.retention_until) < new Date() ? "Automatic deletion is due" : "Automatic deletion after") : "Retained until"} {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}{member.retention_purge_attempts > 0 && member.retention_purge_last_attempt_at ? <small>Retention attempts: {member.retention_purge_attempts} · last {new Date(member.retention_purge_last_attempt_at).toLocaleDateString("en-GB")}</small> : null}{member.membership_status === "archived" && ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}</div><div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div><form className="member-role-form" action={updateMemberRole}><input type="hidden" name="user_id" value={member.id}/><label><span className="member-cell-label">Portal role</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={roleMap.get(member.id) || "member"} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label><PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton></form><div className="member-actions"><span className="member-cell-label">Access control</span>{member.membership_status === "active" ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : member.membership_status === "lapsed" ? <p>Renewal is required before portal access is restored.</p> : member.retention_purge_claimed_at ? <p>Retention deletion is in progress; restoration is temporarily unavailable.</p> : <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form>}{member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>Legal hold prevents deletion.</p> : ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}</div></div>)}</div>
     {!users?.length ? <div className="empty-state"><h2>No matching members</h2></div> : null}
     <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="members" href={pageHref} ariaLabel="Member pages"/>
   </div>;
