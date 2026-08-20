@@ -18,20 +18,18 @@ import {
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  saveEvent,
   saveAnnouncement,
   saveWorkshop,
   suspendMember,
   updateMemberRole,
 } from "@/lib/actions/content";
-import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { AnnouncementFields } from "@/app/components/AnnouncementFields";
-import { EventAudienceFields } from "@/app/components/EventAudienceFields";
-import { EventBookingFields } from "@/app/components/EventBookingFields";
+import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
+import { eventImage } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 25;
@@ -40,28 +38,10 @@ const EVENT_PAGE_SIZE = 12;
 const WORKSHOP_PAGE_SIZE = 5;
 
 type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
-type EventRow = { id:number; name:string; descriptions:string; file_url:string; start_date:string; end_date:string; start_time:string; end_time:string; event_type:"public"|"member_only"; display_in_homepage:boolean; public_teaser_enabled:boolean; booking_enabled:boolean; booking_mode:string; booking_capacity:number|null; lifecycle_status:LifecycleStatus; updated_at:string };
+type EventRow = EventEditorRecord;
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function EventForm({ event }: { event?: EventRow }) {
-  const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
-  return <form action={saveEvent} className="editor-form">
-    {event ? <input type="hidden" name="id" value={event.id}/> : null}
-    <label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label>
-    <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
-    <label>Start date<input type="date" name="start_date" defaultValue={event?.start_date} required/></label><label>End date<input type="date" name="end_date" defaultValue={event?.end_date} required/></label>
-    <label>Start time<input type="time" name="start_time" defaultValue={event?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={event?.end_time.slice(0,5)} required/></label>
-    <EventAudienceFields initialAudience={event?.event_type} initialPublicTeaserEnabled={event?.public_teaser_enabled}>
-      <label>Status<select name="lifecycle_status" defaultValue={event?.lifecycle_status === "archived" ? "draft" : event?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label>
-      <EventBookingFields initialMode={mode} initialCapacity={event?.booking_capacity ?? 100}/>
-      <SignedUploadField kind="event-image" label={event ? "Replace event image (optional)" : "Event image (optional)"}/><input type="hidden" name="file_url" value={event?.file_url || ""}/>
-      <label className="check"><input type="checkbox" name="display_in_homepage" defaultChecked={event?.display_in_homepage}/>Feature on homepage</label>
-    </EventAudienceFields>
-    <PendingSubmitButton className="button dark" pendingLabel={event ? "Saving changes…" : "Creating event…"}>{event ? "Save changes" : "Create event"}</PendingSubmitButton>
-  </form>;
-}
 
 function AnnouncementForm({ announcement }: { announcement?: AnnouncementRow }) {
   return <form action={saveAnnouncement} className="editor-form">
@@ -156,7 +136,6 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(eventStatuses.map((value, index) => [value, eventCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
     const pageCount = Math.max(1, Math.ceil((eventResult.count ?? 0) / EVENT_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/events?status=${status}&page=${pageCount}`);
-    const eventTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/events?status=${status}&page=${page}`;
     const emptyCopy: Record<string, string> = {
       published: "Publish an event to add it to the upcoming timetable.",
@@ -166,10 +145,9 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Content control</p><h1>Manage events</h1><p>Create and maintain public or member-only dates. Past events move into the archive automatically.</p></div><EventEditorDialog intent="create" triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!eventTotal}><summary><Plus/>Create an event</summary><EventForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter events by status">
         <Link prefetch={false} href="/admin/events?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/events?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
@@ -178,7 +156,8 @@ export default async function AdminSection({ params, searchParams }: { params: P
       </nav>
       <div className="admin-list event-admin-list">{visibleEvents.map(event => {
         const isPast = event.end_date < new Date().toISOString().slice(0, 10);
-        return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions">{event.lifecycle_status === "archived" ? <><details><summary><Pencil/>{isPast ? "Reschedule" : "Edit"}</summary><div className="popover-editor"><EventForm event={event}/></div></details>{!isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null}</> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><EventForm event={event}/></div></details><form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>;
+        const editorIntent = event.lifecycle_status === "archived" && isPast ? "reschedule" : "edit";
+        return <article key={event.id}><div className="admin-list-icon"><CalendarDays/></div><div><span>{event.event_type.replace("_", " ")} · {isPast ? "past · " : ""}{event.lifecycle_status} · {event.booking_mode === "website" ? "website booking" : "no booking needed"}</span><h2>{event.name}</h2><p><time dateTime={event.start_date}>{format(parseISO(event.start_date), "d MMMM yyyy")}</time>{event.end_date !== event.start_date ? <>–<time dateTime={event.end_date}>{format(parseISO(event.end_date), "d MMMM yyyy")}</time></> : null} · {event.start_time.slice(0,5)}–{event.end_time.slice(0,5)}</p></div><div className="admin-list-actions"><EventEditorDialog event={event} currentImage={event.file_url ? eventImage(event.file_url) : undefined} intent={editorIntent}/>{event.lifecycle_status === "archived" ? !isPast ? <form action={restoreEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : null : <form action={deleteEvent}><input type="hidden" name="id" value={event.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form>}</div></article>;
       })}</div>
       {!visibleEvents.length ? <div className="empty-state"><CalendarDays/><h2>No {status === "published" ? "upcoming" : status} events</h2><p>{emptyCopy[status]}</p></div> : null}
       <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={eventResult.count ?? 0} itemLabel="events" href={pageHref} ariaLabel="Event pages"/>
@@ -304,7 +283,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
       { href: memberTabHref("suspended"), label: "Suspended", count: suspendedResult.count ?? 0, current: status === "suspended" },
       { href: memberTabHref("archived"), label: "Archived", count: archivedResult.count ?? 0, current: status === "archived" },
     ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link prefetch={false} href="/administrator/member-import"><FileUp/>MemberMojo import</Link><Link prefetch={false} href="/administrator/add-members">Bulk invite</Link><Link prefetch={false} href="/administrator/delete-members">Bulk archive</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
+    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div><div className="bulk-links"><Link prefetch={false} href="/administrator/member-import"><FileUp/>MemberMojo import</Link><Link prefetch={false} href="/administrator/add-members">Bulk invite</Link></div></div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
     <div className="member-table"><div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>{(users ?? []).map(member => <div className={`member-row is-${member.membership_status}`} key={member.id}><div className="member-identity"><div className="member-identity-heading"><strong>{member.full_name || "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold" : ""}</span></div><small>{member.title || "Member"}</small>{member.retention_purge_claimed_at ? <small>Automatic deletion in progress</small> : member.retention_until ? <small>{member.membership_status === "archived" ? (new Date(member.retention_until) < new Date() ? "Automatic deletion is due" : "Automatic deletion after") : "Retained until"} {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}{member.retention_purge_attempts > 0 && member.retention_purge_last_attempt_at ? <small>Retention attempts: {member.retention_purge_attempts} · last {new Date(member.retention_purge_last_attempt_at).toLocaleDateString("en-GB")}</small> : null}{member.membership_status === "archived" && ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}</div><div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div><form className="member-role-form" action={updateMemberRole}><input type="hidden" name="user_id" value={member.id}/><label><span className="member-cell-label">Portal role</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={roleMap.get(member.id) || "member"} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label><PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton></form><div className="member-actions"><span className="member-cell-label">Access control</span>{member.membership_status === "active" ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : member.retention_purge_claimed_at ? <p>Retention deletion is in progress; restoration is temporarily unavailable.</p> : <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form>}{member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>Legal hold prevents deletion.</p> : ((roleMap.get(member.id) || "member") !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}</div></div>)}</div>
     {!users?.length ? <div className="empty-state"><h2>No matching members</h2></div> : null}
     <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="members" href={pageHref} ariaLabel="Member pages"/>

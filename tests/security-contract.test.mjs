@@ -20,12 +20,12 @@ test("protects member routes with verified Supabase claims", async () => {
 });
 
 test("exposes only explicitly selected member event teasers through a limited public view", async () => {
-  const [data, events, home, migration, admin, audienceFields, actions] = await Promise.all([
+  const [data, events, home, migration, eventEditor, audienceFields, actions] = await Promise.all([
     read("lib/data.ts"),
     read("app/events/page.tsx"),
     read("app/page.tsx"),
     read("supabase/migrations/202608190002_public_member_event_teasers.sql"),
-    read("app/admin/[section]/page.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
     read("app/components/EventAudienceFields.tsx"),
     read("lib/actions/content.ts"),
   ]);
@@ -42,7 +42,7 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(migration, /public_teaser_enabled = true/);
   assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
   assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
-  assert.match(admin, /EventAudienceFields/);
+  assert.match(eventEditor, /EventAudienceFields/);
   assert.match(audienceFields, /audience === "member_only"[\s\S]*name="public_teaser_enabled"/);
   assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
@@ -201,6 +201,54 @@ test("requires action-level roles before privileged writes", async () => {
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
 });
 
+test("reviews and standardizes event images before secure upload", async () => {
+  const [field, editor, admin, styles] = await Promise.all([
+    read("app/components/EventImageUploadField.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(admin, /<EventEditorDialog/);
+  assert.match(editor, /<EventImageUploadField/);
+  assert.match(field, /OUTPUT_WIDTH = 1800/);
+  assert.match(field, /OUTPUT_HEIGHT = 1200/);
+  assert.match(field, /drawCrop\(canvas, image/);
+  assert.match(field, /createUploadIntent\(\{ kind: "event-image"/);
+  assert.match(field, /uploadToSignedUrl/);
+  assert.match(field, /previewMode === "desktop"/);
+  assert.match(field, /previewMode === "mobile"/);
+  assert.match(field, /Keep important details inside this area/);
+  assert.match(field, /navigator\.clipboard\.writeText\(aiPrompt\)/);
+  assert.match(field, /Leave comfortable space around the subject/);
+  assert.match(field, /preventUnconfirmedImage/);
+  assert.match(styles, /event-image-card-media[^}]*aspect-ratio:23\/16/);
+  assert.match(styles, /event-image-card-preview\.is-mobile \.event-image-card-media\{aspect-ratio:8\/5\}/);
+});
+
+test("edits events in an accessible two-section modal", async () => {
+  const [dialog, editor, admin, styles] = await Promise.all([
+    read("app/components/EditorDialog.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+    read("app/admin/[section]/page.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(dialog, /<dialog/);
+  assert.match(dialog, /dialog\.showModal\(\)/);
+  assert.match(dialog, /onCancel=/);
+  assert.match(dialog, /discard the unsaved changes/);
+  assert.match(dialog, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(editor, /Event details/);
+  assert.match(editor, /Artwork & preview/);
+  assert.match(editor, /action=\{saveEvent\}/);
+  assert.match(editor, /noValidate/);
+  assert.match(editor, /form\.checkValidity\(\)/);
+  assert.match(editor, /imageReviewState === "pending"/);
+  assert.match(admin, /intent="create"/);
+  assert.doesNotMatch(admin, /<EventForm/);
+  assert.match(styles, /\.editor-dialog::backdrop/);
+  assert.match(styles, /\.event-editor-panel\[hidden\]\{display:none\}/);
+});
+
 test("uses exactly three database-backed application roles", async () => {
   const [auth, migration, admin] = await Promise.all([
     read("lib/auth.ts"),
@@ -215,6 +263,20 @@ test("uses exactly three database-backed application roles", async () => {
   assert.match(migration, /where role::text in \('moderator', 'read-only-committee'\)/);
   assert.match(migration, /drop type if exists public\.app_permission/);
   assert.match(migration, /Expected at least three active administrators/);
+});
+
+test("retires bulk member archiving in favour of reviewed lifecycle controls", async () => {
+  const [admin, actions, memberImport] = await Promise.all([
+    read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
+    read("app/administrator/member-import/page.tsx"),
+  ]);
+  assert.doesNotMatch(admin, /Bulk archive|\/administrator\/delete-members/);
+  assert.doesNotMatch(actions, /bulkDeleteMembers|members\.bulk-archived|ARCHIVE MEMBERS/);
+  assert.match(actions, /export async function deleteMember/);
+  assert.match(actions, /export async function restoreMember/);
+  assert.match(memberImport, /resolveMemberMojoPortalAccessReview/);
+  await assert.rejects(stat(new URL("app/administrator/delete-members/page.tsx", root)), { code: "ENOENT" });
 });
 
 test("ships database and HTTP defence in depth", async () => {
@@ -279,18 +341,36 @@ test("defers document delivery and rejects active PDF content", async () => {
 });
 
 test("keeps the supplied logo and local member login", async () => {
-  const [shell, signIn, signInCard, authActions] = await Promise.all([
+  const [shell, pageShell, signIn, signInCard, authActions] = await Promise.all([
     read("app/components/RailSite.tsx"),
+    read("app/components/PageShell.tsx"),
     read("app/signin/page.tsx"),
     read("app/components/SignInCard.tsx"),
     read("lib/actions/auth.ts"),
   ]);
   assert.match(shell, /\/ydsme-logo\.png/);
-  assert.match(shell, /href="\/signin"/);
+  assert.match(shell, /isAuthenticated\?"\/dashboard":"\/signin"/);
+  assert.match(shell, /isAuthenticated\?"Member area":"Member login"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);
+  assert.match(pageShell, /getCurrentUser/);
+  assert.match(pageShell, /isAuthenticated=\{Boolean\(user\)\}/);
   assert.match(signIn, /<SignInCard/);
+  assert.match(signIn, /isMagicLinkSent[\s\S]*?auth-link-confirmation/);
+  assert.match(signIn, /If that email belongs to an active member account/);
+  assert.match(signIn, /isPasswordResetSent = query\.sent === "password-reset"/);
+  assert.match(signIn, /Password reset instructions are on their way/);
+  assert.match(signIn, /initialMode=\{initialMode\}/);
+  assert.match(signInCard, /auth-flip-front[\s\S]*?<form action=\{sendMagicLink\}/);
+  assert.match(signInCard, /SubmitOnEnterInput[\s\S]*?enterKeyHint="go"/);
+  assert.match(signInCard, /showBack\("password"\)[\s\S]*?Sign in with email and password/);
+  assert.match(signInCard, /backMode === "password-reset" \? "Back to password sign in"/);
+  assert.match(signInCard, /action=\{signInWithPassword\}[\s\S]*?showBack\("password-reset"\)[\s\S]*?Forgotten your password/);
   assert.match(signInCard, /minLength=\{6\}/);
   assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
+  assert.match(authActions, /method: "password"/);
+  assert.match(authActions, /passwordAuthError\("We could not sign you in/);
+  assert.match(authActions, /method: "password-reset"/);
+  assert.match(authActions, /passwordResetAuthError\("We could not send the reset email/);
   assert.match(authActions, /newPasswordSchema = z\.string\(\)\.min\(8\)/);
 });
 

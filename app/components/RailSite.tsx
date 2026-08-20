@@ -146,8 +146,10 @@ function SocialIcon({ name }: { name: string }) {
   return <Globe2 aria-hidden="true"/>;
 }
 
-export function RailSiteFrame({children, siteConfig, headerTheme="overlay"}:{children:ReactNode;siteConfig:PublicSiteConfig;headerTheme?:"overlay"|"light"}) {
+export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAuthenticated=false}:{children:ReactNode;siteConfig:PublicSiteConfig;headerTheme?:"overlay"|"light";isAuthenticated?:boolean}) {
   const path=usePathname(); const [open,setOpen]=useState(false);
+  const memberHref=isAuthenticated?"/dashboard":"/signin";
+  const memberLabel=isAuthenticated?"Member area":"Member login";
   useEffect(()=>{
     if (!window.location.hash) window.scrollTo({top:0,left:0,behavior:"auto"});
   },[path]);
@@ -161,8 +163,8 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay"}:{chi
     <a className="skip-link" href="#main-content">Skip to main content</a>
     <header className={headerTheme === "light" ? "site-header site-header-light" : "site-header"}>
       <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo.png" alt={siteConfig.fullName} width={76} height={76} /></span><span>York Model<br/><b>Engineers</b></span></Link>
-      <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href="/signin" onClick={()=>setOpen(false)}>Member login <ArrowUpRight size={15}/></Link></nav>
-      <Link className="member-login" href="/signin">Member login <ArrowUpRight size={15}/></Link>
+      <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{nav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href={memberHref} onClick={()=>setOpen(false)}>{memberLabel} <ArrowUpRight size={15}/></Link></nav>
+      <Link className="member-login" href={memberHref}>{memberLabel} <ArrowUpRight size={15}/></Link>
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
     <main id="main-content">{children}</main>

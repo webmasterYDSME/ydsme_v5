@@ -4,7 +4,7 @@ import type { InputHTMLAttributes, KeyboardEvent } from "react";
 
 type SubmitOnEnterPasswordProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type">;
 
-export function SubmitOnEnterPassword({ onKeyDown, ...props }: SubmitOnEnterPasswordProps) {
+export function SubmitOnEnterInput({ onKeyDown, type = "text", ...props }: InputHTMLAttributes<HTMLInputElement>) {
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     onKeyDown?.(event);
     if (
@@ -17,5 +17,9 @@ export function SubmitOnEnterPassword({ onKeyDown, ...props }: SubmitOnEnterPass
     event.currentTarget.form?.requestSubmit();
   }
 
-  return <input {...props} type="password" onKeyDown={handleKeyDown} />;
+  return <input {...props} type={type} onKeyDown={handleKeyDown} />;
+}
+
+export function SubmitOnEnterPassword(props: SubmitOnEnterPasswordProps) {
+  return <SubmitOnEnterInput {...props} type="password" />;
 }

@@ -818,27 +818,3 @@ export async function bulkInviteMembers(formData: FormData) {
   if (failures.length) redirect(`/administrator/add-members?error=${encodeURIComponent(`${valid.length - failures.length} invited; ${failures.length} failed.`)}`);
   redirect(`/administrator/add-members?notice=${valid.length}-invitations-sent`);
 }
-
-export async function bulkDeleteMembers(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
-  if (formData.get("confirmation") !== "ARCHIVE MEMBERS") redirect("/administrator/delete-members?error=Type+ARCHIVE+MEMBERS+to+confirm.");
-  const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0 || file.size > 1024 * 1024) redirect("/administrator/delete-members?error=Choose+a+CSV+file+smaller+than+1MB.");
-  const rows = await parseCsv(file);
-  const emails = rows.map(row => z.string().email().safeParse(row.email)).filter(result => result.success).map(result => result.data);
-  if (!emails.length || emails.length > 250) redirect("/administrator/delete-members?error=The+CSV+needs+email+and+full_name+columns+with+up+to+250+valid+rows.");
-  const admin = createAdminClient();
-  const { data: members } = await admin.from("users").select("id,email").in("email", emails);
-  const targets = (members ?? []).filter(member => member.id !== user.id);
-  let archived = 0;
-  for (const member of targets) {
-    const { data: memberRole } = await admin.from("user_roles").select("role").eq("user_id", member.id).maybeSingle();
-    if (memberRole?.role === "administrator") continue;
-    const now = new Date();
-    const { error } = await admin.from("users").update({ membership_status: "archived", archived_at: now.toISOString(), archived_by: user.id, retention_until: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString(), updated_at: now.toISOString() }).eq("id", member.id);
-    if (!error) archived += 1;
-  }
-  revalidatePath("/admin/members");
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: "members.bulk-archived", entityType: "member-import", entityId: crypto.randomUUID(), summary: `${archived} members archived` });
-  redirect(`/administrator/delete-members?notice=${archived}-members-archived`);
-}
