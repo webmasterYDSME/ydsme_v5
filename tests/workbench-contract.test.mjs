@@ -105,6 +105,7 @@ test("publishes only owner-consented and independently reviewed project snapshot
   assert.match(publicData, /createSignedUrls\(uniquePaths, 5 \* 60\)/);
   assert.match(publicIndex, /From the workbench/);
   assert.match(publicDetail, /reviewed before publication/);
-  assert.match(navigation, /\["Projects","\/projects"\]/);
+  assert.doesNotMatch(navigation, /const headerNav = [^\n]*Projects/);
+  assert.match(navigation, /const footerNav = \[\["News","\/news"\],\["Projects","\/projects"\],\.\.\.headerNav\]/);
   assert.match(sitemap, /path: "\/projects"/);
 });
