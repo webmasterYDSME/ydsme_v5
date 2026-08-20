@@ -10,7 +10,6 @@ import { sendBookingCancellation, sendBookingConfirmation } from "@/lib/booking-
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyTurnstile } from "@/lib/turnstile";
-import { visitorBookingsEnabled } from "@/lib/features";
 
 export type BookingActionState = {
   status: "idle" | "error" | "success";
@@ -56,7 +55,6 @@ export async function createVisitorBooking(
   _previousState: BookingActionState,
   formData: FormData,
 ): Promise<BookingActionState> {
-  if (!visitorBookingsEnabled()) return { status: "error", message: "Online booking is temporarily unavailable. Please contact the Society." };
   const parsed = bookingSchema.safeParse({
     eventId: formData.get("eventId"),
     leadName: formData.get("leadName"),

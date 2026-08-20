@@ -6,7 +6,6 @@ import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
 import { createPublicClient, publicStorageUrl } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { defaultDonationSettings } from "@/lib/donations";
-import { donationsEnabled, visitorBookingsEnabled } from "@/lib/features";
 import {
   ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
@@ -178,7 +177,7 @@ export async function getPublicEvents() {
     const bookedPlaces = totals.get(event.id) ?? 0;
     return {
       ...event,
-      booking_enabled: event.booking_enabled && visitorBookingsEnabled(),
+      booking_enabled: event.booking_enabled,
       booked_places: bookedPlaces,
       available_places: event.booking_capacity ? Math.max(0, event.booking_capacity - bookedPlaces) : 0,
     };
@@ -204,7 +203,6 @@ export async function getPublicMemberEventTeasers(limit = 3) {
 
 export async function getBookableEvent(id: number) {
   await connection();
-  if (!visitorBookingsEnabled()) return null;
   const admin = createAdminClient();
   const today = new Date().toISOString().slice(0, 10);
   const { data: event, error } = await admin.from("events")
@@ -349,7 +347,6 @@ export async function getPublicSiteConfig() {
 
 export async function getDonationSettings() {
   await connection();
-  if (!donationsEnabled()) return defaultDonationSettings;
   const admin = createAdminClient();
   const [{ data, error }, { data: raisedPence, error: totalError }] = await Promise.all([
     admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence"),

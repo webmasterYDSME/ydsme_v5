@@ -6,7 +6,6 @@ import { getDonationSettings } from "@/lib/data";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { getStripe } from "@/lib/stripe";
 import { verifyTurnstile } from "@/lib/turnstile";
-import { donationsEnabled } from "@/lib/features";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 
 const checkoutSchema = z.object({
@@ -15,7 +14,6 @@ const checkoutSchema = z.object({
 });
 
 export async function startDonationCheckout(formData: FormData) {
-  if (!donationsEnabled()) redirect("/?donation=unavailable");
   const parsed = checkoutSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/?donation=invalid");
   if (!await verifyTurnstile(String(formData.get("captchaToken") || ""))) {
