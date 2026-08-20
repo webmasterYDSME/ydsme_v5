@@ -8,7 +8,7 @@ import { ArrowUpRight, Globe2, MapPin, Menu, X } from "lucide-react";
 import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
 const headerNav = [["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
-const footerNav = [["News","/news"],["Projects","/projects"],...headerNav];
+const footerNav = [["Projects","/projects"],...headerNav];
 
 export function Reveal({children, delay=0}:{children:ReactNode;delay?:number}) {
   const ref=useRef<HTMLDivElement>(null);
@@ -172,7 +172,7 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
     <footer className="site-footer">
       <div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo.png" alt="" width={92} height={92} quality={55} /></span><div><h2>Made by hand.<br/><em>Moved by steam.</em></h2><p>Miniature railways and model engineering in York since 1929.</p></div></div>
       <section className="footer-visit" aria-labelledby="footer-visit-title"><h3 id="footer-visit-title">Visit</h3><address><a className="footer-address-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)"><MapPin aria-hidden="true"/><span><AddressLines address={siteConfig.clubAddress}/></span><ArrowUpRight aria-hidden="true"/></a></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</section>
-      <nav className="footer-navigation" aria-label="Footer navigation"><h3>Explore</h3>{footerNav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}</nav>
+      <nav className="footer-navigation" aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{footerNav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}</nav>
       <nav className="footer-navigation" aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav>
       <section className="footer-social" aria-labelledby="footer-social-title"><h3 id="footer-social-title">Follow</h3><div>{siteConfig.socialLinks.map(link=><a className="footer-social-link" key={`${link.name}-${link.url}`} href={link.url} target="_blank" rel="noreferrer" aria-label={`${link.name} (opens in a new tab)`}><span className="footer-social-icon"><SocialIcon name={link.name}/></span><span>{link.name}</span><ArrowUpRight aria-hidden="true"/></a>)}</div></section>
       <div className="footer-bottom">

@@ -68,6 +68,7 @@ test("provides the complete member Workbench journey", async () => {
   assert.match(styles, /\.workbench-project-card\{display:flex;flex-direction:column\}/);
   assert.match(styles, /\.workbench-project-card-body\{display:flex;flex:1;flex-direction:column\}/);
   assert.match(styles, /\.workbench-project-card footer\{margin-top:auto\}/);
+  assert.match(styles, /\.public-project-card footer\{[^}]*background:#f2ede2/);
 });
 
 test("publishes only owner-consented and independently reviewed project snapshots", async () => {
@@ -106,6 +107,6 @@ test("publishes only owner-consented and independently reviewed project snapshot
   assert.match(publicIndex, /From the workbench/);
   assert.match(publicDetail, /reviewed before publication/);
   assert.doesNotMatch(navigation, /const headerNav = [^\n]*Projects/);
-  assert.match(navigation, /const footerNav = \[\["News","\/news"\],\["Projects","\/projects"\],\.\.\.headerNav\]/);
+  assert.match(navigation, /const footerNav = \[\["Projects","\/projects"\],\.\.\.headerNav\]/);
   assert.match(sitemap, /path: "\/projects"/);
 });
