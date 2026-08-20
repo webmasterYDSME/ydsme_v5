@@ -6,8 +6,9 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("keeps Workbench projects and photographs inside the active-member boundary", async () => {
-  const [migration, actions, uploads, uploadFinalizer] = await Promise.all([
+  const [migration, serviceGrant, actions, uploads, uploadFinalizer] = await Promise.all([
     read("supabase/migrations/202608200008_project_workbench.sql"),
+    read("supabase/migrations/202608200016_project_workbench_service_grants.sql"),
     read("lib/actions/workbench.ts"),
     read("lib/actions/uploads.ts"),
     read("lib/uploads.ts"),
@@ -20,6 +21,7 @@ test("keeps Workbench projects and photographs inside the active-member boundary
   assert.match(migration, /'project-images',[\s\S]*false,[\s\S]*8 \* 1024 \* 1024/);
   assert.match(migration, /ydsme_member_project_images_read[\s\S]*public\.is_active_member\(\)/);
   assert.doesNotMatch(migration, /grant [^;]*member_project[^;]* to anon/);
+  assert.match(serviceGrant, /grant select, insert, update, delete[\s\S]*to service_role/);
   assert.match(actions, /createProject[\s\S]*await requireUser\(\)/);
   assert.match(actions, /addProjectUpdate[\s\S]*project\.owner_id !== user\.id/);
   assert.match(actions, /addProjectComment[\s\S]*consumeRateLimit\("project-comment"/);
