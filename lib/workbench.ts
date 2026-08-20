@@ -61,7 +61,7 @@ export const helpLabels: Record<ProjectHelpType, string> = {
 
 type ProjectRow = {
   id: string;
-  owner_id: string;
+  owner_id: string | null;
   title: string;
   summary: string;
   category: ProjectCategory;
@@ -76,7 +76,7 @@ type ProjectRow = {
 type UpdateRow = {
   id: string;
   project_id: string;
-  author_id: string;
+  author_id: string | null;
   title: string;
   body: string;
   help_type: ProjectHelpType | null;
@@ -97,7 +97,7 @@ type CommentRow = {
   id: string;
   project_id: string;
   update_id: string | null;
-  author_id: string;
+  author_id: string | null;
   body: string;
   created_at: string;
 };
@@ -105,6 +105,10 @@ type CommentRow = {
 type UserRow = { id: string; full_name: string | null };
 
 type WorkbenchClient = Awaited<ReturnType<typeof createClient>>;
+
+function memberAttribution(userId: string | null, names: Map<string, string>) {
+  return userId ? names.get(userId) ?? "Society member" : "Former member";
+}
 
 async function signedProjectImages(client: WorkbenchClient, paths: Array<string | null | undefined>) {
   const uniquePaths = [...new Set(paths.filter((path): path is string => Boolean(path)))];
@@ -172,7 +176,7 @@ export async function getWorkbenchProjects({
   const projects = (data ?? []) as ProjectRow[];
   if (!projects.length) return [] as WorkbenchProjectCard[];
   const ids = projects.map((project) => project.id);
-  const ownerIds = [...new Set(projects.map((project) => project.owner_id))];
+  const ownerIds = [...new Set(projects.map((project) => project.owner_id).filter((id): id is string => Boolean(id)))];
   const [usersResult, updatesResult, commentsResult, followsResult, imageUrls] = await Promise.all([
     client.rpc("workbench_member_names", { p_user_ids: ownerIds }),
     client.from("member_project_updates").select("id,project_id,title,created_at,help_type").in("project_id", ids).order("created_at", { ascending: false }),
@@ -192,7 +196,7 @@ export async function getWorkbenchProjects({
     const latest = projectUpdates[0];
     return {
       ...project,
-      owner_name: owners.get(project.owner_id) ?? "Society member",
+      owner_name: memberAttribution(project.owner_id, owners),
       cover_image_url: project.cover_image_path ? imageUrls.get(project.cover_image_path) ?? null : null,
       update_count: projectUpdates.length,
       comment_count: comments.filter((comment) => comment.project_id === project.id).length,
@@ -236,7 +240,9 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
   if (photoError) throw new Error("Unable to load project photographs.");
   const photos = (photoData ?? []) as PhotoRow[];
   const comments = (commentsResult.data ?? []) as CommentRow[];
-  const authorIds = [...new Set([project.owner_id, ...comments.map((comment) => comment.author_id)])];
+  const authorIds = [...new Set(
+    [project.owner_id, ...comments.map((comment) => comment.author_id)].filter((id): id is string => Boolean(id)),
+  )];
   const { data: authorData, error: authorError } = await client.rpc("workbench_member_names", { p_user_ids: authorIds });
   if (authorError) throw new Error("Unable to load project contributors.");
   const authors = new Map(((authorData ?? []) as UserRow[]).map((author) => [author.id, author.full_name || "Society member"]));
@@ -245,7 +251,7 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
 
   return {
     ...project,
-    owner_name: authors.get(project.owner_id) ?? "Society member",
+    owner_name: memberAttribution(project.owner_id, authors),
     cover_image_url: project.cover_image_path ? imageUrls.get(project.cover_image_path) ?? null : null,
     followed_by_me: follows.some((follow) => follow.user_id === userId),
     follower_count: follows.length,
@@ -253,6 +259,6 @@ export async function getWorkbenchProject(projectId: string, userId: string): Pr
       ...update,
       photos: photos.filter((photo) => photo.update_id === update.id).map((photo) => ({ ...photo, image_url: imageUrls.get(photo.storage_path) ?? null })),
     })),
-    comments: comments.map((comment) => ({ ...comment, author_name: authors.get(comment.author_id) ?? "Society member" })),
+    comments: comments.map((comment) => ({ ...comment, author_name: memberAttribution(comment.author_id, authors) })),
   };
 }

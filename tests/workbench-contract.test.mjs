@@ -6,9 +6,10 @@ const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
 
 test("keeps Workbench projects and photographs inside the active-member boundary", async () => {
-  const [migration, authenticatedAccess, actions, workbench, uploads, uploadFinalizer] = await Promise.all([
+  const [migration, authenticatedAccess, formerMemberRetention, actions, workbench, uploads, uploadFinalizer] = await Promise.all([
     read("supabase/migrations/202608200008_project_workbench.sql"),
     read("supabase/migrations/202608200017_project_workbench_authenticated_access.sql"),
+    read("supabase/migrations/202608200019_preserve_former_member_projects.sql"),
     read("lib/actions/workbench.ts"),
     read("lib/workbench.ts"),
     read("lib/actions/uploads.ts"),
@@ -25,10 +26,15 @@ test("keeps Workbench projects and photographs inside the active-member boundary
   assert.match(authenticatedAccess, /security invoker/);
   assert.match(authenticatedAccess, /grant execute on function public\.create_member_project_update[\s\S]*to authenticated/);
   assert.match(authenticatedAccess, /revoke select, insert, update, delete[\s\S]*from service_role/);
+  assert.match(formerMemberRetention, /member_projects[\s\S]*alter column owner_id drop not null/);
+  assert.match(formerMemberRetention, /foreign key \(owner_id\) references public\.users\(id\) on delete set null/);
+  assert.match(formerMemberRetention, /member_project_updates set author_id = null where author_id = p_user_id/);
+  assert.match(formerMemberRetention, /member_project_comments set author_id = null where author_id = p_user_id/);
   assert.match(actions, /import \{ createClient \} from "@\/lib\/supabase\/server"/);
   assert.doesNotMatch(actions, /createServiceClient/);
   assert.match(workbench, /import \{ createClient \} from "@\/lib\/supabase\/server"/);
   assert.doesNotMatch(workbench, /createServiceClient/);
+  assert.match(workbench, /"Former member"/);
   assert.match(actions, /createProject[\s\S]*await requireUser\(\)/);
   assert.match(actions, /addProjectUpdate[\s\S]*project\.owner_id !== user\.id/);
   assert.match(actions, /addProjectComment[\s\S]*consumeRateLimit\("project-comment"/);

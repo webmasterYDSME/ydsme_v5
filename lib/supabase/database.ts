@@ -730,7 +730,7 @@ export type Database = {
         Row: {
           archived_at: string | null
           archived_by: string | null
-          author_id: string
+          author_id: string | null
           body: string
           created_at: string
           id: string
@@ -740,7 +740,7 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           archived_by?: string | null
-          author_id: string
+          author_id?: string | null
           body: string
           created_at?: string
           id?: string
@@ -750,7 +750,7 @@ export type Database = {
         Update: {
           archived_at?: string | null
           archived_by?: string | null
-          author_id?: string
+          author_id?: string | null
           body?: string
           created_at?: string
           id?: string
@@ -858,7 +858,7 @@ export type Database = {
       }
       member_project_updates: {
         Row: {
-          author_id: string
+          author_id: string | null
           body: string
           created_at: string
           help_type: string | null
@@ -868,7 +868,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          author_id: string
+          author_id?: string | null
           body: string
           created_at?: string
           help_type?: string | null
@@ -878,7 +878,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          author_id?: string
+          author_id?: string | null
           body?: string
           created_at?: string
           help_type?: string | null
@@ -912,7 +912,7 @@ export type Database = {
           cover_image_path: string | null
           created_at: string
           id: string
-          owner_id: string
+          owner_id: string | null
           project_status: string
           summary: string
           title: string
@@ -925,7 +925,7 @@ export type Database = {
           cover_image_path?: string | null
           created_at?: string
           id?: string
-          owner_id: string
+          owner_id?: string | null
           project_status?: string
           summary: string
           title: string
@@ -938,7 +938,7 @@ export type Database = {
           cover_image_path?: string | null
           created_at?: string
           id?: string
-          owner_id?: string
+          owner_id?: string | null
           project_status?: string
           summary?: string
           title?: string

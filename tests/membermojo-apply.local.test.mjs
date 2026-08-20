@@ -52,6 +52,25 @@ begin
     now(),
     now()
   );
+  insert into public.member_projects (owner_id, title, summary, category)
+  values (
+    v_member,
+    'Synthetic retained Workbench project',
+    'A project retained by the local member-purge contract test.',
+    'other'
+  );
+  insert into public.member_project_updates (project_id, author_id, title, body)
+  select id, v_member, 'Synthetic retained update', 'Historical progress remains available.'
+  from public.member_projects
+  where title = 'Synthetic retained Workbench project';
+  insert into public.member_project_photos (update_id, storage_path, caption)
+  select id, 'projects/synthetic-retained-photo.jpg', 'Synthetic retained photograph'
+  from public.member_project_updates
+  where title = 'Synthetic retained update';
+  insert into public.member_project_comments (project_id, author_id, body)
+  select id, v_member, 'Synthetic retained comment'
+  from public.member_projects
+  where title = 'Synthetic retained Workbench project';
   perform set_config('app.membermojo_test_actor', v_actor::text, true);
   perform set_config('app.membermojo_test_member', v_member::text, true);
 end;
@@ -438,6 +457,31 @@ begin
   end if;
 end;
 $test$;
+
+reset role;
+
+do $retention_check$
+begin
+  if not exists (
+    select 1 from public.member_projects
+    where title = 'Synthetic retained Workbench project' and owner_id is null
+  ) or not exists (
+    select 1 from public.member_project_updates
+    where title = 'Synthetic retained update' and author_id is null
+  ) or not exists (
+    select 1
+    from public.member_project_photos photo
+    join public.member_project_updates project_update on project_update.id = photo.update_id
+    where project_update.title = 'Synthetic retained update'
+      and photo.storage_path = 'projects/synthetic-retained-photo.jpg'
+  ) or not exists (
+    select 1 from public.member_project_comments
+    where body = 'Synthetic retained comment' and author_id is null
+  ) then
+    raise exception 'Workbench history was not retained with anonymised attribution';
+  end if;
+end;
+$retention_check$;
 
 rollback;
 `;
