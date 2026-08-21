@@ -131,7 +131,10 @@ test("keeps applications safe when online Checkout cannot be created", async () 
 });
 
 test("keeps annual fees prominent while hiding rarely changed membership rules", async () => {
-  const officerPage = await readFile(new URL("../app/admin/memberships/page.tsx", import.meta.url), "utf8");
+  const [officerPage, actions] = await Promise.all([
+    readFile(new URL("../app/admin/memberships/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(officerPage, /Membership types and annual fees/);
   assert.match(officerPage, /current fee continues automatically each year/);
   assert.match(officerPage, /Save fee change/);
@@ -140,6 +143,9 @@ test("keeps annual fees prominent while hiding rarely changed membership rules",
   assert.match(officerPage, /Save membership details/);
   assert.doesNotMatch(officerPage, /Save new annual fee/);
   assert.doesNotMatch(officerPage, /Save membership type/);
+  assert.match(actions, /section=plans&notice=price-saved#plans/);
+  assert.match(actions, /section=plans&notice=plan-updated#plans/);
+  assert.match(actions, /section=plans&error=price-save-failed#plans/);
 });
 
 test("carries unchanged annual fees forward and delays future Stripe price changes", async () => {

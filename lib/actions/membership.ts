@@ -1186,20 +1186,22 @@ export async function updateMembershipPlan(formData: FormData) {
     active: z.string().optional().transform((value) => value === "on"),
     requires_approval: z.string().optional().transform((value) => value === "on"),
   }).parse(Object.fromEntries(formData));
-  if (values.maximum_age < values.minimum_age) redirect("/admin/memberships?error=plan-age-range-invalid");
+  if (values.maximum_age < values.minimum_age) {
+    redirect("/admin/memberships?section=plans&error=plan-age-range-invalid#plans");
+  }
   const admin = createServiceClient();
   const { data: before } = await admin.from("membership_plans")
     .select("description,minimum_age,maximum_age,active,requires_approval").eq("id", planId).maybeSingle();
-  if (!before) redirect("/admin/memberships?error=plan-unavailable");
+  if (!before) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
   const { error } = await admin.from("membership_plans").update({ ...values, updated_at: new Date().toISOString() }).eq("id", planId);
-  if (error) redirect("/admin/memberships?error=plan-update-failed");
+  if (error) redirect("/admin/memberships?section=plans&error=plan-update-failed#plans");
   await writeAudit({
     actorUserId: user.id, actorRole: role, action: "membership.plan-updated",
     entityType: "membership-plan", entityId: planId, before, after: values,
   });
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=plan-updated");
+  redirect("/admin/memberships?section=plans&notice=plan-updated#plans");
 }
 
 export async function configureMembershipPrice(formData: FormData) {
@@ -1210,7 +1212,7 @@ export async function configureMembershipPrice(formData: FormData) {
   const admin = createServiceClient();
   const { data: plan } = await admin.from("membership_plans")
     .select("id,name,stripe_product_id").eq("id", planId).maybeSingle();
-  if (!plan) redirect("/admin/memberships?error=plan-unavailable");
+  if (!plan) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
   const { data: effectivePrice } = await admin.from("membership_plan_prices")
     .select("amount_pence,stripe_price_id")
     .eq("plan_id", plan.id)
@@ -1246,7 +1248,7 @@ export async function configureMembershipPrice(formData: FormData) {
     amount_pence: amountPence, currency: "gbp", stripe_price_id: stripePrice.id,
     active: true, created_by: user.id,
   });
-  if (error) redirect("/admin/memberships?error=price-save-failed");
+  if (error) redirect("/admin/memberships?section=plans&error=price-save-failed#plans");
   await admin.from("membership_plan_prices").update({ active: false })
     .eq("plan_id", plan.id)
     .gt("membership_year", year)
@@ -1259,7 +1261,9 @@ export async function configureMembershipPrice(formData: FormData) {
       .select("id,full_name,auth_user_id,contact_email,membership_subscriptions(stripe_subscription_id,next_charge_at)")
       .eq("current_plan_id", plan.id).in("effective_state", ["active", "grace", "payment_review"])
       .order("id").range(offset, offset + pageSize - 1);
-    if (affectedError) redirect("/admin/memberships?error=price-transition-queue-failed");
+    if (affectedError) {
+      redirect("/admin/memberships?section=plans&error=price-transition-queue-failed#plans");
+    }
     for (const member of affectedMembers ?? []) {
       const subscriptions = member.membership_subscriptions as Array<{ stripe_subscription_id: string; next_charge_at: string | null }> | null;
       const subscriptionId = subscriptions?.[0]?.stripe_subscription_id;
@@ -1297,7 +1301,7 @@ export async function configureMembershipPrice(formData: FormData) {
   });
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=price-saved");
+  redirect("/admin/memberships?section=plans&notice=price-saved#plans");
 }
 
 export async function stageMemberMojoCutover() {
