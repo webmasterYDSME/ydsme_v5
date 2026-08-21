@@ -51,6 +51,8 @@ test("keeps signup mail actionable and combines activation with account setup", 
   ]);
 
   assert.match(verification, /membership\.application-payment-reminder/);
+  assert.match(verification, /Finish \$\{application\.full_name\}'s membership payment/);
+  assert.match(verification, /\$\{application\.full_name\}'s membership application is ready for payment/);
   assert.match(verification, /scheduled_for: new Date\(Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000\)/);
   assert.doesNotMatch(verification, /membership\.application-approval-required/);
   assert.match(membership, /membership_active: true/);
@@ -72,6 +74,18 @@ test("keeps signup mail actionable and combines activation with account setup", 
   assert.match(membership, /request_membership_notification_delivery/);
 });
 
+test("names the relevant applicant in shared-mailbox decision messages", async () => {
+  const [verification, actions] = await Promise.all([
+    read("app/membership/verify/route.ts"),
+    read("lib/actions/membership.ts"),
+  ]);
+
+  assert.match(verification, /Confirm \$\{application\.full_name\}'s Junior membership application/);
+  assert.match(actions, /\$\{application\.full_name\}'s membership application is approved/);
+  assert.match(actions, /\$\{application\.full_name\}'s membership application update/);
+  assert.doesNotMatch(actions, /title: "Your membership application is approved"/);
+});
+
 test("uses Society language for member-facing payment updates", async () => {
   const [application, account, actions, webhook, paymentLanguage] = await Promise.all([
     read("app/membership/apply/page.tsx"),
@@ -87,8 +101,8 @@ test("uses Society language for member-facing payment updates", async () => {
   assert.match(account, /Continue to payment/);
   assert.doesNotMatch(account, /Opening Stripe|Continue to Stripe|securely with Stripe/);
   assert.match(actions, /Continue to secure online payment to activate membership/);
-  assert.match(webhook, /We could not verify the full payment/);
-  assert.match(webhook, /Your annual membership payment[^`]+has been confirmed/);
+  assert.match(webhook, /We could not verify \$\{memberName\}'s full payment/);
+  assert.match(webhook, /\$\{member\.full_name\}'s annual membership payment[^`]+has been confirmed/);
   assert.match(paymentLanguage, /replacement online or offline payment/);
   assert.match(paymentLanguage, /complete online or offline renewal/);
 });

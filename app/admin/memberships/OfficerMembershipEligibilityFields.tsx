@@ -51,14 +51,15 @@ export function OfficerMembershipEligibilityFields({ plans, prices, today }: {
 
   return <div className="wide officer-eligibility-fields">
     <div className="membership-manual-date-grid">
-      <label>Date of birth<input type="date" name="date_of_birth" max={today} required value={dateOfBirth} onChange={(event) => {
-        setDateOfBirth(event.target.value);
+      <label>Date of birth<input type="date" name="date_of_birth" max={today} required value={dateOfBirth} onInput={(event) => {
+        const value = event.currentTarget.value;
+        setDateOfBirth(value);
         setStudent(false);
-        const matches = eligibleMembershipPlans(plans, event.target.value, new Date(`${startDate}T00:00:00Z`));
-        event.target.setCustomValidity(defaultMembershipPlan(matches.plans) ? "" : "No membership is available for this age.");
+        const matches = eligibleMembershipPlans(plans, value, new Date(`${startDate}T00:00:00Z`));
+        event.currentTarget.setCustomValidity(defaultMembershipPlan(matches.plans) ? "" : "No membership is available for this age.");
       }}/></label>
-      <label>Membership start date<input type="date" name="received_on" required value={startDate} onChange={(event) => {
-        setStartDate(event.target.value);
+      <label>Membership start date<input type="date" name="received_on" required value={startDate} onInput={(event) => {
+        setStartDate(event.currentTarget.value);
         setStudent(false);
       }}/><small>This is also the payment date when payment has already been received.</small></label>
     </div>
