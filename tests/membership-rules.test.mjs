@@ -179,6 +179,23 @@ test("shows a single paid membership amount because partial payments are unsuppo
   assert.match(accountPage, /term\.amount_paid_pence !== term\.amount_due_pence/);
 });
 
+test("keeps officer contact and renewal work safe and understandable", async () => {
+  const root = new URL("../", import.meta.url);
+  const [officerPage, renewalForm, actions] = await Promise.all([
+    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readFile(new URL("app/admin/memberships/OfficerRenewalPaymentForm.tsx", root), "utf8"),
+    readFile(new URL("lib/actions/membership.ts", root), "utf8"),
+  ]);
+  assert.match(officerPage, /const manualContactTasks = Array\.from\(new Map/);
+  assert.match(officerPage, /Mark all updates as contacted/);
+  assert.match(officerPage, /Each person appears once/);
+  assert.match(renewalForm, /Amount to record/);
+  assert.match(renewalForm, /No payment due/);
+  assert.match(actions, /membership-year-already-paid/);
+  assert.match(actions, /honorary-year-no-payment/);
+  assert.match(actions, /payment-review-required/);
+});
+
 test("uses the junior applicant name in guardian consent messages without claiming an extra email was sent", async () => {
   const root = new URL("../", import.meta.url);
   const [verificationRoute, actions, guardianPage] = await Promise.all([

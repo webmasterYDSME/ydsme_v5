@@ -713,18 +713,22 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   }
   const admin = createServiceClient();
   const { data: member } = await admin.from("members")
-    .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,revoked_effective_on,replacement_plan_id)")
+    .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)")
     .eq("id", memberId).maybeSingle();
   if (!member?.current_plan_id) redirect("/admin/memberships?error=offline-member-unavailable");
   const { data: transition } = await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", memberId).eq("membership_year", year)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
   if (transition?.status === "awaiting_student_review") redirect("/admin/memberships?error=student-request-pending");
-  const honoraryRows = member.honorary_memberships as Array<{ status: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
+  const honoraryRows = member.honorary_memberships as Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
   const honoraryTransition = member.effective_state === "honorary"
     ? honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
       && item.revoked_effective_on?.startsWith(`${year}-`) && item.replacement_plan_id) ?? null
     : null;
+  const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+    && item.effective_from <= `${year}-12-31`
+    && (!item.revoked_effective_on || item.revoked_effective_on > `${year}-01-01`)) ?? null;
+  if (honoraryForYear && !honoraryTransition) redirect("/admin/memberships?error=honorary-year-no-payment");
   const price = await ensureMembershipPlanPrice(
     honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id,
     year,
@@ -735,6 +739,10 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const { data: pendingInitialTerm } = await admin.from("membership_terms")
     .select("plan_price_id,status,source,amount_due_pence,amount_paid_pence")
     .eq("member_id", memberId).eq("membership_year", year).maybeSingle();
+  if (pendingInitialTerm?.status === "paid" && pendingInitialTerm.amount_paid_pence >= pendingInitialTerm.amount_due_pence) {
+    redirect("/admin/memberships?error=membership-year-already-paid");
+  }
+  if (pendingInitialTerm?.status === "payment_review") redirect("/admin/memberships?error=payment-review-required");
   const completesInitialTerm = pendingInitialTerm?.plan_price_id === price.id
     && pendingInitialTerm.status === "scheduled"
     && pendingInitialTerm.amount_paid_pence === 0

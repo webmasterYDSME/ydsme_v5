@@ -32,7 +32,9 @@ import {
 } from "@/lib/actions/membership";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { OfficerMembershipEligibilityFields } from "@/app/admin/memberships/OfficerMembershipEligibilityFields";
+import { OfficerRenewalPaymentForm } from "@/app/admin/memberships/OfficerRenewalPaymentForm";
 import { membershipAdministrationEnabled } from "@/lib/features";
+import { proratedMembershipFee } from "@/lib/membership-rules";
 
 export const dynamic = "force-dynamic";
 
@@ -102,12 +104,12 @@ export default async function MembershipAdministration({ searchParams }: { searc
   const [
     applicationResult, memberResult, planResult, priceResult, honoraryResult,
     failureResult, reviewResult, committeeResult, capabilityResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult,
-    checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult,
+    checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult, renewalTransitionResult, renewalTermResult,
   ] = await Promise.all([
     admin.from("membership_applications")
       .select("id,full_name,contact_email,date_of_birth,payment_method,status,student_declaration,guardian_name,guardian_email,guardian_verified_at,created_at,requested_plan_id,membership_offline_payment_records(id,status,payment_reference,received_on)")
       .in("status", ["awaiting_approval", "awaiting_cash", "awaiting_bank_transfer", "awaiting_cheque"]).order("created_at"),
-    admin.from("members").select("id,full_name,contact_email,contact_email_verified_at,contact_role,contact_number,date_of_birth,effective_state,current_plan_id,auth_user_id,portal_invitation_status,honorary_memberships(status,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name"),
+    admin.from("members").select("id,full_name,contact_email,contact_email_verified_at,contact_role,contact_number,date_of_birth,effective_state,current_plan_id,auth_user_id,portal_invitation_status,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name"),
     admin.from("membership_plans").select("id,slug,name,description,minimum_age,maximum_age,requires_approval,active,stripe_product_id").order("sort_order"),
     admin.from("membership_plan_prices").select("id,plan_id,membership_year,amount_pence,stripe_price_id,active,version,carried_forward_from_id").eq("active", true).order("membership_year", { ascending: false }),
     admin.from("honorary_memberships").select("id,member_id,status,effective_from,reason,revoked_effective_on").in("status", ["scheduled", "active"]).order("effective_from"),
@@ -140,8 +142,15 @@ export default async function MembershipAdministration({ searchParams }: { searc
     admin.from("membership_plan_transitions")
       .select("id,member_id,membership_year,status,requested_at,to_plan_id")
       .eq("status", "awaiting_student_review").order("requested_at"),
+    admin.from("membership_plan_transitions")
+      .select("member_id,membership_year,status,to_plan_id")
+      .in("status", ["scheduled", "approved", "awaiting_student_review"])
+      .gte("membership_year", new Date().getUTCFullYear()).lte("membership_year", new Date().getUTCFullYear() + 1),
+    admin.from("membership_terms")
+      .select("member_id,membership_year,status,amount_due_pence,amount_paid_pence,source")
+      .gte("membership_year", new Date().getUTCFullYear()).lte("membership_year", new Date().getUTCFullYear() + 1),
   ]);
-  const results = [applicationResult, memberResult, planResult, priceResult, honoraryResult, failureResult, reviewResult, committeeResult, capabilityResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult, checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult];
+  const results = [applicationResult, memberResult, planResult, priceResult, honoraryResult, failureResult, reviewResult, committeeResult, capabilityResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult, checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult, renewalTransitionResult, renewalTermResult];
   if (results.some((result) => result.error)) throw new Error("Unable to load membership administration.");
   const { data: reportExports, error: reportError } = await admin.from("membership_report_exports")
     .select("id,status,storage_path,row_counts,financial_totals,created_at,completed_at,expires_at,last_error")
@@ -164,12 +173,67 @@ export default async function MembershipAdministration({ searchParams }: { searc
   const deliveryProblemCount = (emailConfigurationReady ? 0 : 1)
     + (failureResult.data?.length ?? 0) + (deliveryProblemResult.data?.length ?? 0);
   const memberMap = new Map(members.map((member) => [member.id, member]));
+  const manualContactTasks = Array.from(new Map((manualContactResult.data ?? [])
+    .filter((task) => task.member_id)
+    .map((task) => [task.member_id!, task])).values());
   const renewableMembers = members.filter((member) => {
     if (!member.current_plan_id || ["suspended", "archived"].includes(member.effective_state)) return false;
     if (member.effective_state !== "honorary") return true;
     const honorary = member.honorary_memberships as Array<{ revoked_effective_on: string | null }> | null;
     return Boolean(honorary?.some((item) => item.revoked_effective_on));
   });
+  const currentYear = new Date().getUTCFullYear();
+  const renewalChoices = renewableMembers.flatMap((member) => [currentYear, currentYear + 1].map((membershipYear) => {
+    const honoraryRows = member.honorary_memberships as Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
+    const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+      && item.effective_from <= `${membershipYear}-12-31`
+      && (!item.revoked_effective_on || item.revoked_effective_on > `${membershipYear}-01-01`)) ?? null;
+    const honoraryTransition = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+      && item.revoked_effective_on?.startsWith(`${membershipYear}-`) && item.replacement_plan_id) ?? null;
+    if (honoraryForYear && !honoraryTransition) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "Honorary membership covers this year, so no payment should be recorded.",
+    };
+    const transition = (renewalTransitionResult.data ?? []).find((item) => item.member_id === member.id
+      && item.membership_year === membershipYear);
+    if (transition?.status === "awaiting_student_review") return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "The Student membership request must be decided before payment is recorded.",
+    };
+    const planId = honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id;
+    const price = prices.find((item) => item.plan_id === planId && item.membership_year === membershipYear)
+      ?? prices.find((item) => item.plan_id === planId && item.membership_year < membershipYear);
+    if (!price) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: `No annual fee is available for ${membershipYear}.`,
+    };
+    const term = (renewalTermResult.data ?? []).find((item) => item.member_id === member.id
+      && item.membership_year === membershipYear);
+    if (term?.status === "paid" && term.amount_paid_pence >= term.amount_due_pence) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: `This member's ${membershipYear} membership is already paid.`,
+    };
+    if (term?.status === "payment_review") return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "Resolve the existing payment review before recording another payment.",
+    };
+    if (term?.status === "scheduled" && term.amount_paid_pence === 0 && ["officer", "application"].includes(term.source)) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: term.amount_due_pence,
+      note: "This is the amount already due for the pending membership term.",
+    };
+    if (honoraryTransition?.revoked_effective_on && !honoraryTransition.revoked_effective_on.endsWith("-01-01")) {
+      const transitionDate = new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`);
+      return {
+        member_id: member.id, membership_year: membershipYear,
+        amount_pence: proratedMembershipFee(price.amount_pence, transitionDate),
+        note: `Reduced from the ${money(price.amount_pence)} annual fee from the honorary transition date.`,
+      };
+    }
+    return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: price.amount_pence,
+      note: `Full annual fee for ${membershipYear}.`,
+    };
+  }));
   const planMap = new Map(plans.map((plan) => [plan.id, plan]));
   const officerIds = new Set((capabilityResult.data ?? []).map((item) => item.user_id));
   const selectedMemberId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(query.member || "") ? query.member! : null;
@@ -215,7 +279,7 @@ export default async function MembershipAdministration({ searchParams }: { searc
       {(paymentReviewResult.data?.length ?? 0) > 0 ? <Link href="/admin/memberships?section=payment-reviews#payment-reviews" aria-current={selectedTask === "payment-reviews" ? "page" : undefined}>Payment checks<span className="membership-nav-count">{paymentReviewResult.data?.length}</span></Link> : null}
       {(studentRequestResult.data?.length ?? 0) > 0 ? <Link href="/admin/memberships?section=student-requests#student-requests" aria-current={selectedTask === "student-requests" ? "page" : undefined}>Student requests<span className="membership-nav-count">{studentRequestResult.data?.length}</span></Link> : null}
       {(honoraryConflictResult.data?.length ?? 0) > 0 ? <Link href="/admin/memberships?section=honorary-conflicts#honorary-conflicts" aria-current={selectedTask === "honorary-conflicts" ? "page" : undefined}>Honorary payment checks<span className="membership-nav-count">{honoraryConflictResult.data?.length}</span></Link> : null}
-      {(manualContactResult.data?.length ?? 0) > 0 ? <Link href="/admin/memberships?section=manual-contact#manual-contact" aria-current={selectedTask === "manual-contact" ? "page" : undefined}>Contact members<span className="membership-nav-count">{manualContactResult.data?.length}</span></Link> : null}
+      {manualContactTasks.length > 0 ? <Link href="/admin/memberships?section=manual-contact#manual-contact" aria-current={selectedTask === "manual-contact" ? "page" : undefined}>Contact members<span className="membership-nav-count">{manualContactTasks.length}</span></Link> : null}
       {deliveryProblemCount > 0 ? <Link href="/admin/memberships?section=email-failures#email-failures" aria-current={selectedTask === "email-failures" ? "page" : undefined}>Email problems<span className="membership-nav-count">{deliveryProblemCount}</span></Link> : null}
       <Link href="/admin/memberships?section=add-member#add-member" aria-current={selectedTask === "add-member" ? "page" : undefined}>Add a member</Link>
       <Link href="/admin/memberships?section=renewals#renewals" aria-current={selectedTask === "renewals" ? "page" : undefined}>Record a renewal</Link>
@@ -269,9 +333,9 @@ export default async function MembershipAdministration({ searchParams }: { searc
 
     {(honoraryConflictResult.data ?? []).length ? <MembershipAdminSection id="honorary-conflicts" className="membership-attention-section" eyebrow="Payment already recorded" title="Honorary membership payment checks" description="Review payments taken for a year that will be covered by honorary membership. Refunds are never issued automatically." icon={<Award/>} defaultOpen={sectionOpen("honorary-conflicts", true)}><div className="membership-queue-list">{honoraryConflictResult.data?.map((conflict) => <article key={conflict.id}><div><strong>{conflict.member_id ? memberMap.get(conflict.member_id)?.full_name || "Member" : "Member"}</strong><p>{conflict.body}</p>{conflict.member_id ? <Link href={`/admin/memberships?member=${conflict.member_id}&section=member-history#member-history`}>View payment history</Link> : null}</div>{conflict.member_id ? <form action={resolveHonoraryPaymentConflict} className="stack-form"><input type="hidden" name="member_id" value={conflict.member_id}/><label>Decision<select name="decision"><option value="retain">Keep the payment on record; no refund</option><option value="handled-in-stripe">Payment handled through the online payment service</option></select></label><label>Reason for the decision<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save decision</PendingSubmitButton></form> : null}</article>)}</div></MembershipAdminSection> : null}
 
-    {(manualContactResult.data ?? []).length ? <MembershipAdminSection id="manual-contact" eyebrow="Personal contact needed" title="Members to contact" description="These members cannot be reached automatically because they do not have an email address or website account." icon={<BellRing/>} defaultOpen={sectionOpen("manual-contact")}><div className="membership-queue-list">{manualContactResult.data?.map((task) => <article key={task.id}><div><strong>{task.member_id ? memberMap.get(task.member_id)?.full_name || "Member" : "Member"}</strong><p>{task.body}</p>{task.member_id ? <Link href={`/admin/memberships?member=${task.member_id}&section=member-history#member-history`}>View membership history</Link> : null}</div><form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.id}/><label>Contact note<textarea name="reason" minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><PendingSubmitButton pendingLabel="Saving…">Mark as contacted</PendingSubmitButton></form></article>)}</div></MembershipAdminSection> : null}
+    {manualContactTasks.length ? <MembershipAdminSection id="manual-contact" eyebrow="Personal contact needed" title="Members to contact" description="Each person appears once, even when several updates need to be shared with them." icon={<BellRing/>} defaultOpen={sectionOpen("manual-contact")}><div className="membership-queue-list">{manualContactTasks.map((task) => <article key={task.member_id}><div><strong>{task.member_id ? memberMap.get(task.member_id)?.full_name || "Member" : "Member"}</strong><p>{task.body}</p>{task.member_id ? <Link href={`/admin/memberships?member=${task.member_id}&section=member-history#member-history`}>View membership history</Link> : null}</div><form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.id}/><label>Contact note<textarea name="reason" minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><PendingSubmitButton pendingLabel="Saving…">Mark all updates as contacted</PendingSubmitButton></form></article>)}</div></MembershipAdminSection> : null}
 
-    <MembershipAdminSection id="renewals" eyebrow="Renew a member" title="Record a renewal payment" description="Record a full payment made by cash, bank transfer or cheque. Mid-year transitions from honorary membership use the displayed prorated amount. Automatic online renewal is switched off to prevent a second charge." icon={<Landmark/>} defaultOpen={sectionOpen("renewals")}><form action={confirmExistingMemberOfflineRenewal} className="editor-form membership-cash-renewal-form"><label>Member<select name="member_id" required>{renewableMembers.map((member) => <option key={member.id} value={member.id}>{member.full_name} · {memberStateName(member.effective_state)}</option>)}</select></label><label>Membership year<select name="membership_year" defaultValue={new Date().getUTCMonth() === 11 ? new Date().getUTCFullYear() + 1 : new Date().getUTCFullYear()}><option value={new Date().getUTCFullYear()}>{new Date().getUTCFullYear()}</option><option value={new Date().getUTCFullYear() + 1}>{new Date().getUTCFullYear() + 1}</option></select></label><label>Payment method<select name="payment_method"><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label><label>Receipt or payment reference<input name="payment_reference" minLength={2} maxLength={120} required/></label><label>Date received<input type="date" name="received_on" defaultValue={today} required/></label><label className="checkbox-row"><input type="checkbox" name="cleared"/>Cheque cleared <em>Cheque payments only</em></label><PendingSubmitButton pendingLabel="Saving payment…">Record renewal payment</PendingSubmitButton></form></MembershipAdminSection>
+    <MembershipAdminSection id="renewals" eyebrow="Renew a member" title="Record a renewal payment" description="Record a full payment made by cash, bank transfer or cheque. The exact amount is shown before saving, and automatic online renewal is switched off to prevent a second charge." icon={<Landmark/>} defaultOpen={sectionOpen("renewals")}><OfficerRenewalPaymentForm members={renewableMembers.map((member) => ({ id: member.id, full_name: member.full_name, state_label: memberStateName(member.effective_state) }))} choices={renewalChoices} currentYear={currentYear} today={today}/></MembershipAdminSection>
 
     {selectedMemberId ? <MembershipAdminSection id="member-history" className="membership-member-history" eyebrow="Member history" title={memberMap.get(selectedMemberId)?.full_name || "Member"} description="Review contact ownership, portal access, eligibility, memberships and payments." icon={<CreditCard/>} defaultOpen={sectionOpen("member-history", true)}>
       <div className="membership-admin-grid">
