@@ -34,6 +34,7 @@ type PortalNavigationProps = {
   canViewContent: boolean;
   administrator: boolean;
   membershipOfficer: boolean;
+  membershipEnabled: boolean;
   membershipTaskCount: number;
 };
 
@@ -98,6 +99,7 @@ function PortalNavigationForPath({
   canViewContent,
   administrator,
   membershipOfficer,
+  membershipEnabled,
   membershipTaskCount,
   pathname,
 }: PortalNavigationProps & { pathname: string }) {
@@ -109,11 +111,9 @@ function PortalNavigationForPath({
       label: "Membership and money",
       icon: Landmark,
       links: [
-        ...(membershipOfficer ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
-        ...(administrator ? [
-          { href: "/admin/members", label: "Member register", icon: UsersRound },
-          { href: "/admin/donations", label: "Donations", icon: HandCoins },
-        ] : []),
+        ...(membershipOfficer && membershipEnabled ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
+        ...(administrator ? [{ href: "/admin/members", label: "Member register", icon: UsersRound }] : []),
+        { href: "/admin/donations", label: "Donations", icon: HandCoins },
       ],
     }] : []),
     ...(administrator ? [{ id: "administration", label: "Administration", icon: Settings, links: administratorLinks }] : []),

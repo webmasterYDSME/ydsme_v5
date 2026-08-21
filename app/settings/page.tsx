@@ -1,14 +1,12 @@
-import { Banknote, HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
+import { Banknote, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   deleteCommittee,
   saveCommittee,
-  saveDonationSettings,
   saveSiteConfig,
 } from "@/lib/actions/content";
-import { defaultDonationSettings } from "@/lib/donations";
 import { saveMembershipPaymentSettings } from "@/lib/actions/membership";
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
@@ -47,12 +45,12 @@ export default async function Settings({
   searchParams: Promise<{ error?: string; notice?: string; tab?: string; page?: string }>;
 }) {
   const [query] = await Promise.all([searchParams, requireCapability("settings.manage")]);
+  if (query.tab === "donations" || query.notice === "donations-saved") redirect("/admin/donations?view=appeals");
   const admin = createAdminClient();
   const membershipEnabled = membershipAdministrationEnabled();
-  const availableTabs = ["committee", "donations", ...(membershipEnabled ? ["membership"] : []), "site"];
+  const availableTabs = ["committee", ...(membershipEnabled ? ["membership"] : []), "site"];
   const requestedTab = availableTabs.includes(query.tab || "") ? query.tab! : "committee";
-  const tab = query.notice === "donations-saved" ? "donations"
-    : query.notice === "membership-payment-settings-saved" && membershipEnabled ? "membership"
+  const tab = query.notice === "membership-payment-settings-saved" && membershipEnabled ? "membership"
       : query.notice === "config-saved" ? "site" : requestedTab;
   const committeePageSize = 8;
   const requestedPage = Number.parseInt(query.page || "1", 10);
@@ -60,7 +58,7 @@ export default async function Settings({
   const committeeQuery = tab === "committee"
     ? admin.from("committees").select("id,name,title,email,file_url", { count: "exact" }).order("id").range((currentPage - 1) * committeePageSize, currentPage * committeePageSize - 1)
     : admin.from("committees").select("id", { count: "exact", head: true });
-  const [committeeResult, configResult, socialResult, affiliateResult, campaignResult, membershipPaymentResult] = await Promise.all([
+  const [committeeResult, configResult, socialResult, affiliateResult, membershipPaymentResult] = await Promise.all([
     committeeQuery,
     admin
       .from("configs")
@@ -69,14 +67,13 @@ export default async function Settings({
       .single(),
     tab === "site" ? admin.from("site_social_links").select("name,url,position").order("position") : Promise.resolve({ data: [], error: null }),
     tab === "site" ? admin.from("site_affiliates").select("name,url,logo_path,position").order("position") : Promise.resolve({ data: [], error: null }),
-    tab === "donations" ? admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence") : Promise.resolve({ data: [], error: null }),
-    membershipEnabled
+    membershipEnabled && tab === "membership"
       ? admin.from("membership_payment_settings_versions")
         .select("id,version,configured,treasurer_name,treasurer_email,treasurer_phone,bank_account_name,bank_sort_code,bank_account_number,bank_transfer_instructions,cheque_payee,cheque_delivery_instructions,cash_instructions")
         .eq("active", true).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
-  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || campaignResult.error || membershipPaymentResult.error || !configResult.data || (membershipEnabled && !membershipPaymentResult.data)) {
+  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || membershipPaymentResult.error || !configResult.data || (membershipEnabled && tab === "membership" && !membershipPaymentResult.data)) {
     throw new Error("Unable to load Society settings.");
   }
   const config = configResult.data;
@@ -88,15 +85,8 @@ export default async function Settings({
   const registeredAddress = config.registered_address as Record<string, string>;
   const socialData = (socialResult.data ?? []) as Array<{ name: string; url: string; position: number }>;
   const affiliateData = (affiliateResult.data ?? []) as Array<{ name: string; url: string; logo_path: string; position: number }>;
-  const campaignData = (campaignResult.data ?? []) as Array<{ kind: string; enabled: boolean; title: string; description: string; button_label: string; target_pence: number }>;
   const socials = socialData.map(item => ({ name: item.name, link: item.url }));
   const affiliates = affiliateData.map(item => ({ name: item.name, website: item.url, logo: item.logo_path }));
-  const generic = campaignData?.find(item => item.kind === "generic");
-  const target = campaignData?.find(item => item.kind === "target");
-  const donations = {
-    generic: generic ? { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label } : defaultDonationSettings.generic,
-    target: target ? { enabled: target.enabled, title: target.title, description: target.description, buttonLabel: target.button_label, targetPence: Number(target.target_pence), raisedPence: 0 } : defaultDonationSettings.target,
-  };
   const membershipPayment = membershipPaymentResult.data;
 
   return (
@@ -105,19 +95,17 @@ export default async function Settings({
         <div>
           <p className="eyebrow dark">Administrator only</p>
           <h1>Committee &amp; site</h1>
-          <p>Maintain the Society record, public links, donation appeals and committee roster in focused workspaces.</p>
+          <p>Maintain the Society record, public links and committee roster in focused workspaces.</p>
         </div>
-        <span className="count-badge"><SettingsIcon />Site administration</span>
+        <span className="count-badge"><SettingsIcon/>Site administration</span>
       </header>
 
       {query.error ? <p className="form-message error">{query.error}</p> : null}
-      {query.notice ? <p className="form-message success">{query.notice === "donations-saved" ? "Donation appeals saved."
-        : query.notice === "membership-payment-settings-saved" ? "Membership payment instructions saved as a new version."
+      {query.notice ? <p className="form-message success">{query.notice === "membership-payment-settings-saved" ? "Membership payment instructions saved as a new version."
           : "Society settings saved."}</p> : null}
 
       <PortalTabs label="Committee and site settings" tabs={[
         { href: "/settings?tab=committee", label: "Committee roster", count: committeeCount, current: tab === "committee" },
-        { href: "/settings?tab=donations", label: "Donation appeals", current: tab === "donations" },
         ...(membershipEnabled ? [{ href: "/settings?tab=membership", label: "Membership payments", current: tab === "membership" }] : []),
         { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
       ]}/>
@@ -191,46 +179,6 @@ export default async function Settings({
           </fieldset>
           <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
           <PendingSubmitButton className="button dark">Save Society settings</PendingSubmitButton>
-        </form>
-      </section> : null}
-
-      {tab === "donations" ? <section className="settings-tab-panel donation-manager">
-        <header className="settings-panel-heading"><div><span>Public fundraising</span><h2>Donation appeals</h2><p>Control which appeals visitors see and the message used for each one.</p></div><HeartHandshake/></header>
-        <form action={saveDonationSettings} className="editor-form">
-          <input type="hidden" name="id" value={config.id} />
-          <p className="wide form-help donation-manager-help">
-            Each component stays hidden until it is enabled. Donation amounts are collected here, then visitors complete payment on a secure online payment page.
-          </p>
-
-          <fieldset className="wide donation-settings-card">
-            <legend>General donation</legend>
-            <label className="check donation-toggle">
-              <input type="checkbox" name="generic_enabled" defaultChecked={donations.generic.enabled} />
-              Show the general donation component near the end of the visitors page
-            </label>
-            <div className="donation-settings-grid">
-              <label>Heading<input name="generic_title" defaultValue={donations.generic.title} required /></label>
-              <label>Button label<input name="generic_button_label" defaultValue={donations.generic.buttonLabel} required /></label>
-              <label className="wide">Description<textarea name="generic_description" rows={4} defaultValue={donations.generic.description} required /></label>
-            </div>
-          </fieldset>
-
-          <fieldset className="wide donation-settings-card target-settings-card">
-            <legend>Target campaign</legend>
-            <label className="check donation-toggle">
-              <input type="checkbox" name="target_enabled" defaultChecked={donations.target.enabled} />
-              Show the target campaign after the main railway image on the homepage
-            </label>
-            <div className="donation-settings-grid">
-              <label>Heading<input name="target_title" defaultValue={donations.target.title} required /></label>
-              <label>Button label<input name="target_button_label" defaultValue={donations.target.buttonLabel} required /></label>
-              <label className="wide">Description<textarea name="target_description" rows={4} defaultValue={donations.target.description} required /></label>
-              <label>Campaign target (£)<input type="number" name="target_pounds" min="1" max="10000000" step="0.01" defaultValue={donations.target.targetPence / 100} required /></label>
-              <p className="donation-total-note">Raised funds update automatically from verified online payments and refunds.</p>
-            </div>
-          </fieldset>
-
-          <PendingSubmitButton className="button dark">Save donation components</PendingSubmitButton>
         </form>
       </section> : null}
 

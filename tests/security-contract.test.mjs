@@ -397,8 +397,8 @@ test("publishes reviewed legal notices and original Society PDFs", async () => {
   assert.ok(historyPdf.size > 100_000);
 });
 
-test("keeps donation checkout server-side and administrator controlled", async () => {
-  const [checkout, stripe, content, cards, webhook, migration, settings] = await Promise.all([
+test("keeps donation checkout server-side and officer managed", async () => {
+  const [checkout, stripe, content, cards, webhook, migration, settings, auth, donationsAdmin, donationExport] = await Promise.all([
     read("lib/actions/donations.ts"),
     read("lib/stripe.ts"),
     read("lib/actions/content.ts"),
@@ -406,6 +406,9 @@ test("keeps donation checkout server-side and administrator controlled", async (
     read("app/api/stripe/webhook/route.ts"),
     read("supabase/migrations/202608180002_donation_webhook.sql"),
     read("app/settings/page.tsx"),
+    read("lib/auth.ts"),
+    read("app/admin/donations/page.tsx"),
+    read("app/admin/donations/export/route.ts"),
   ]);
   assert.match(stripe, /process\.env\.STRIPE_SECRET_KEY/);
   assert.match(stripe, /import "server-only"/);
@@ -416,7 +419,13 @@ test("keeps donation checkout server-side and administrator controlled", async (
   assert.match(checkout, /payment_intent_data: \{[\s\S]*description: donationLabel[\s\S]*metadata: donationMetadata/);
   assert.match(checkout, /Donation: \$\{campaign\.title\}/);
   assert.doesNotMatch(checkout, /payment_method_types/);
-  assert.match(content, /saveDonationSettings[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(content, /saveDonationSettings[\s\S]*requireCapability\("donations\.manage"\)/);
+  assert.match(auth, /membershipOfficerCapabilities[\s\S]*"donations\.view"[\s\S]*"donations\.manage"/);
+  assert.match(donationsAdmin, /requireCapability\("donations\.view"\)/);
+  assert.match(donationsAdmin, /view === "appeals"[\s\S]*requireCapability\("donations\.manage"\)/);
+  assert.match(donationsAdmin, /saveDonationSettings/);
+  assert.match(donationExport, /isMembershipOfficer\(user\.id, role\)/);
+  assert.doesNotMatch(settings, /saveDonationSettings/);
   assert.match(cards, /startDonationCheckout/);
   assert.doesNotMatch(cards, /STRIPE_SECRET_KEY/);
   assert.match(webhook, /request\.text\(\)/);

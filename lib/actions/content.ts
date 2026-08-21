@@ -3,7 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { canManageContent, requireRole, requireUser } from "@/lib/auth";
+import { canManageContent, requireCapability, requireRole, requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -711,7 +711,7 @@ export async function saveSiteConfig(formData: FormData) {
 }
 
 export async function saveDonationSettings(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireCapability("donations.manage");
   const parsed = z.object({
     id: z.coerce.number().int().positive(),
     generic_title: text(2, 120),
@@ -724,13 +724,13 @@ export async function saveDonationSettings(formData: FormData) {
   }).safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
-    redirect("/settings?tab=donations&error=Please+check+the+donation+content+and+campaign+amounts.");
+    redirect("/admin/donations?view=appeals&error=invalid");
   }
 
   const genericEnabled = bool(formData, "generic_enabled");
   const targetEnabled = bool(formData, "target_enabled");
   if ((genericEnabled || targetEnabled) && !process.env.STRIPE_SECRET_KEY) {
-    redirect("/settings?tab=donations&error=Add+the+Stripe+secret+key+before+enabling+donations.");
+    redirect("/admin/donations?view=appeals&error=payment-configuration");
   }
 
   const admin = createAdminClient();
@@ -739,7 +739,7 @@ export async function saveDonationSettings(formData: FormData) {
     .select("settings")
     .eq("id", parsed.data.id)
     .single();
-  if (readError) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+loaded.");
+  if (readError) redirect("/admin/donations?view=appeals&error=load");
 
   const currentSettings = config.settings && typeof config.settings === "object" && !Array.isArray(config.settings)
     ? config.settings
@@ -764,14 +764,14 @@ export async function saveDonationSettings(formData: FormData) {
   };
 
   const { error } = await admin.from("configs").update({ settings }).eq("id", parsed.data.id);
-  if (error) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+saved.");
+  if (error) redirect("/admin/donations?view=appeals&error=save");
   const { error: campaignError } = await admin.rpc("replace_donation_campaigns", { p_generic: settings.donations.generic, p_target: settings.donations.target });
-  if (campaignError) redirect("/settings?tab=donations&error=Donation+campaigns+could+not+be+saved.");
+  if (campaignError) redirect("/admin/donations?view=appeals&error=save");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "donation-campaigns.updated", entityType: "site-config", entityId: parsed.data.id, before: { donations: currentSettings.donations }, after: { donations: settings.donations } });
   revalidatePath("/");
   revalidatePath("/visitors");
   revalidatePath("/settings");
-  redirect("/settings?tab=donations&notice=donations-saved");
+  redirect("/admin/donations?view=appeals&notice=donations-saved");
 }
 
 function parseCsv(file: File) {
