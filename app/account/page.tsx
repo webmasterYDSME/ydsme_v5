@@ -21,6 +21,28 @@ export const dynamic = "force-dynamic";
 const money = (pence: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
 const date = (value: string) => new Date(`${value}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/London" });
 const paymentMethod = (method: string) => method === "stripe" ? "online" : method.replaceAll("_", " ");
+const membershipStatus = (status: string) => ({
+  active: "Active",
+  honorary: "Lifetime honorary",
+  grace: "Renewal due",
+  payment_review: "Payment being checked",
+  lapsed: "Lapsed",
+  suspended: "Access suspended",
+  archived: "Account archived",
+  scheduled: "Upcoming",
+  paid: "Paid",
+  void: "Cancelled",
+  revoked: "Ended",
+}[status] || status.replaceAll("_", " "));
+const paymentStatus = (status: string) => ({
+  pending: "Payment pending",
+  paid: "Paid",
+  failed: "Payment failed",
+  partially_refunded: "Partly refunded",
+  refunded: "Refunded",
+  disputed: "Payment being checked",
+  void: "Cancelled",
+}[status] || status.replaceAll("_", " "));
 const accountErrors: Record<string, string> = {
   "renewal-unavailable": "Online renewal is not currently available. Your existing membership and recorded payments are unchanged.",
   "payment-cancelled": "The payment was cancelled. No payment was recorded.",
@@ -53,14 +75,14 @@ export default async function Account({ searchParams }: { searchParams: Promise<
       <div className="membership-account-heading"><div><p className="eyebrow dark">Membership status</p><h2>{membership?.member.effective_state === "honorary" ? "Lifetime honorary member" : membership?.plan?.name || "Membership record pending"}</h2></div>{membership?.member.effective_state === "honorary" ? <Award/> : <CalendarClock/>}</div>
       {membership ? <>
         <dl className="membership-facts">
-          <div><dt>Effective status</dt><dd>{membership.member.effective_state.replaceAll("_", " ")}</dd></div>
+          <div><dt>Membership status</dt><dd>{membershipStatus(membership.member.effective_state)}</dd></div>
           <div><dt>Member since</dt><dd>{date(membership.member.joined_on)}</dd></div>
-          {membership.term ? <><div><dt>Current term</dt><dd>{membership.term.membership_year} · {membership.term.status}</dd></div><div><dt>Paid</dt><dd>{money(membership.term.amount_paid_pence)}</dd></div><div><dt>Term ends</dt><dd>{date(membership.term.ends_on)}</dd></div><div><dt>Grace ends</dt><dd>{date(membership.term.grace_ends_on)}</dd></div></> : null}
-          {membership.honorary ? <div><dt>Honorary status</dt><dd>{membership.honorary.status} from {date(membership.honorary.effective_from)}</dd></div> : null}
+          {membership.term ? <><div><dt>Current membership</dt><dd>{membership.term.membership_year} · {membershipStatus(membership.term.status)}</dd></div><div><dt>Paid</dt><dd>{money(membership.term.amount_paid_pence)}</dd></div><div><dt>Membership ends</dt><dd>{date(membership.term.ends_on)}</dd></div><div><dt>Final renewal date</dt><dd>{date(membership.term.grace_ends_on)}</dd></div></> : null}
+          {membership.honorary ? <div><dt>Honorary membership</dt><dd>{membershipStatus(membership.honorary.status)} from {date(membership.honorary.effective_from)}</dd></div> : null}
         </dl>
         {membership.student_request.available ? <form action={requestStudentMembership} className="membership-renewal-panel"><div><strong>Student membership for {membership.student_request.membership_year}</strong><p>Members aged 18–24 may request the Student fee during November. Adult remains the default until an officer approves the request, and payment waits for that decision.</p></div><PendingSubmitButton className="button outline" pendingLabel="Sending request…">Request Student membership</PendingSubmitButton></form> : membership.student_request.status === "awaiting_student_review" ? <p className="membership-account-note">The Student membership request is awaiting an officer decision. Renewal payment is paused so the wrong fee is not charged.</p> : null}
         {membership.subscription && !["canceled", "incomplete_expired"].includes(membership.subscription.status) ? <div className="membership-renewal-panel"><div><strong>Automatic renewal</strong><p>{membership.subscription.renewal_locked ? "Off — an offline payment already covers the forthcoming term." : membership.subscription.cancel_at_period_end ? "Off — your current paid term is unchanged." : `On${membership.subscription.next_charge_at ? ` — ${membership.subscription.renewal_amount_pence !== null ? `${money(membership.subscription.renewal_amount_pence)} on ` : "next charge "}${new Date(membership.subscription.next_charge_at).toLocaleDateString("en-GB")}` : ""}.`}</p></div><div className="member-action-group">{!membership.subscription.renewal_locked ? <form action={toggleMembershipAutoRenew}><input type="hidden" name="enable" value={membership.subscription.cancel_at_period_end ? "true" : "false"}/><PendingSubmitButton className="button outline" pendingLabel="Updating…">{membership.subscription.cancel_at_period_end ? "Turn on auto-renew" : "Turn off auto-renew"}</PendingSubmitButton></form> : null}<form action={openMembershipBillingPortal}><PendingSubmitButton className="button outline" pendingLabel="Opening secure payment settings…"><CreditCard/>Update payment method</PendingSubmitButton></form></div></div> : membership.member.effective_state === "honorary" && !honoraryTransitionPayment ? <p className="membership-account-note">Honorary membership has no fee, expiry or renewal.</p> : renewalAvailable || honoraryTransitionPayment ? <form action={startMembershipRenewalCheckout} className="membership-renewal-panel"><div><strong>{honoraryTransitionPayment ? `Prepare membership from ${date(membership.honorary!.revoked_effective_on!)}` : `Renew ${membershipRenewalYear(new Date())} membership securely online`}</strong><p>{honoraryTransitionPayment ? "Honorary access continues until the scheduled change date. The payment page will show the exact replacement fee before payment." : "The renewal costs the full annual fee. Automatic annual renewal is enabled by default and can be switched off before payment or later from this account."}</p><label className="checkbox-row"><input type="checkbox" name="auto_renew" defaultChecked/>Automatically renew each 1 January</label></div><PendingSubmitButton className="button dark" pendingLabel="Opening secure payment…"><CreditCard/>Continue to payment</PendingSubmitButton></form> : <div className="membership-renewal-panel"><div><strong>Membership paid</strong><p>Your {membership.term?.membership_year} membership is paid through {membership.term ? date(membership.term.ends_on) : "31 December"}. Renewal for the following year opens on 1 November.</p></div></div>}
-        <details className="membership-account-history"><summary>Payment and entitlement history</summary><div className="membership-notification-list">{membership.history.map((term) => <article key={term.id}><div><strong>{term.membership_year} · {term.status}</strong><p>{money(term.amount_paid_pence)}{term.amount_paid_pence !== term.amount_due_pence ? ` of ${money(term.amount_due_pence)}` : ""}</p>{term.payments.map((payment) => <small key={payment.id}>{paymentMethod(payment.method)} · {payment.status} · {money(payment.amount_pence)}{payment.refunded_pence ? ` · ${money(payment.refunded_pence)} refunded` : ""}</small>)}</div></article>)}{membership.honorary_history.map((honorary) => <article key={honorary.id}><div><strong>Lifetime honorary · {honorary.status}</strong><p>Effective {date(honorary.effective_from)}{honorary.revoked_effective_on ? ` · transition ${date(honorary.revoked_effective_on)}` : ""}</p></div></article>)}</div></details>
+        <details className="membership-account-history"><summary>Membership and payment history</summary><div className="membership-notification-list">{membership.history.map((term) => <article key={term.id}><div><strong>{term.membership_year} · {membershipStatus(term.status)}</strong><p>{money(term.amount_paid_pence)}{term.amount_paid_pence !== term.amount_due_pence ? ` of ${money(term.amount_due_pence)}` : ""}</p>{term.payments.map((payment) => <small key={payment.id}>{paymentMethod(payment.method)} · {paymentStatus(payment.status)} · {money(payment.amount_pence)}{payment.refunded_pence ? ` · ${money(payment.refunded_pence)} refunded` : ""}</small>)}</div></article>)}{membership.honorary_history.map((honorary) => <article key={honorary.id}><div><strong>Lifetime honorary · {membershipStatus(honorary.status)}</strong><p>Starts {date(honorary.effective_from)}{honorary.revoked_effective_on ? ` · changes ${date(honorary.revoked_effective_on)}` : ""}</p></div></article>)}</div></details>
       </> : <p>Your account has not yet been linked to the Society’s membership register. A membership officer can complete this for you.</p>}
     </section> : null}
 

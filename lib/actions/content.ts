@@ -464,7 +464,7 @@ export async function replaceDocumentVersion(formData: FormData) {
 
 export async function purgeDocument(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
-  const parsed = z.object({ id: z.string().uuid(), confirmation: z.literal("PURGE DOCUMENT") }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ id: z.string().uuid(), confirmation: z.literal("DELETE DOCUMENT") }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/dashboard/resources?error=Type+PURGE+DOCUMENT+to+confirm.");
   const admin = createAdminClient();
   const { data: doc } = await admin.from("documents").select("id,name,file_url,lifecycle_status,version").eq("id", parsed.data.id).maybeSingle();

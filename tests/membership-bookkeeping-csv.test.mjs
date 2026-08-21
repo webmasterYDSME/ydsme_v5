@@ -77,6 +77,6 @@ test("queues complete ZIP reports and protects the private download", async () =
   assert.match(worker, /financial_totals_pence/);
   assert.match(actions, /requestMembershipReportExport/);
   assert.match(actions, /request_membership_report_generation/);
-  assert.match(page, /Prepare records ZIP/);
+  assert.match(page, /Prepare records download/);
   assert.match(page, /\/admin\/memberships\/export\?id=/);
 });

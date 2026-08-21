@@ -123,7 +123,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(checkoutRoute, /continueApplicationCheckout/);
   assert.match(applicationPage, /"payment-unavailable"[\s\S]*Application safely saved/);
   assert.match(officerPage, /Online payments need attention/);
-  assert.match(officerPage, /Online payment configuration is incomplete/);
+  assert.match(officerPage, /Online payments are not fully set up/);
   assert.match(officerPage, /Online payments\{checkoutProblemCount \? <span/);
   assert.match(officerPage, /title=\{checkoutProblemCount \? "Online payments need attention" : "Online payments are ready"\}/);
   assert.match(officerPage, /Online payments are ready/);

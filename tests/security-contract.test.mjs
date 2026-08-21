@@ -475,7 +475,7 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(form, /Please do not make multiple bookings/);
   assert.match(admin, /checkInBooking/);
   assert.match(admin, /booking_management_summary/);
-  assert.match(admin, /Export CSV/);
+  assert.match(admin, /Download spreadsheet/);
   assert.match(data, /available_places/);
   assert.match(email, /sendTransactionalEmail/);
   assert.match(emailDelivery, /Idempotency-Key/);

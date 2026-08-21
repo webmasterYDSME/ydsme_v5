@@ -27,7 +27,7 @@ const statusCopy: Record<string, { title: string; body: string }> = {
   awaiting_bank_transfer: { title: "Waiting for bank transfer", body: "A membership officer will activate membership after confirming the complete payment." },
   awaiting_cheque: { title: "Waiting for the cheque to clear", body: "The application remains open while the cheque is received and cleared." },
   rejected: { title: "Application not approved", body: "The decision email explains the outcome and how to contact the membership officer." },
-  converted: { title: "Membership active", body: "The complete payment or honorary entitlement has been confirmed. Portal access is sent separately only when this member has a unique login identity." },
+  converted: { title: "Membership active", body: "The complete payment or honorary membership has been confirmed. If an individual login email is available, a separate email will explain how to access the member area." },
   expired: { title: "Application expired", body: "No membership or payment was created. Contact the membership officer before starting again if help is needed." },
 };
 
