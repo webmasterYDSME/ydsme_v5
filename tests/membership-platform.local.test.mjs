@@ -24,6 +24,9 @@ declare
   v_plan uuid;
   v_price uuid;
   v_member uuid;
+  v_other_member uuid;
+  v_own_notification uuid;
+  v_foreign_notification uuid;
   v_term uuid;
   v_payment uuid;
   v_honorary uuid;
@@ -40,14 +43,48 @@ begin
   from public.membership_plans plan join public.membership_plan_prices price on price.plan_id=plan.id
   where plan.slug='adult' and price.membership_year=public.membership_billing_year(current_date) and price.active;
   insert into public.membership_applications(
-    requested_plan_id,full_name,contact_email,date_of_birth,payment_method,auto_renew,status,
+    requested_plan_id,full_name,contact_email,contact_number,date_of_birth,payment_method,auto_renew,status,
     verification_token_hash,verification_expires_at,email_verified_at,terms_version,terms_accepted_at
-  ) values(v_plan,'Synthetic Paid Member','membership-member-'||v_portal||'@example.invalid','1980-01-01','cash',false,'awaiting_cash',
+  ) values(v_plan,'Synthetic Paid Member','membership-member-'||v_portal||'@example.invalid','01904 000123','1980-01-01','cash',false,'awaiting_cash',
     repeat('a',64),now()+interval '1 day',now(),'test',now()) returning id into v_application;
 
   select member_id,term_id,payment_id into v_member,v_term,v_payment
   from public.activate_membership_application(v_application,v_price,'cash',v_amount,v_actor,'Synthetic receipt and audit reason');
   update public.members set auth_user_id=v_portal where id=v_member;
+  if (select contact_number from public.users where id=v_portal)<>'01904 000123' then
+    raise exception 'linked membership contact details were not copied to the portal profile';
+  end if;
+  perform set_config('request.jwt.claim.sub',v_portal::text,true);
+  insert into public.members(full_name,contact_email,contact_role,effective_state,source)
+  values('Unrelated Synthetic Member','membership-member-'||v_portal||'@example.invalid','shared_household','active','website')
+  returning id into v_other_member;
+  if (select count(*) from public.members where lower(contact_email)=lower('membership-member-'||v_portal||'@example.invalid'))<>2
+    or (select auth_user_id from public.members where id=v_other_member) is not null then
+    raise exception 'shared correspondence address was treated as portal identity';
+  end if;
+  insert into public.membership_notifications(
+    member_id,recipient_user_id,recipient_email,kind,title,body,portal_visible,deduplication_key
+  ) values (
+    v_member,v_portal,'membership-member-'||v_portal||'@example.invalid','membership.ownership-test',
+    'Own synthetic notice','Visible only to its member.',true,'own-notice-'||v_portal
+  ) returning id into v_own_notification;
+  insert into public.membership_notifications(
+    member_id,recipient_user_id,recipient_email,kind,title,body,portal_visible,deduplication_key
+  ) values (
+    v_other_member,v_portal,'membership-member-'||v_portal||'@example.invalid','membership.ownership-test',
+    'Foreign synthetic notice','Must not appear despite a stale recipient link.',true,'foreign-notice-'||v_portal
+  ) returning id into v_foreign_notification;
+  if not exists(select 1 from public.get_own_membership_notifications(20) where id=v_own_notification)
+    or exists(select 1 from public.get_own_membership_notifications(20) where id=v_foreign_notification)
+    or public.mark_own_membership_notification_read(v_foreign_notification) then
+    raise exception 'member notification ownership was not enforced';
+  end if;
+  perform public.update_own_member_profile('Dr','Updated Synthetic Member','01904 000456');
+  if (select contact_number from public.users where id=v_portal)<>'01904 000456'
+    or (select contact_number from public.members where id=v_member)<>'01904 000456'
+    or (select full_name from public.members where id=v_member)<>'Updated Synthetic Member' then
+    raise exception 'member profile update did not remain atomic';
+  end if;
   if (select status from public.membership_payments where id=v_payment)<>'paid'
     or (select effective_state from public.members where id=v_member)<>'active' then
     raise exception 'cash activation failed';

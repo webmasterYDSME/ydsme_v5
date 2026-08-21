@@ -523,11 +523,15 @@ export async function deleteCommittee(formData: FormData) {
 }
 
 export async function updateProfile(formData: FormData) {
-  const { user } = await requireUser();
+  await requireUser();
   const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(30), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/account?error=Please+check+your+profile+details.");
   const supabase = await createClient();
-  const { error } = await supabase.from("users").update(parsed.data).eq("id", user.id);
+  const { error } = await supabase.rpc("update_own_member_profile", {
+    p_title: parsed.data.title,
+    p_full_name: parsed.data.full_name,
+    p_contact_number: parsed.data.contact_number,
+  });
   if (error) redirect("/account?error=The+profile+could+not+be+updated.");
   revalidatePath("/account"); revalidatePath("/dashboard", "layout");
   redirect("/account?notice=profile-updated");
@@ -560,7 +564,7 @@ export async function inviteMember(formData: FormData) {
   if (!email.success || !fullName.success) redirect("/admin/members?error=Enter+a+valid+name+and+email.");
   if (!await consumeRateLimit("member-invitation", 30, 60 * 60, user.id)) redirect("/admin/members?error=Invitation+limit+reached.+Please+try+again+later.");
   const origin = getTrustedAppOrigin();
-  const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email.data, { data: { full_name: fullName.data }, redirectTo: `${origin}/auth/callback?next=/reset-password` });
+  const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email.data, { data: { full_name: fullName.data }, redirectTo: `${origin}/auth/invite?next=/reset-password` });
   if (error) redirect("/admin/members?error=The+invitation+could+not+be+sent.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.invited", entityType: "member-invitation", entityId: email.data.toLowerCase(), summary: fullName.data });
   redirect("/admin/members?notice=invitation-sent");
@@ -810,7 +814,7 @@ export async function bulkInviteMembers(formData: FormData) {
   const admin = createAdminClient();
   const failures: string[] = [];
   for (const member of valid) {
-    const { error } = await admin.auth.admin.inviteUserByEmail(member.email, { data: { full_name: member.full_name }, redirectTo: `${origin}/auth/callback?next=/reset-password` });
+    const { error } = await admin.auth.admin.inviteUserByEmail(member.email, { data: { full_name: member.full_name }, redirectTo: `${origin}/auth/invite?next=/reset-password` });
     if (error) failures.push(member.email);
   }
   revalidatePath("/admin/members");

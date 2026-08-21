@@ -1,19 +1,39 @@
 import "server-only";
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 import {
+  ageOn,
   membershipBillingYear,
+  membershipRenewalIsOpen,
   membershipRenewalAt,
+  membershipRenewalYear,
   proratedMembershipFee,
 } from "@/lib/membership-rules";
 
 export { ageOn, membershipBillingYear, membershipRenewalAt, proratedMembershipFee } from "@/lib/membership-rules";
 
-export const MEMBERSHIP_TERMS_VERSION = "2026-08-20";
+export const MEMBERSHIP_TERMS_VERSION = "2026-08-21";
 export const MEMBERSHIP_INTEGRATION_IDENTIFIER = "ydsme_membership_qnvrltac";
+
+const membershipMoney = (pence: number) => new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+}).format(pence / 100);
+
+function membershipCheckoutDisclosure(
+  initialAmountPence: number,
+  annualAmountPence: number,
+  membershipYear: number,
+  autoRenew: boolean,
+) {
+  const currentTerm = `${membershipMoney(initialAmountPence)} covers membership through 31 December ${membershipYear}.`;
+  return autoRenew
+    ? `${currentTerm} Automatic renewal is ${membershipMoney(annualAmountPence)} on 1 January ${membershipYear + 1}. You can cancel anytime from your Account.`
+    : `${currentTerm} Automatic renewal is off, so no further payment will be taken.`;
+}
 
 export type PublicMembershipPlan = {
   id: string;
@@ -28,14 +48,29 @@ export type PublicMembershipPlan = {
   currency: "gbp";
 };
 
+export type MembershipPlanPrice = {
+  id: string;
+  plan_id: string;
+  membership_year: number;
+  version: number;
+  amount_pence: number;
+  currency: string;
+  stripe_price_id: string | null;
+  active: boolean;
+  carried_forward_from_id: string | null;
+};
+
 export type MembershipAccount = {
   member: {
     id: string;
     full_name: string;
+    contact_email: string | null;
+    contact_role: string;
     effective_state: string;
     joined_on: string;
   };
-  plan: { name: string } | null;
+  plan: { name: string; slug: string } | null;
+  student_request: { available: boolean; status: string | null; membership_year: number };
   term: {
     membership_year: number;
     status: string;
@@ -55,6 +90,7 @@ export type MembershipAccount = {
     status: string;
     effective_from: string;
     revoked_effective_on: string | null;
+    replacement_plan_id: string | null;
   } | null;
   history: Array<{
     id: string;
@@ -75,6 +111,57 @@ export function membershipTokenHash(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export function newsletterUnsubscribeToken(email: string) {
+  const normalized = email.trim().toLowerCase();
+  const encoded = Buffer.from(normalized, "utf8").toString("base64url");
+  const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || process.env.RATE_LIMIT_SECRET;
+  if (!secret) throw new Error("Newsletter unsubscribe links are not configured.");
+  const signature = createHmac("sha256", secret).update(encoded).digest("base64url");
+  return `${encoded}.${signature}`;
+}
+
+export function emailFromNewsletterUnsubscribeToken(token: string) {
+  const [encoded, provided, extra] = token.split(".");
+  const secret = process.env.NEWSLETTER_UNSUBSCRIBE_SECRET || process.env.RATE_LIMIT_SECRET;
+  if (!secret || !encoded || !provided || extra) return null;
+  const expected = createHmac("sha256", secret).update(encoded).digest();
+  let received: Buffer;
+  try { received = Buffer.from(provided, "base64url"); } catch { return null; }
+  if (received.length !== expected.length || !timingSafeEqual(received, expected)) return null;
+  try {
+    const email = Buffer.from(encoded, "base64url").toString("utf8").trim().toLowerCase();
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? email : null;
+  } catch { return null; }
+}
+
+/**
+ * Return the price for a financial workflow, creating an immutable snapshot for
+ * the requested membership year when the latest officer-set fee still applies.
+ */
+export async function ensureMembershipPlanPrice(planId: string, membershipYear: number) {
+  const { data, error } = await createServiceClient().rpc("ensure_membership_plan_price", {
+    p_plan_id: planId,
+    p_membership_year: membershipYear,
+  });
+  const price = data?.[0] as MembershipPlanPrice | undefined;
+  if (error || !price) throw new Error("No annual fee is available for this membership year.");
+  return price;
+}
+
+async function getEffectiveMembershipPlanPrice(planId: string, membershipYear: number) {
+  const { data, error } = await createServiceClient().from("membership_plan_prices")
+    .select("id,plan_id,membership_year,version,amount_pence,currency,stripe_price_id,active,carried_forward_from_id")
+    .eq("plan_id", planId)
+    .eq("active", true)
+    .lte("membership_year", membershipYear)
+    .order("membership_year", { ascending: false })
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error("Unable to resolve the annual membership fee.");
+  return data as MembershipPlanPrice | null;
+}
+
 export async function getPublicMembershipPlans(): Promise<PublicMembershipPlan[]> {
   const { data, error } = await createServiceClient()
     .from("public_membership_plans")
@@ -88,14 +175,15 @@ export async function getPublicMembershipPlans(): Promise<PublicMembershipPlan[]
 export async function getMembershipAccount(userId: string): Promise<MembershipAccount | null> {
   const admin = createServiceClient();
   const { data: member, error } = await admin.from("members")
-    .select("id,full_name,effective_state,joined_on,current_plan_id")
+    .select("id,full_name,contact_email,contact_role,effective_state,joined_on,current_plan_id,date_of_birth")
     .eq("auth_user_id", userId)
     .maybeSingle();
   if (error) throw new Error("Unable to load membership details.");
   if (!member) return null;
-  const [{ data: plan }, { data: terms }, { data: subscription }, { data: honorary }] = await Promise.all([
+  const renewalYearForAccount = membershipRenewalYear(new Date());
+  const [{ data: plan }, { data: terms }, { data: subscription }, { data: honorary }, { data: transition }] = await Promise.all([
     member.current_plan_id
-      ? admin.from("membership_plans").select("name").eq("id", member.current_plan_id).maybeSingle()
+      ? admin.from("membership_plans").select("name,slug").eq("id", member.current_plan_id).maybeSingle()
       : Promise.resolve({ data: null }),
     admin.from("membership_terms")
       .select("id,membership_year,status,ends_on,grace_ends_on,amount_due_pence,amount_paid_pence,membership_payments(id,method,status,amount_pence,refunded_pence,created_at)")
@@ -104,8 +192,10 @@ export async function getMembershipAccount(userId: string): Promise<MembershipAc
       .select("status,cancel_at_period_end,next_charge_at")
       .eq("member_id", member.id).maybeSingle(),
     admin.from("honorary_memberships")
-      .select("id,status,effective_from,revoked_effective_on")
+      .select("id,status,effective_from,revoked_effective_on,replacement_plan_id")
       .eq("member_id", member.id).order("effective_from", { ascending: false }).limit(20),
+    admin.from("membership_plan_transitions").select("status,to_plan_id")
+      .eq("member_id", member.id).eq("membership_year", renewalYearForAccount).maybeSingle(),
   ]);
   type RawTerm = MembershipAccount["term"] & {
     id: string;
@@ -115,23 +205,34 @@ export async function getMembershipAccount(userId: string): Promise<MembershipAc
   const rawTerm = rawTerms[0];
   const renewalLocked = Boolean(rawTerm
     && rawTerm.membership_year >= new Date().getUTCFullYear()
-    && rawTerm.membership_payments?.some((payment) => payment.method === "cash" && payment.status === "paid"));
+    && rawTerm.membership_payments?.some((payment) => payment.method !== "stripe" && payment.status === "paid"));
   const renewalYear = subscription?.next_charge_at
     ? new Date(subscription.next_charge_at).getUTCFullYear()
     : new Date().getUTCFullYear() + 1;
-  const { data: renewalPrice } = subscription && member.current_plan_id
-    ? await admin.from("membership_plan_prices").select("amount_pence")
-      .eq("plan_id", member.current_plan_id).eq("membership_year", renewalYear).eq("active", true).maybeSingle()
-    : { data: null };
+  const renewalPricePlanId = transition && ["scheduled", "approved", "applied"].includes(transition.status)
+    ? transition.to_plan_id : member.current_plan_id;
+  const renewalPrice = subscription && renewalPricePlanId
+    ? await getEffectiveMembershipPlanPrice(renewalPricePlanId, renewalYear)
+    : null;
   const currentHonorary = (honorary ?? []).find((item) => ["scheduled", "active"].includes(item.status));
   return {
     member: {
       id: member.id,
       full_name: member.full_name,
+      contact_email: member.contact_email,
+      contact_role: member.contact_role,
       effective_state: member.effective_state,
       joined_on: member.joined_on,
     },
-    plan: plan ? { name: plan.name } : null,
+    plan: plan ? { name: plan.name, slug: plan.slug } : null,
+    student_request: {
+      available: new Date().getUTCMonth() === 10 && plan?.slug === "adult" && Boolean(member.date_of_birth)
+        && ageOn(member.date_of_birth!, new Date(Date.UTC(renewalYearForAccount, 0, 1))) >= 18
+        && ageOn(member.date_of_birth!, new Date(Date.UTC(renewalYearForAccount, 0, 1))) <= 24
+        && !transition,
+      status: transition?.status ?? null,
+      membership_year: renewalYearForAccount,
+    },
     term: rawTerm ? {
       membership_year: rawTerm.membership_year,
       status: rawTerm.status,
@@ -162,72 +263,343 @@ type CheckoutApplication = {
   created_at: string;
   requested_plan_id: string;
   status: string;
+  date_of_birth: string;
+  student_declaration: boolean;
 };
 
-export async function createApplicationCheckout(applicationId: string) {
+type ReservedCheckoutAttempt = {
+  attempt_id: string;
+  stripe_checkout_session_id: string | null;
+  attempt_status: string;
+  attempt_created: boolean;
+};
+
+async function reserveCheckoutAttempt(input: {
+  purpose: "application" | "renewal" | "honorary_transition";
+  applicationId?: string;
+  memberId?: string;
+  membershipYear: number;
+  planPriceId: string;
+  amountPence: number;
+  autoRenew: boolean;
+}) {
+  const admin = createServiceClient();
+  let existingQuery = admin.from("membership_checkout_attempts")
+    .select("id,plan_price_id,amount_pence,auto_renew,stripe_checkout_session_id,expires_at")
+    .in("status", ["creating", "open"])
+    .eq("membership_year", input.membershipYear)
+    .eq("purpose", input.purpose);
+  existingQuery = input.applicationId
+    ? existingQuery.eq("application_id", input.applicationId)
+    : existingQuery.eq("member_id", input.memberId!);
+  const { data: existingAttempts } = await existingQuery;
+  for (const existing of existingAttempts ?? []) {
+    const noLongerValid = existing.plan_price_id !== input.planPriceId
+      || existing.amount_pence !== input.amountPence
+      || existing.auto_renew !== input.autoRenew
+      || new Date(existing.expires_at) <= new Date();
+    if (!noLongerValid) continue;
+    if (existing.stripe_checkout_session_id) {
+      const session = await getStripe().checkout.sessions.retrieve(existing.stripe_checkout_session_id);
+      if (session.status === "open") await getStripe().checkout.sessions.expire(session.id);
+    }
+    await admin.from("membership_checkout_attempts").update({
+      status: "expired", updated_at: new Date().toISOString(),
+    }).eq("id", existing.id).in("status", ["creating", "open"]);
+  }
+  const { data, error } = await admin.rpc("reserve_membership_checkout_attempt", {
+    p_purpose: input.purpose,
+    p_application_id: input.applicationId ?? null,
+    p_member_id: input.memberId ?? null,
+    p_membership_year: input.membershipYear,
+    p_plan_price_id: input.planPriceId,
+    p_amount_pence: input.amountPence,
+    p_auto_renew: input.autoRenew,
+  });
+  const attempt = data?.[0] as ReservedCheckoutAttempt | undefined;
+  if (error || !attempt) throw new Error("Unable to reserve a membership payment.");
+  if (attempt.stripe_checkout_session_id) {
+    const existing = await getStripe().checkout.sessions.retrieve(attempt.stripe_checkout_session_id);
+    if (existing.status === "open" && existing.url) return { attempt, existingUrl: existing.url };
+    await admin.from("membership_checkout_attempts").update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("id", attempt.attempt_id).in("status", ["creating", "open"]);
+    return reserveCheckoutAttempt(input);
+  }
+  if (!attempt.attempt_created) throw new Error("A membership payment page is already being prepared.");
+  return { attempt, existingUrl: null };
+}
+
+async function attachCheckoutSession(attemptId: string, sessionId: string, expiresAt: number) {
+  const { data, error } = await createServiceClient().rpc("attach_membership_checkout_session", {
+    p_attempt_id: attemptId,
+    p_stripe_checkout_session_id: sessionId,
+    p_expires_at: new Date(expiresAt * 1000).toISOString(),
+  });
+  if (error || !data) throw new Error("Unable to save the secure membership payment page.");
+}
+
+export class MembershipCheckoutUnavailableError extends Error {
+  constructor() {
+    super("Online membership payment is temporarily unavailable.");
+    this.name = "MembershipCheckoutUnavailableError";
+  }
+}
+
+type ProviderCommand = {
+  command_id: string;
+  command_type: "cancel_at_boundary" | "resume_auto_renew" | "cancel_for_offline_payment" | "cancel_for_honorary" | "transition_price";
+  stripe_subscription_id: string;
+  payload: Record<string, unknown> | null;
+  idempotency_key: string;
+};
+
+export async function processMembershipProviderCommands(memberId: string | null = null, limit = 20) {
+  const admin = createServiceClient();
+  const { data, error } = await admin.rpc("claim_membership_provider_commands", {
+    p_member_id: memberId,
+    p_limit: limit,
+  });
+  if (error) throw new Error("Unable to claim membership payment updates.");
+  const commands = (data ?? []) as ProviderCommand[];
+  for (const command of commands) {
+    try {
+      if (command.command_type === "transition_price") {
+        const priceId = typeof command.payload?.stripe_price_id === "string"
+          ? command.payload.stripe_price_id : null;
+        if (!priceId) throw new Error("Price transition details are incomplete.");
+        let itemId = typeof command.payload?.subscription_item_id === "string"
+          ? command.payload.subscription_item_id : null;
+        if (!itemId) {
+          const subscription = await getStripe().subscriptions.retrieve(command.stripe_subscription_id);
+          itemId = subscription.items.data.find((item) => item.price.recurring)?.id ?? null;
+        }
+        if (!itemId) throw new Error("The recurring membership item is unavailable.");
+        await getStripe().subscriptions.update(command.stripe_subscription_id, {
+          items: [{ id: itemId, price: priceId }],
+          proration_behavior: "none",
+        }, { idempotencyKey: command.idempotency_key });
+      } else {
+        const cancel = command.command_type !== "resume_auto_renew";
+        await getStripe().subscriptions.update(command.stripe_subscription_id, {
+          cancel_at_period_end: cancel,
+        }, { idempotencyKey: command.idempotency_key });
+      }
+      await admin.rpc("complete_membership_provider_command", {
+        p_command_id: command.command_id,
+        p_succeeded: true,
+        p_safe_error: null,
+      });
+    } catch {
+      await admin.rpc("complete_membership_provider_command", {
+        p_command_id: command.command_id,
+        p_succeeded: false,
+        p_safe_error: "The payment service update failed and will be retried.",
+      });
+    }
+  }
+  return commands.length;
+}
+
+async function recordApplicationCheckoutProblem(
+  application: CheckoutApplication,
+  planName: string | null,
+  billingYear: number,
+  reason: "configuration" | "provider",
+  resumeHref: string | null,
+) {
+  const admin = createServiceClient();
+  const applicantBody = `Your application has been saved, but online payment is temporarily unavailable. No payment has been taken.${resumeHref ? " Use the secure link below to try again after the issue is fixed." : ""} A membership officer has been notified and will contact you if anything else is needed.`;
+  await admin.from("membership_notifications").upsert({
+    application_id: application.id,
+    recipient_email: application.contact_email,
+    kind: "membership.application-payment-unavailable",
+    title: "Your membership application has been saved",
+    body: applicantBody,
+    action_href: resumeHref,
+    portal_visible: false,
+    deduplication_key: `membership-checkout-unavailable-${application.id}`,
+  }, { onConflict: "deduplication_key", ignoreDuplicates: true });
+
+  const [{ data: administrators }, { data: membershipOfficers }, { data: activeUsers }] = await Promise.all([
+    admin.from("user_roles").select("user_id").eq("role", "administrator"),
+    admin.from("user_capabilities").select("user_id").eq("capability", "memberships.manage"),
+    admin.from("users").select("id").eq("membership_status", "active"),
+  ]);
+  const activeUserIds = new Set((activeUsers ?? []).map((user) => user.id));
+  const officerIds = new Set([
+    ...(administrators ?? []).map((officer) => officer.user_id),
+    ...(membershipOfficers ?? []).map((officer) => officer.user_id),
+  ].filter((userId) => activeUserIds.has(userId)));
+  const planLabel = planName || "membership";
+  const isConfigurationProblem = reason === "configuration";
+  const officerBody = isConfigurationProblem
+    ? `${application.full_name}'s ${planLabel} application is saved but cannot continue because the ${billingYear} online payment fee is not fully set up. Set the annual fee, then ask the applicant to use their existing payment link.`
+    : `${application.full_name}'s ${planLabel} application is saved, but the online payment service did not create a checkout page. Check the payment service and ask the applicant to use their existing payment link when it is available.`;
+  if (officerIds.size) {
+    await admin.from("membership_notifications").upsert([...officerIds].map((recipientUserId) => ({
+      application_id: application.id,
+      recipient_user_id: recipientUserId,
+      kind: "membership.application-payment-attention-officer",
+      title: isConfigurationProblem ? "Online payment setup needed" : "Online payment could not be started",
+      body: officerBody,
+      action_href: isConfigurationProblem
+        ? "/admin/memberships?section=plans#plans"
+        : "/admin/memberships?section=online-payment-problems#online-payment-problems",
+      email_status: "cancelled",
+      deduplication_key: `membership-checkout-${reason}-${application.id}-${recipientUserId}`,
+    })), { onConflict: "deduplication_key", ignoreDuplicates: true });
+  }
+}
+
+async function resolveApplicationCheckoutProblems(applicationId: string) {
+  const admin = createServiceClient();
+  const now = new Date().toISOString();
+  await Promise.all([
+    admin.from("membership_notifications").update({ email_status: "cancelled", updated_at: now })
+      .eq("application_id", applicationId)
+      .eq("kind", "membership.application-payment-unavailable")
+      .in("email_status", ["queued", "failed"]),
+    admin.from("membership_notifications").update({ read_at: now, updated_at: now })
+      .eq("application_id", applicationId)
+      .eq("kind", "membership.application-payment-attention-officer")
+      .is("read_at", null),
+  ]);
+}
+
+export async function createApplicationCheckout(applicationId: string, resumeHref: string | null = null) {
   const admin = createServiceClient();
   const { data: application, error } = await admin.from("membership_applications")
-    .select("id,contact_email,full_name,auto_renew,created_at,requested_plan_id,status")
+    .select("id,contact_email,full_name,auto_renew,created_at,requested_plan_id,status,date_of_birth,student_declaration")
     .eq("id", applicationId).maybeSingle();
   if (error || !application || application.status !== "awaiting_payment") {
     throw new Error("This membership application is not ready for payment.");
   }
 
   const checkoutApplication = application as CheckoutApplication;
-  const createdAt = new Date(checkoutApplication.created_at);
-  const billingYear = membershipBillingYear(createdAt);
-  const [{ data: plan }, { data: price }] = await Promise.all([
+  const paymentDate = new Date();
+  const billingYear = membershipBillingYear(paymentDate);
+  const [{ data: plan }, price] = await Promise.all([
     admin.from("membership_plans")
-      .select("id,name,stripe_product_id")
-      .eq("id", checkoutApplication.requested_plan_id).maybeSingle(),
-    admin.from("membership_plan_prices")
-      .select("id,amount_pence,stripe_price_id")
-      .eq("plan_id", checkoutApplication.requested_plan_id)
-      .eq("membership_year", billingYear).eq("active", true).maybeSingle(),
+      .select("id,name,slug,minimum_age,maximum_age,stripe_product_id")
+      .eq("id", checkoutApplication.requested_plan_id).eq("active", true).maybeSingle(),
+    ensureMembershipPlanPrice(checkoutApplication.requested_plan_id, billingYear).catch(() => null),
   ]);
   if (!plan?.stripe_product_id || !price?.stripe_price_id) {
-    throw new Error("Online membership payment is not configured for this plan.");
+    await recordApplicationCheckoutProblem(checkoutApplication, plan?.name ?? null, billingYear, "configuration", resumeHref);
+    throw new MembershipCheckoutUnavailableError();
   }
 
-  const initialAmount = proratedMembershipFee(price.amount_pence, createdAt);
+  if (!plan || plan.id !== checkoutApplication.requested_plan_id) {
+    throw new Error("This membership type is no longer available.");
+  }
+  const paymentAge = ageOn(checkoutApplication.date_of_birth, paymentDate);
+  if (paymentAge < plan.minimum_age || paymentAge > plan.maximum_age
+    || (plan.slug === "student" && !checkoutApplication.student_declaration)) {
+    await admin.from("membership_notifications").insert({
+      application_id: checkoutApplication.id,
+      kind: "membership.plan-reassignment-required",
+      title: "Membership type needs reassignment",
+      body: `${checkoutApplication.full_name}'s eligibility changed before payment. Choose the correct membership type before issuing another payment link.`,
+      action_href: "/admin/memberships?section=applications#applications",
+      email_status: "cancelled",
+      deduplication_key: `membership-plan-reassignment-${checkoutApplication.id}-${paymentAge}`,
+    });
+    throw new Error("This membership type needs officer reassignment before payment.");
+  }
+  const initialAmount = proratedMembershipFee(price.amount_pence, paymentDate);
   const renewalAt = membershipRenewalAt(billingYear);
+  const renewalPrice = await ensureMembershipPlanPrice(checkoutApplication.requested_plan_id, billingYear + 1)
+    .catch(() => null);
+  if (!renewalPrice?.stripe_price_id) {
+    await recordApplicationCheckoutProblem(checkoutApplication, plan.name, billingYear + 1, "configuration", resumeHref);
+    throw new MembershipCheckoutUnavailableError();
+  }
+  const reservation = await reserveCheckoutAttempt({
+    purpose: "application",
+    applicationId: checkoutApplication.id,
+    membershipYear: billingYear,
+    planPriceId: price.id,
+    amountPence: initialAmount,
+    autoRenew: checkoutApplication.auto_renew,
+  });
+  if (reservation.existingUrl) return reservation.existingUrl;
   const origin = getTrustedAppOrigin();
-  const session = await getStripe().checkout.sessions.create({
-    integration_identifier: MEMBERSHIP_INTEGRATION_IDENTIFIER,
-    mode: "subscription",
-    customer_email: checkoutApplication.contact_email,
-    client_reference_id: checkoutApplication.id,
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: "gbp",
-          unit_amount: initialAmount,
-          product: plan.stripe_product_id,
+  let checkoutUrl: string | null = null;
+  try {
+    const session = await getStripe().checkout.sessions.create({
+      integration_identifier: MEMBERSHIP_INTEGRATION_IDENTIFIER,
+      mode: "subscription",
+      customer_email: checkoutApplication.contact_email,
+      client_reference_id: checkoutApplication.id,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "gbp",
+            unit_amount: initialAmount,
+            product: plan.stripe_product_id,
+          },
+        },
+        { quantity: 1, price: renewalPrice.stripe_price_id },
+      ],
+      custom_text: {
+        submit: {
+          message: membershipCheckoutDisclosure(
+            initialAmount,
+            renewalPrice.amount_pence,
+            billingYear,
+            checkoutApplication.auto_renew,
+          ),
         },
       },
-      { quantity: 1, price: price.stripe_price_id },
-    ],
-    metadata: {
-      ydsme_integration: "memberships",
-      membership_application_id: checkoutApplication.id,
-      membership_plan_price_id: price.id,
-      membership_initial_amount_pence: String(initialAmount),
-      membership_auto_renew: String(checkoutApplication.auto_renew),
-    },
-    subscription_data: {
-      trial_end: Math.floor(renewalAt.getTime() / 1000),
       metadata: {
         ydsme_integration: "memberships",
         membership_application_id: checkoutApplication.id,
         membership_plan_price_id: price.id,
+        membership_year: String(billingYear),
+        membership_initial_amount_pence: String(initialAmount),
+        membership_auto_renew: String(checkoutApplication.auto_renew),
+        membership_checkout_attempt_id: reservation.attempt.attempt_id,
       },
-    },
-    success_url: `${origin}/membership?application=payment-received`,
-    cancel_url: `${origin}/membership?application=payment-cancelled`,
-  });
-  if (!session.url) throw new Error("Stripe Checkout did not return a secure payment URL.");
-  return session.url;
+      subscription_data: {
+        // The separately priced one-time line pays for the current term. A
+        // trial ending on 1 January prevents Stripe from also prorating the
+        // recurring annual item before its first full-year charge.
+        trial_end: Math.floor(renewalAt.getTime() / 1000),
+        metadata: {
+          ydsme_integration: "memberships",
+          membership_application_id: checkoutApplication.id,
+          membership_plan_price_id: renewalPrice.id,
+          membership_year: String(billingYear + 1),
+          membership_renewal_at: renewalAt.toISOString(),
+          membership_checkout_attempt_id: reservation.attempt.attempt_id,
+          membership_auto_renew: String(checkoutApplication.auto_renew),
+        },
+      },
+      success_url: `${origin}/membership/apply?application=payment-received`,
+      cancel_url: `${origin}/membership/apply?application=payment-cancelled`,
+    }, {
+      idempotencyKey: `membership-application-${checkoutApplication.id}-${billingYear}-${price.version}-${initialAmount}-${checkoutApplication.auto_renew}`,
+    });
+    await attachCheckoutSession(reservation.attempt.attempt_id, session.id, session.expires_at);
+    checkoutUrl = session.url;
+  } catch (error) {
+    console.error(
+      "Membership Checkout Session creation failed",
+      error instanceof Error ? error.name : "UnknownProviderError",
+    );
+    await admin.from("membership_checkout_attempts").update({
+      status: "failed", last_error: "The payment provider did not create a checkout page.", updated_at: new Date().toISOString(),
+    }).eq("id", reservation.attempt.attempt_id).eq("status", "creating");
+    await recordApplicationCheckoutProblem(checkoutApplication, plan.name, billingYear, "provider", resumeHref);
+    throw new MembershipCheckoutUnavailableError();
+  }
+  if (!checkoutUrl) {
+    await recordApplicationCheckoutProblem(checkoutApplication, plan.name, billingYear, "provider", resumeHref);
+    throw new MembershipCheckoutUnavailableError();
+  }
+  await resolveApplicationCheckoutProblems(checkoutApplication.id);
+  return checkoutUrl;
 }
 
 export async function createApplicationCheckoutFromToken(token: string) {
@@ -239,7 +611,35 @@ export async function createApplicationCheckoutFromToken(token: string) {
   if (error || !data || data.status !== "awaiting_payment" || new Date(data.verification_expires_at) <= new Date()) {
     throw new Error("This membership payment link is no longer valid.");
   }
-  return createApplicationCheckout(data.id);
+  return createApplicationCheckout(data.id, `/membership/checkout?token=${encodeURIComponent(token)}`);
+}
+
+export async function getApplicationCheckoutSummaryFromToken(token: string) {
+  if (token.length < 20 || token.length > 200) return null;
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_applications")
+    .select("id,full_name,requested_plan_id,status,verification_expires_at,auto_renew,membership_plans(name,active)")
+    .eq("verification_token_hash", membershipTokenHash(token)).maybeSingle();
+  if (error || !data || data.status !== "awaiting_payment"
+    || new Date(data.verification_expires_at) <= new Date()) return null;
+  const plan = Array.isArray(data.membership_plans) ? data.membership_plans[0] : data.membership_plans;
+  if (!plan?.active) return null;
+  const paymentDate = new Date();
+  const membershipYear = membershipBillingYear(paymentDate);
+  const [price, renewalPrice] = await Promise.all([
+    ensureMembershipPlanPrice(data.requested_plan_id, membershipYear).catch(() => null),
+    ensureMembershipPlanPrice(data.requested_plan_id, membershipYear + 1).catch(() => null),
+  ]);
+  if (!price || !renewalPrice) return null;
+  return {
+    applicationId: data.id,
+    fullName: data.full_name,
+    planName: plan.name,
+    membershipYear,
+    initialAmountPence: proratedMembershipFee(price.amount_pence, paymentDate),
+    annualAmountPence: renewalPrice.amount_pence,
+    autoRenew: data.auto_renew,
+  };
 }
 
 export async function createMembershipPortal(userId: string) {
@@ -259,20 +659,41 @@ export async function createMembershipPortal(userId: string) {
 export async function createMemberRenewalCheckout(userId: string, autoRenew: boolean) {
   const admin = createServiceClient();
   const { data: member, error } = await admin.from("members")
-    .select("id,full_name,contact_email,current_plan_id,effective_state,membership_subscriptions(stripe_customer_id,status)")
+    .select("id,full_name,contact_email,current_plan_id,effective_state,membership_subscriptions(stripe_customer_id,status),honorary_memberships(status,revoked_effective_on,replacement_plan_id)")
     .eq("auth_user_id", userId).maybeSingle();
   if (error || !member?.contact_email || !member.current_plan_id
-    || ["honorary", "suspended", "archived"].includes(member.effective_state)) {
+    || ["suspended", "archived"].includes(member.effective_state)) {
     throw new Error("This membership is not available for online renewal.");
   }
   const now = new Date();
-  const membershipYear = membershipBillingYear(now);
-  const [{ data: price }, { data: term }, { data: plan }] = await Promise.all([
-    admin.from("membership_plan_prices").select("id,amount_pence,stripe_price_id")
-      .eq("plan_id", member.current_plan_id).eq("membership_year", membershipYear).eq("active", true).maybeSingle(),
+  const honoraryRows = member.honorary_memberships as Array<{
+    status: string; revoked_effective_on: string | null; replacement_plan_id: string | null;
+  }> | null;
+  const honoraryTransition = member.effective_state === "honorary"
+    ? honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+      && item.revoked_effective_on && item.replacement_plan_id) ?? null
+    : null;
+  if (member.effective_state === "honorary" && !honoraryTransition) {
+    throw new Error("Honorary membership has no payment or renewal.");
+  }
+  if (!honoraryTransition && !membershipRenewalIsOpen(now) && member.effective_state !== "lapsed") {
+    throw new Error("Membership renewals open on 1 November.");
+  }
+  const transitionDate = honoraryTransition?.revoked_effective_on
+    ? new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`) : null;
+  const membershipYear = transitionDate?.getUTCFullYear() ?? membershipRenewalYear(now);
+  const { data: transition } = honoraryTransition ? { data: null } : await admin.from("membership_plan_transitions")
+    .select("to_plan_id,status").eq("member_id", member.id).eq("membership_year", membershipYear)
+    .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
+  if (transition?.status === "awaiting_student_review") {
+    throw new Error("The Student membership request must be decided before payment.");
+  }
+  const renewalPlanId = honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id;
+  const [price, { data: term }, { data: plan }] = await Promise.all([
+    ensureMembershipPlanPrice(renewalPlanId, membershipYear).catch(() => null),
     admin.from("membership_terms").select("status,amount_paid_pence")
       .eq("member_id", member.id).eq("membership_year", membershipYear).maybeSingle(),
-    admin.from("membership_plans").select("name,stripe_product_id").eq("id", member.current_plan_id).maybeSingle(),
+    admin.from("membership_plans").select("name,stripe_product_id").eq("id", renewalPlanId).maybeSingle(),
   ]);
   if (term?.status === "paid" || (term?.amount_paid_pence ?? 0) > 0) {
     throw new Error("This membership term is already paid.");
@@ -280,14 +701,21 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew: boo
   if (!price?.stripe_price_id || !plan?.stripe_product_id) {
     throw new Error("Online renewal is not configured for this membership tier.");
   }
-  const amount = membershipYear > now.getUTCFullYear()
-    ? price.amount_pence
-    : proratedMembershipFee(price.amount_pence, now);
+  const amount = transitionDate && (transitionDate.getUTCMonth() !== 0 || transitionDate.getUTCDate() !== 1)
+    ? proratedMembershipFee(price.amount_pence, transitionDate)
+    : price.amount_pence;
   const subscriptions = member.membership_subscriptions as Array<{ stripe_customer_id: string; status: string }> | null;
   if (subscriptions?.[0] && !["canceled", "incomplete_expired"].includes(subscriptions[0].status)) {
-    throw new Error("An existing Stripe subscription must be managed instead of replaced.");
+    throw new Error("An existing automatic renewal must be managed instead of replaced.");
   }
   const customerId = subscriptions?.[0]?.stripe_customer_id;
+  const renewalPrice = await ensureMembershipPlanPrice(renewalPlanId, membershipYear + 1);
+  if (!renewalPrice.stripe_price_id) throw new Error("The following annual membership fee is not configured.");
+  const reservation = await reserveCheckoutAttempt({
+    purpose: honoraryTransition ? "honorary_transition" : "renewal", memberId: member.id, membershipYear,
+    planPriceId: price.id, amountPence: amount, autoRenew,
+  });
+  if (reservation.existingUrl) return reservation.existingUrl;
   const session = await getStripe().checkout.sessions.create({
     integration_identifier: MEMBERSHIP_INTEGRATION_IDENTIFIER,
     mode: "subscription",
@@ -295,8 +723,13 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew: boo
     client_reference_id: member.id,
     line_items: [
       { quantity: 1, price_data: { currency: "gbp", unit_amount: amount, product: plan.stripe_product_id } },
-      { quantity: 1, price: price.stripe_price_id },
+      { quantity: 1, price: renewalPrice.stripe_price_id },
     ],
+    custom_text: {
+      submit: {
+        message: membershipCheckoutDisclosure(amount, renewalPrice.amount_pence, membershipYear, autoRenew),
+      },
+    },
     metadata: {
       ydsme_integration: "memberships",
       membership_member_id: member.id,
@@ -304,19 +737,31 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew: boo
       membership_year: String(membershipYear),
       membership_initial_amount_pence: String(amount),
       membership_auto_renew: String(autoRenew),
+      membership_checkout_attempt_id: reservation.attempt.attempt_id,
+      ...(honoraryTransition?.revoked_effective_on
+        ? { membership_honorary_transition_on: honoraryTransition.revoked_effective_on }
+        : {}),
     },
     subscription_data: {
+      // The one-time line pays the selected term; the annual item starts at
+      // the following 1 January without a second prorated charge.
       trial_end: Math.floor(membershipRenewalAt(membershipYear).getTime() / 1000),
       metadata: {
         ydsme_integration: "memberships",
         membership_member_id: member.id,
-        membership_plan_price_id: price.id,
-        membership_year: String(membershipYear),
+        membership_plan_price_id: renewalPrice.id,
+        membership_year: String(membershipYear + 1),
+        membership_renewal_at: membershipRenewalAt(membershipYear).toISOString(),
+        membership_checkout_attempt_id: reservation.attempt.attempt_id,
+        membership_auto_renew: String(autoRenew),
       },
     },
     success_url: `${getTrustedAppOrigin()}/account?notice=payment-received`,
     cancel_url: `${getTrustedAppOrigin()}/account?error=payment-cancelled`,
+  }, {
+    idempotencyKey: `membership-renewal-${member.id}-${membershipYear}-${price.version}-${amount}-${autoRenew}`,
   });
+  await attachCheckoutSession(reservation.attempt.attempt_id, session.id, session.expires_at);
   if (!session.url) throw new Error("Stripe Checkout did not return a secure payment URL.");
   return session.url;
 }
@@ -328,28 +773,96 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew: boo
 export async function ensureMemberPortalInvitation(memberId: string) {
   const admin = createServiceClient();
   const { data: member, error: memberError } = await admin.from("members")
-    .select("id,full_name,contact_email,auth_user_id")
+    .select("id,full_name,contact_email,contact_role,portal_invitation_status,auth_user_id")
     .eq("id", memberId).maybeSingle();
   if (memberError) throw new Error("Unable to prepare the member portal invitation.");
-  if (!member?.contact_email || member.auth_user_id) return;
+  if (!member) return;
+
+  const requestDelivery = async () => {
+    const { error } = await admin.rpc("request_membership_notification_delivery");
+    if (error) console.error("Unable to request membership activation email delivery.", error.message);
+  };
+
+  const releaseActivationEmail = async (authUserId: string | null, actionHref: string | null, extraBody?: string) => {
+    const { data: notices, error: noticeError } = await admin.from("membership_notifications")
+      .select("id,body").eq("member_id", member.id).eq("kind", "membership.activated")
+      .ilike("recipient_email", member.contact_email ?? "").in("email_status", ["cancelled", "failed"]);
+    if (noticeError) throw new Error("Unable to prepare the membership activation email.");
+    for (const notice of notices ?? []) {
+      const { error } = await admin.from("membership_notifications").update({
+        recipient_user_id: authUserId,
+        portal_visible: Boolean(authUserId),
+        action_href: actionHref,
+        body: extraBody ? `${notice.body} ${extraBody}` : notice.body,
+        email_status: "queued",
+        scheduled_for: new Date().toISOString(),
+        last_email_error: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", notice.id);
+      if (error) throw new Error("Unable to prepare the membership activation email.");
+    }
+    if (notices?.length) await requestDelivery();
+  };
+
+  const linkPortalNotices = async (authUserId: string, sendActivationEmail: boolean) => {
+    const { error } = await admin.from("membership_notifications").update({
+      recipient_user_id: authUserId,
+      updated_at: new Date().toISOString(),
+    }).eq("member_id", member.id)
+      .eq("portal_visible", true)
+      .is("recipient_user_id", null);
+    if (error) throw new Error("Unable to link membership notifications to the portal account.");
+
+    if (sendActivationEmail && member.contact_email) {
+      await releaseActivationEmail(authUserId, "/auth/switch-account?next=/account");
+    }
+  };
+
+  if (member.auth_user_id) {
+    await linkPortalNotices(member.auth_user_id, true);
+    return;
+  }
+  if (!member.contact_email) {
+    await admin.from("members").update({ portal_invitation_status: "not_requested" }).eq("id", member.id);
+    return;
+  }
+  if (member.contact_role === "guardian" || member.portal_invitation_status === "declined") {
+    await admin.from("members").update({ portal_invitation_status: "not_requested" }).eq("id", member.id);
+    await releaseActivationEmail(null, null, "A personal portal account has not been created. Contact the membership officer if the member later has a unique login email.");
+    return;
+  }
 
   const { data: profile, error: profileError } = await admin.from("users")
     .select("id").ilike("email", member.contact_email).maybeSingle();
   if (profileError) throw new Error("Unable to check the member portal account.");
   if (profile) {
-    const { error } = await admin.from("members").update({ auth_user_id: profile.id }).eq("id", member.id);
-    if (error) throw new Error("Unable to link the member portal account.");
+    // An email match is only a correspondence signal. It is never sufficient
+    // evidence that this Auth account belongs to this canonical member.
+    await admin.from("members").update({ portal_invitation_status: "blocked_shared" }).eq("id", member.id);
+    await releaseActivationEmail(null, null, "This correspondence email already has a website login. Membership is active, but a different email or an officer-confirmed portal assignment is needed for this member's personal portal access.");
     return;
   }
 
   const { data, error } = await admin.auth.admin.inviteUserByEmail(member.contact_email, {
-    data: { full_name: member.full_name },
-    redirectTo: `${getTrustedAppOrigin()}/auth/callback?next=/reset-password`,
+    data: { full_name: member.full_name, membership_active: true },
+    redirectTo: `${getTrustedAppOrigin()}/auth/invite?next=/account`,
   });
   if (error || !data.user) throw new Error("Unable to send the member portal invitation.");
   const { error: linkError } = await admin.from("members")
-    .update({ auth_user_id: data.user.id })
+    .update({ auth_user_id: data.user.id, portal_invitation_status: "sent" })
     .eq("id", member.id)
     .is("auth_user_id", null);
   if (linkError) throw new Error("Unable to link the invited portal account.");
+  await linkPortalNotices(data.user.id, false);
+
+  // The account invitation is the member's actionable activation email. Keep
+  // the activation notice in the portal without sending a second email.
+  const { error: suppressionError } = await admin.from("membership_notifications").update({
+    email_status: "cancelled",
+    updated_at: new Date().toISOString(),
+  }).eq("member_id", member.id)
+    .eq("kind", "membership.activated")
+    .eq("portal_visible", true)
+    .in("email_status", ["queued", "failed"]);
+  if (suppressionError) throw new Error("Unable to streamline the membership activation email.");
 }

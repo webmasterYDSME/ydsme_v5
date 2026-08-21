@@ -33,8 +33,12 @@ begin
   end if;
   if has_column_privilege('authenticated', 'public.users', 'membership_status', 'UPDATE')
     or has_column_privilege('authenticated', 'public.users', 'legal_hold', 'UPDATE')
-    or not has_column_privilege('authenticated', 'public.users', 'full_name', 'UPDATE') then
+    or has_column_privilege('authenticated', 'public.users', 'full_name', 'UPDATE') then
     raise exception 'Member profile column privileges are incorrect';
+  end if;
+  if not has_function_privilege('authenticated', 'public.update_own_member_profile(text,text,text)', 'EXECUTE')
+    or has_function_privilege('anon', 'public.update_own_member_profile(text,text,text)', 'EXECUTE') then
+    raise exception 'Atomic member profile RPC privileges are incorrect';
   end if;
   if has_function_privilege('authenticated', 'public.update_users(uuid,text,text,text,text,text,text,jsonb,boolean)', 'EXECUTE') then
     raise exception 'A legacy security-definer function is exposed as an RPC';

@@ -7,7 +7,7 @@ These templates are designed for Supabase Auth and use its supported Go-template
 | Supabase template | Subject | HTML file |
 | --- | --- | --- |
 | Confirm signup | Confirm your York Model Engineers email | `confirmation.html` |
-| Invite user | Your invitation to York Model Engineers | `invite.html` |
+| Invite user | Your York Model Engineers account is ready | `invite.html` |
 | Magic link | Your secure York Model Engineers sign-in link | `magic_link.html` |
 | Reset password | Reset your York Model Engineers password | `recovery.html` |
 | Change email address | Confirm your new York Model Engineers email | `email_change.html` |

@@ -14,7 +14,7 @@ import {
   type MemberImportPreview,
 } from "@/lib/membermojo";
 import { MemberMojoCsvError, MEMBERMOJO_MAX_FILE_BYTES } from "@/lib/membermojo-csv";
-import { membershipBillingEnabled } from "@/lib/features";
+import { membershipMode } from "@/lib/features";
 
 export type MemberImportActionState = {
   status: "idle" | "error" | "success";
@@ -39,7 +39,7 @@ export async function previewMemberMojoImport(
   _previousState: MemberImportActionState,
   formData: FormData,
 ): Promise<MemberImportActionState> {
-  if (membershipBillingEnabled()) return { status: "error", message: "The final MemberMojo migration is complete. Use the website membership register." };
+  if (["live", "drain"].includes(membershipMode())) return { status: "error", message: "The final MemberMojo migration is complete. Use the website membership register." };
   const { user } = await requireCapability("members.manage");
   const mode = modeSchema.safeParse(formData.get("mode"));
   const file = formData.get("file");
@@ -78,7 +78,7 @@ export async function applyMemberMojoImport(
   _previousState: MemberImportApplyActionState,
   formData: FormData,
 ): Promise<MemberImportApplyActionState> {
-  if (membershipBillingEnabled()) return { status: "error", message: "The final MemberMojo migration is complete. Further imports are disabled." };
+  if (["live", "drain"].includes(membershipMode())) return { status: "error", message: "The final MemberMojo migration is complete. Further imports are disabled." };
   const { user } = await requireCapability("members.manage");
   const confirmation = applySchema.safeParse({
     importId: formData.get("importId"),
@@ -136,7 +136,7 @@ function portalReviewError(message: string) {
 }
 
 export async function resolveMemberMojoPortalAccessReview(formData: FormData) {
-  if (membershipBillingEnabled()) redirect("/admin/memberships");
+  if (["live", "drain"].includes(membershipMode())) redirect("/admin/memberships");
   const { user } = await requireCapability("members.manage");
   const parsed = portalReviewSchema.safeParse({
     membershipRecordId: formData.get("membershipRecordId"),
