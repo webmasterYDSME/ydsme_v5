@@ -1,4 +1,4 @@
-import { HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
+import { Banknote, HeartHandshake, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -9,11 +9,13 @@ import {
   saveSiteConfig,
 } from "@/lib/actions/content";
 import { defaultDonationSettings } from "@/lib/donations";
+import { saveMembershipPaymentSettings } from "@/lib/actions/membership";
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
+import { membershipAdministrationEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -46,15 +48,19 @@ export default async function Settings({
 }) {
   const [query] = await Promise.all([searchParams, requireCapability("settings.manage")]);
   const admin = createAdminClient();
-  const requestedTab = ["committee", "donations", "site"].includes(query.tab || "") ? query.tab! : "committee";
-  const tab = query.notice === "donations-saved" ? "donations" : query.notice === "config-saved" ? "site" : requestedTab;
+  const membershipEnabled = membershipAdministrationEnabled();
+  const availableTabs = ["committee", "donations", ...(membershipEnabled ? ["membership"] : []), "site"];
+  const requestedTab = availableTabs.includes(query.tab || "") ? query.tab! : "committee";
+  const tab = query.notice === "donations-saved" ? "donations"
+    : query.notice === "membership-payment-settings-saved" && membershipEnabled ? "membership"
+      : query.notice === "config-saved" ? "site" : requestedTab;
   const committeePageSize = 8;
   const requestedPage = Number.parseInt(query.page || "1", 10);
   const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const committeeQuery = tab === "committee"
     ? admin.from("committees").select("id,name,title,email,file_url", { count: "exact" }).order("id").range((currentPage - 1) * committeePageSize, currentPage * committeePageSize - 1)
     : admin.from("committees").select("id", { count: "exact", head: true });
-  const [committeeResult, configResult, socialResult, affiliateResult, campaignResult] = await Promise.all([
+  const [committeeResult, configResult, socialResult, affiliateResult, campaignResult, membershipPaymentResult] = await Promise.all([
     committeeQuery,
     admin
       .from("configs")
@@ -64,8 +70,13 @@ export default async function Settings({
     tab === "site" ? admin.from("site_social_links").select("name,url,position").order("position") : Promise.resolve({ data: [], error: null }),
     tab === "site" ? admin.from("site_affiliates").select("name,url,logo_path,position").order("position") : Promise.resolve({ data: [], error: null }),
     tab === "donations" ? admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence") : Promise.resolve({ data: [], error: null }),
+    membershipEnabled
+      ? admin.from("membership_payment_settings_versions")
+        .select("id,version,configured,treasurer_name,treasurer_email,treasurer_phone,bank_account_name,bank_sort_code,bank_account_number,bank_transfer_instructions,cheque_payee,cheque_delivery_instructions,cash_instructions")
+        .eq("active", true).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
-  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || campaignResult.error || !configResult.data) {
+  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || campaignResult.error || membershipPaymentResult.error || !configResult.data || (membershipEnabled && !membershipPaymentResult.data)) {
     throw new Error("Unable to load Society settings.");
   }
   const config = configResult.data;
@@ -86,6 +97,7 @@ export default async function Settings({
     generic: generic ? { enabled: generic.enabled, title: generic.title, description: generic.description, buttonLabel: generic.button_label } : defaultDonationSettings.generic,
     target: target ? { enabled: target.enabled, title: target.title, description: target.description, buttonLabel: target.button_label, targetPence: Number(target.target_pence), raisedPence: 0 } : defaultDonationSettings.target,
   };
+  const membershipPayment = membershipPaymentResult.data;
 
   return (
     <div className="portal-content">
@@ -99,13 +111,50 @@ export default async function Settings({
       </header>
 
       {query.error ? <p className="form-message error">{query.error}</p> : null}
-      {query.notice ? <p className="form-message success">{query.notice === "donations-saved" ? "Donation appeals saved." : "Society settings saved."}</p> : null}
+      {query.notice ? <p className="form-message success">{query.notice === "donations-saved" ? "Donation appeals saved."
+        : query.notice === "membership-payment-settings-saved" ? "Membership payment instructions saved as a new version."
+          : "Society settings saved."}</p> : null}
 
       <PortalTabs label="Committee and site settings" tabs={[
         { href: "/settings?tab=committee", label: "Committee roster", count: committeeCount, current: tab === "committee" },
         { href: "/settings?tab=donations", label: "Donation appeals", current: tab === "donations" },
+        ...(membershipEnabled ? [{ href: "/settings?tab=membership", label: "Membership payments", current: tab === "membership" }] : []),
         { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
       ]}/>
+
+      {membershipEnabled && tab === "membership" && membershipPayment ? <section className="settings-tab-panel">
+        <header className="settings-panel-heading"><div><span>Membership administration</span><h2>Treasurer and offline payments</h2><p>These versioned details are used in verified bank-transfer, cheque and cash instructions. Existing applications retain the version they received.</p></div><Banknote/></header>
+        {!membershipPayment.configured ? <p className="form-message error">Bank transfer remains unavailable to applicants until real Society account details are saved.</p> : null}
+        <form action={saveMembershipPaymentSettings} className="editor-form">
+          <fieldset className="wide settings-fieldset">
+            <legend>Treasurer contact</legend>
+            <div className="settings-field-grid">
+              <label>Name or role<input name="treasurer_name" defaultValue={membershipPayment.treasurer_name} required/></label>
+              <label>Email<input type="email" name="treasurer_email" defaultValue={membershipPayment.treasurer_email} required/></label>
+              <label>Telephone <span className="sr-only">optional</span><input name="treasurer_phone" defaultValue={membershipPayment.treasurer_phone || ""}/></label>
+            </div>
+          </fieldset>
+          <fieldset className="wide settings-fieldset">
+            <legend>Bank transfer</legend>
+            <p className="form-help">Bank details are sent only after email verification and any required approval.</p>
+            <div className="settings-field-grid">
+              <label>Account name<input name="bank_account_name" defaultValue={membershipPayment.bank_account_name} required/></label>
+              <label>Sort code<input name="bank_sort_code" inputMode="numeric" pattern="[0-9]{2}-[0-9]{2}-[0-9]{2}" defaultValue={membershipPayment.bank_sort_code} required/></label>
+              <label>Account number<input name="bank_account_number" inputMode="numeric" pattern="[0-9]{8}" defaultValue={membershipPayment.bank_account_number} required/></label>
+              <label className="wide">Additional instructions<textarea name="bank_transfer_instructions" rows={3} defaultValue={membershipPayment.bank_transfer_instructions} required/></label>
+            </div>
+          </fieldset>
+          <fieldset className="wide settings-fieldset">
+            <legend>Cheque and cash</legend>
+            <div className="settings-field-grid">
+              <label>Cheque payee<input name="cheque_payee" defaultValue={membershipPayment.cheque_payee} required/></label>
+              <label className="wide">Cheque delivery instructions<textarea name="cheque_delivery_instructions" rows={3} defaultValue={membershipPayment.cheque_delivery_instructions} required/></label>
+              <label className="wide">Cash instructions<textarea name="cash_instructions" rows={3} defaultValue={membershipPayment.cash_instructions} required/></label>
+            </div>
+          </fieldset>
+          <PendingSubmitButton className="button dark">Save a new payment-settings version</PendingSubmitButton>
+        </form>
+      </section> : null}
 
       {tab === "site" ? <section className="settings-tab-panel">
         <header className="settings-panel-heading"><div><span>Public Society record</span><h2>Society information &amp; links</h2><p>Details saved here are used across the public website and legal information.</p></div><SettingsIcon/></header>

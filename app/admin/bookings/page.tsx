@@ -46,7 +46,7 @@ export default async function AdminBookingsPage({ searchParams }: { searchParams
   const [eventResult, bookingResult, summaryResult] = await Promise.all([
     eventsQuery,
     bookingQuery.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
-    admin.rpc("booking_management_summary", { p_event_id: eventId }),
+    admin.rpc("booking_management_summary", { p_event_id: eventId ?? undefined }),
   ]);
   const { data: events, error: eventError } = eventResult;
   const { data: bookings, count, error: bookingError } = bookingResult;

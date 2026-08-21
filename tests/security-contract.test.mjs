@@ -304,14 +304,15 @@ test("ships database and HTTP defence in depth", async () => {
   assert.match(config, /Permissions-Policy/);
 });
 
-test("bounds portal reads and narrows member profile updates", async () => {
-  const [adminPage, settings, account, audit, summaries, profileGrant] = await Promise.all([
+test("bounds portal reads and synchronizes member profile updates", async () => {
+  const [adminPage, settings, account, profileAction, audit, summaries, profileSync] = await Promise.all([
     read("app/admin/[section]/page.tsx"),
     read("app/settings/page.tsx"),
     read("app/account/page.tsx"),
+    read("lib/actions/content.ts"),
     read("app/admin/audit/page.tsx"),
     read("supabase/migrations/202608180024_portal_management_summaries.sql"),
-    read("supabase/migrations/202608180025_limit_member_profile_updates.sql"),
+    read("supabase/migrations/202608200034_membership_portal_profile_sync.sql"),
   ]);
   assert.match(adminPage, /\.range\(\(currentPage - 1\) \* ANNOUNCEMENT_PAGE_SIZE/);
   assert.match(adminPage, /\.in\("reference_id", visibleWorkshopIds\)/);
@@ -321,7 +322,9 @@ test("bounds portal reads and narrows member profile updates", async () => {
   assert.doesNotMatch(account, /createAdminClient/);
   assert.doesNotMatch(audit, /before_state,after_state/);
   assert.match(summaries, /grant execute on function public\.donation_management_summary[\s\S]*to service_role/);
-  assert.match(profileGrant, /grant update \(title, full_name, contact_number\)/);
+  assert.match(profileAction, /rpc\("update_own_member_profile"/);
+  assert.match(profileSync, /revoke update on public\.users from authenticated/);
+  assert.match(profileSync, /update public\.members[\s\S]*where auth_user_id = v_user_id/);
 });
 
 test("defers document delivery and rejects active PDF content", async () => {
@@ -425,7 +428,7 @@ test("keeps donation checkout server-side and administrator controlled", async (
 });
 
 test("keeps visitor bookings private, capacity-safe and staff verified", async () => {
-  const [migration, abuseMigration, abuseHelper, actions, turnstile, form, admin, data, email, ticket, cookieNotice, privacyNotice] = await Promise.all([
+  const [migration, abuseMigration, abuseHelper, actions, turnstile, form, admin, data, email, emailDelivery, ticket, cookieNotice, privacyNotice] = await Promise.all([
     read("supabase/migrations/202608180003_event_bookings.sql"),
     read("supabase/migrations/202608180020_booking_abuse_controls.sql"),
     read("lib/booking-abuse.ts"),
@@ -435,6 +438,7 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
     read("app/admin/bookings/page.tsx"),
     read("lib/data.ts"),
     read("lib/booking-email.ts"),
+    read("lib/email-delivery.ts"),
     read("lib/booking-ticket.ts"),
     read("app/cookie-policy/page.tsx"),
     read("app/privacy-policy/page.tsx"),
@@ -457,6 +461,9 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(abuseHelper, /createHmac\("sha256"/);
   assert.match(turnstile, /TURNSTILE_SECRET_KEY/);
   assert.match(turnstile, /process\.env\.NODE_ENV !== "production"/);
+  assert.match(turnstile, /JOURNEY_TEST_MODE === "true"/);
+  assert.match(turnstile, /NEXT_PUBLIC_SUPABASE_URL === "http:\/\/127\.0\.0\.1:55321"/);
+  assert.match(turnstile, /127\\\.0\\\.0\\\.1\|localhost/);
   assert.match(actions, /requireCapability\("bookings\.manage"\)/);
   assert.match(actions, /create_event_booking_v2/);
   assert.match(actions, /\.max\(6\)/);
@@ -470,7 +477,12 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(admin, /booking_management_summary/);
   assert.match(admin, /Export CSV/);
   assert.match(data, /available_places/);
-  assert.match(email, /Idempotency-Key/);
+  assert.match(email, /sendTransactionalEmail/);
+  assert.match(emailDelivery, /Idempotency-Key/);
+  assert.match(emailDelivery, /usesLocalMailpit/);
+  assert.match(emailDelivery, /NEXT_PUBLIC_SITE_URL/);
+  assert.match(emailDelivery, /NEXT_PUBLIC_SUPABASE_URL/);
+  assert.match(emailDelivery, /LOCAL_MAILPIT_URL/);
   assert.match(email, /attachments/);
   assert.match(email, /content_id/);
   assert.match(email, /cid:\$\{ticket\.contentId\}/);
@@ -501,10 +513,11 @@ test("makes Stripe webhooks replay-safe and keeps finance private", async () => 
 });
 
 test("uses trusted origins and accepts only safe external URLs", async () => {
-  const [origin, authActions, callback, donationActions, inputs, content] = await Promise.all([
+  const [origin, authActions, callback, invite, donationActions, inputs, content] = await Promise.all([
     read("lib/trusted-origin.ts"),
     read("lib/actions/auth.ts"),
     read("app/auth/callback/route.ts"),
+    read("app/auth/invite/page.tsx"),
     read("lib/actions/donations.ts"),
     read("lib/security-input.ts"),
     read("lib/actions/content.ts"),
@@ -514,6 +527,11 @@ test("uses trusted origins and accepts only safe external URLs", async () => {
   assert.doesNotMatch(authActions, /headers\(\).*origin/s);
   assert.doesNotMatch(donationActions, /headers\(\).*origin/s);
   assert.match(callback, /getTrustedAppOrigin/);
+  assert.match(invite, /auth\.setSession/);
+  assert.match(invite, /window\.history\.replaceState/);
+  assert.match(invite, /!value\.startsWith\("\/\/"\)/);
+  assert.match(invite, /router\.replace\(next\)/);
+  assert.doesNotMatch(invite, /updateUser\(\{ password/);
   assert.match(inputs, /HTTP_PROTOCOLS\.has\(url\.protocol\)/);
   assert.match(content, /refine\(\(value\) => Boolean\(safeHttpUrl\(value\)\)/);
 });
@@ -625,4 +643,120 @@ test("keeps public reads available during the additive projection rollout", asyn
   assert.match(data, /from\("public_committee_roster"\)/);
   assert.match(data, /Permission or policy failures[\s\S]*must never fall through/);
   assert.doesNotMatch(data, /isMissingProjection[\s\S]*42501/);
+});
+
+test("enables the complete membership platform with one flag and otherwise falls back to MemberMojo", async () => {
+  const [features, membershipPage, applicationPage, accountPage, checkout, verification, guardian, switchAccount, settings, actions] = await Promise.all([
+    read("lib/features.ts"),
+    read("app/membership/page.tsx"),
+    read("app/membership/apply/page.tsx"),
+    read("app/account/page.tsx"),
+    read("app/membership/checkout/page.tsx"),
+    read("app/membership/verify/route.ts"),
+    read("app/membership/guardian-consent/page.tsx"),
+    read("app/auth/switch-account/page.tsx"),
+    read("app/settings/page.tsx"),
+    read("lib/actions/membership.ts"),
+  ]);
+  assert.match(features, /MEMBERMOJO_MEMBERSHIP_URL = "https:\/\/membermojo\.co\.uk\/york-model-engineers"/);
+  assert.match(features, /process\.env\.MEMBERSHIP_MODE/);
+  assert.doesNotMatch(features, /process\.env\.ENABLE_MEMBERSHIP/);
+  assert.match(features, /membershipBillingEnabled/);
+  assert.match(features, /membershipAdministrationEnabled/);
+  assert.match(features, /\["pilot", "live"\]\.includes\(membershipMode\(\)\)/);
+  assert.match(features, /membershipMode\(\) !== "membermojo"/);
+  assert.match(membershipPage, /href=\{enabled \? "\/membership\/apply" : MEMBERMOJO_MEMBERSHIP_URL\}/);
+  assert.doesNotMatch(membershipPage, /id="membership-application"|submitMembershipApplication/);
+  assert.match(applicationPage, /if \(!enabled\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+  assert.match(accountPage, /\{!membershipEnabled \? <div className="billing-panel">/);
+  assert.match(accountPage, /href=\{MEMBERMOJO_MEMBERSHIP_URL\}/);
+  for (const guardedRoute of [checkout, verification, guardian]) {
+    assert.match(guardedRoute, /if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+  }
+  assert.match(switchAccount, /membershipBillingEnabled/);
+  assert.match(settings, /\.\.\.\(membershipEnabled \? \[\{ href: "\/settings\?tab=membership"/);
+  assert.match(settings, /membershipEnabled && tab === "membership" && membershipPayment/);
+  assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+  assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!membershipAdministrationEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+});
+
+test("keeps membership application and callback states on the dedicated application page", async () => {
+  const [membershipPage, applicationPage, applicationWizard, eligibilityFields, actions, verification, checkout, billing] = await Promise.all([
+    read("app/membership/page.tsx"),
+    read("app/membership/apply/page.tsx"),
+    read("app/membership/apply/MembershipApplicationWizard.tsx"),
+    read("app/membership/apply/MembershipEligibilityFields.tsx"),
+    read("lib/actions/membership.ts"),
+    read("app/membership/verify/route.ts"),
+    read("app/membership/checkout/page.tsx"),
+    read("lib/membership.ts"),
+  ]);
+  assert.match(membershipPage, /redirect\(`\/membership\/apply\?application=/);
+  assert.match(applicationWizard, /action=\{submitMembershipApplication\}/);
+  const applicationSources = `${applicationPage}\n${applicationWizard}\n${eligibilityFields}`;
+  for (const field of ["plan_id", "full_name", "contact_email", "date_of_birth", "payment_method", "auto_renew", "terms"]) {
+    assert.match(applicationSources, new RegExp(`name="${field}"`));
+  }
+  assert.match(eligibilityFields, /name="date_of_birth"[\s\S]*required/);
+  assert.match(eligibilityFields, /defaultMembershipPlan/);
+  assert.match(applicationWizard, /Step \{stage \+ 1\} of \{stages\.length\}/);
+  assert.match(applicationWizard, /hidden=\{stage !== 0\}/);
+  assert.match(applicationWizard, /checkValidity\(\)/);
+  assert.match(applicationPage, /if \(outcome\)[\s\S]*membership-application-result-page/);
+  assert.match(applicationPage, /There is nothing else you need to do\./);
+  assert.match(actions, /eligibleMembershipPlans/);
+  for (const source of [actions, verification, checkout, billing]) {
+    assert.match(source, /\/membership\/apply\?application=/);
+    assert.doesNotMatch(source, /\/membership\?application=/);
+  }
+});
+
+test("links member-facing activation notices to newly created portal accounts", async () => {
+  const [routing, wording, guardianIsolation, ownership, account, actions] = await Promise.all([
+    read("supabase/migrations/202608200031_membership_portal_notification_routing.sql"),
+    read("supabase/migrations/202608200032_membership_activation_notice_wording.sql"),
+    read("supabase/migrations/202608200033_membership_guardian_notification_isolation.sql"),
+    read("supabase/migrations/202608210004_member_notification_ownership.sql"),
+    read("app/account/page.tsx"),
+    read("lib/actions/membership.ts"),
+  ]);
+  assert.match(routing, /route_membership_notification_to_portal/);
+  assert.match(routing, /link_existing_membership_notifications_to_portal/);
+  assert.match(routing, /membership\.activated', 'membership\.honorary-activated/);
+  assert.match(routing, /lower\(new\.recipient_email\) <> v_contact_email/);
+  assert.match(routing, /notify_officer_created_paid_membership/);
+  assert.match(wording, /normalise_membership_activation_notice/);
+  assert.match(guardianIsolation, /v_contact_email is null or lower\(new\.recipient_email\) <> v_contact_email/);
+  assert.match(guardianIsolation, /notification\.body like 'Guardian copy:%'/);
+  assert.match(ownership, /member\.auth_user_id = auth\.uid\(\)/);
+  assert.match(ownership, /notification\.recipient_user_id = auth\.uid\(\)/);
+  assert.match(account, /rpc\("get_own_membership_notifications"/);
+  assert.doesNotMatch(account, /createServiceClient/);
+  assert.match(actions, /rpc\("mark_own_membership_notification_read"/);
+});
+
+test("hardens membership links, duplicate identity matching, and provider failures", async () => {
+  const [nextConfig, proxy, actions, membership, webhook] = await Promise.all([
+    read("next.config.ts"),
+    read("proxy.ts"),
+    read("lib/actions/membership.ts"),
+    read("lib/membership.ts"),
+    read("app/api/stripe/webhook/route.ts"),
+  ]);
+  assert.match(proxy, /Content-Security-Policy/);
+  assert.match(proxy, /'nonce-\$\{nonce\}' 'strict-dynamic'/);
+  assert.match(proxy, /object-src 'none'/);
+  assert.match(proxy, /frame-ancestors 'none'/);
+  assert.match(nextConfig, /sensitiveMembershipPaths[\s\S]*\/membership\/verify/);
+  assert.match(nextConfig, /Referrer-Policy", value: "no-referrer"/);
+  assert.match(nextConfig, /X-Robots-Tag", value: "noindex, nofollow, noarchive"/);
+  assert.match(actions, /postgrestLikeLiteral/);
+  assert.match(actions, /normalizeIdentityName/);
+  assert.match(actions, /memberCandidates\?\.find/);
+  assert.match(actions, /applicationCandidates\?\.find/);
+  assert.doesNotMatch(actions, /\.ilike\("full_name"/);
+  assert.doesNotMatch(membership, /Membership Checkout Session creation failed[\s\S]{0,120}error\.message/);
+  assert.match(webhook, /membership-checkout-\$\{event\.type\}-\$\{session\.id\}/);
+  assert.match(webhook, /onConflict: "deduplication_key", ignoreDuplicates: true/);
+  assert.match(webhook, /if \(notificationError\) throw new Error\("Unable to queue the failed membership Checkout notice\."\)/);
 });

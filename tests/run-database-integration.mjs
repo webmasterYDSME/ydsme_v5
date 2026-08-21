@@ -25,6 +25,9 @@ let fixturesCreated = false;
 try {
   const localTests = [
     "tests/membermojo-apply.local.test.mjs",
+    "tests/membership-price-carry-forward.local.test.mjs",
+    "tests/membership-offline.local.test.mjs",
+    "tests/membership-edge-cases.local.test.mjs",
     "tests/membership-platform.local.test.mjs",
     "tests/public-project-featuring.local.test.mjs",
   ];
