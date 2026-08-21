@@ -7,11 +7,18 @@
 <body><table role="presentation" class="wrap" width="100%"><tr><td align="center" style="padding:24px 12px"><table role="presentation" class="card" width="600">
   <tr><td align="center" style="background:#10271f;border-bottom:5px solid #b98a37;padding:30px 24px 25px"><img src="{{ .SiteURL }}/ydsme-logo.png" width="88" alt="York City and District Society of Model Engineers" style="display:block;width:88px;max-width:88px;margin:0 auto 14px"><div style="color:#f7f3e9;font-family:Georgia,serif;font-size:21px;line-height:27px">York Model Engineers</div></td></tr>
   <tr><td class="pad">
-    <div style="color:#8a542b;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase">A place on the footplate</div>
-    <h1 class="headline" style="color:#13241d;font-family:Georgia,serif;font-size:38px;font-weight:400;line-height:44px;margin:14px 0 18px">You’re invited to join us</h1>
+    {{ if .Data.membership_active }}
+    <div style="color:#8a542b;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase">Membership confirmed</div>
+    <h1 class="headline" style="color:#13241d;font-family:Georgia,serif;font-size:38px;font-weight:400;line-height:44px;margin:14px 0 18px">Your Society membership is active</h1>
     <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 14px">Hello {{ with .Data.full_name }}{{ . }}{{ else }}there{{ end }},</p>
-    <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 28px">An administrator has created your York Model Engineers member account. Accept the invitation to choose a password and enter the members’ area.</p>
-    <table role="presentation" width="100%"><tr><td align="center"><a class="button" href="{{ .ConfirmationURL }}" target="_blank">Accept your invitation</a></td></tr></table>
+    <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 28px">Use the secure link below to open your York Model Engineers account, where your payment and membership updates are waiting. No password is needed; future sign-ins use a one-time link sent to your email.</p>
+    {{ else }}
+    <div style="color:#8a542b;font-family:Arial,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase">Your Society account</div>
+    <h1 class="headline" style="color:#13241d;font-family:Georgia,serif;font-size:38px;font-weight:400;line-height:44px;margin:14px 0 18px">Your account is ready</h1>
+    <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 14px">Hello {{ with .Data.full_name }}{{ . }}{{ else }}there{{ end }},</p>
+    <p style="color:#34453e;font-family:Arial,sans-serif;font-size:17px;line-height:28px;margin:0 0 28px">Choose a password to finish setting up your York Model Engineers account and enter the members’ area. Membership updates will be waiting for you there.</p>
+    {{ end }}
+    <table role="presentation" width="100%"><tr><td align="center"><a class="button" href="{{ .ConfirmationURL }}" target="_blank">{{ if .Data.membership_active }}Open your account{{ else }}Set up your account{{ end }}</a></td></tr></table>
     <p style="color:#5d6964;font-family:Arial,sans-serif;font-size:14px;line-height:22px;margin:30px 0 8px">If the button does not work, copy and paste this secure link into your browser:</p>
     <p class="link" style="font-family:Arial,sans-serif;font-size:12px;line-height:19px;margin:0"><a class="link" href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a></p>
     <div style="border-top:1px solid #d8d1c3;margin-top:32px;padding-top:22px;color:#66716c;font-family:Arial,sans-serif;font-size:13px;line-height:21px">This invitation was sent to {{ .Email }}. If you were not expecting it, please ignore this email.</div>

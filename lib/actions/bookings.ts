@@ -100,7 +100,7 @@ export async function createVisitorBooking(
       p_event_id: parsed.data.eventId,
       p_lead_name: parsed.data.leadName,
       p_email: parsed.data.email,
-      p_ip_hash: abuseIdentifiers.ipHash,
+      p_ip_hash: abuseIdentifiers.ipHash as string,
       p_party_size: parsed.data.partySize,
       p_reference_code: bookingReference(),
     });

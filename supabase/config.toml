@@ -255,7 +255,7 @@ subject = "Confirm your York Model Engineers email"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.invite]
-subject = "Your invitation to York Model Engineers"
+subject = "Your York Model Engineers account is ready"
 content_path = "./supabase/templates/invite.html"
 
 [auth.email.template.magic_link]
@@ -423,8 +423,16 @@ verify_jwt = false
 # Authentication is enforced inside the function by @supabase/server.
 verify_jwt = false
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[functions.generate-membership-report]
+verify_jwt = false
+
+[edge_runtime.secrets]
+# These values are injected only into the local Edge Runtime. Hosted functions use deployed secrets.
+SITE_URL = "http://localhost:3010"
+LOCAL_MAILPIT_URL = "http://inbucket:8025"
+MEMBERSHIP_FROM_EMAIL = "York Model Engineers <membership@example.com>"
+MEMBERSHIP_REPLY_TO = "treasurer@yorkmodelengineers.co.uk"
+MEMBERSHIP_MODE = "live"
 
 [analytics]
 enabled = false

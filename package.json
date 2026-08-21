@@ -9,13 +9,16 @@
     "dev": "next dev -p 3010",
     "build": "next build",
     "start": "next start",
-    "supabase:start": "supabase start",
+    "supabase:start": "supabase start && node scripts/configure-local-supabase.mjs",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",
+    "stripe:configure-local-membership": "node --env-file=.env.local scripts/configure-local-stripe-membership.mjs",
     "test": "npm run test:unit",
     "test:unit": "node tests/run-unit-tests.mjs",
     "test:database": "node tests/run-database-integration.mjs",
     "test:browser": "node tests/run-browser-smoke.mjs",
+    "test:membership-journeys": "node tests/run-membership-journeys.mjs",
+    "test:stripe-membership": "node --env-file=.env.local tests/run-stripe-membership-journey.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern supabase/.temp --ignore-pattern supabase/.branches",
     "verify": "npm run lint && npm run build && npm run test:unit"
   },
@@ -24,6 +27,7 @@
     "@supabase/supabase-js": "^2.112.3",
     "date-fns": "^4.4.0",
     "gsap": "^3.15.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.32.0",
     "next": "^16.3.1",
     "nextjs-toploader": "^3.9.17",
@@ -34,6 +38,7 @@
     "server-only": "^0.0.1",
     "sharp": "^0.35.3",
     "stripe": "^22.4.0",
+    "svix": "^2.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

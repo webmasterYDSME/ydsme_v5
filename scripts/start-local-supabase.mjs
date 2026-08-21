@@ -72,3 +72,13 @@ if (result.status !== 0) {
   );
 }
 assert.equal(result.status, 0, "Unable to start the isolated local Supabase stack.");
+
+const configuration = spawnSync(
+  process.execPath,
+  [join(repositoryRoot, "scripts", "configure-local-supabase.mjs")],
+  {
+    env: { ...process.env, SUPABASE_WORKDIR: testRoot },
+    stdio: "inherit",
+  },
+);
+assert.equal(configuration.status, 0, "Unable to configure the isolated local Supabase stack.");

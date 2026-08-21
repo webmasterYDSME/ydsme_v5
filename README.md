@@ -16,6 +16,10 @@ Open the website at [http://localhost:3010](http://localhost:3010), local Supaba
 
 Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Stripe, Facebook, production SMTP and production webhooks should remain disabled during local development.
 
+Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables allowlisted website journeys; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
+
+`npm run supabase:start` also installs local-only Vault values used by scheduled jobs. Membership emails are sent to Mailpit immediately after they are queued; a one-minute job retries any delivery interrupted by a transient failure.
+
 The local database currently contains a private production snapshot for development. Its ignored export files live under `supabase/.temp/`; never commit, upload or share them. `supabase db reset` erases the local snapshot and rebuilds only the schema because automatic production-data seeding is intentionally disabled.
 
 ## Main routes

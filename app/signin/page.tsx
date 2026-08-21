@@ -8,7 +8,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ error?: string; sent?: string; next?: string; method?: string }> };
+type Props = { searchParams: Promise<{ error?: string; sent?: string; next?: string; method?: string; notice?: string }> };
 
 export default async function SignIn({ searchParams }: Props) {
   const query = await searchParams;
@@ -51,6 +51,7 @@ export default async function SignIn({ searchParams }: Props) {
           </Link>
           <p className="eyebrow dark">{isMagicLinkSent ? "Sign-in link requested" : isPasswordResetSent ? "Password reset requested" : "Member login"}</p>
           <h2>{isEmailSent ? "Check your email." : "Welcome back."}</h2>
+          {query.notice === "account-switched" ? <p className="form-message success">The other account has been signed out. Use the email address that received the membership message.</p> : null}
           {query.error ? <p className="form-message error" role="alert">{query.error}</p> : null}
 
           {isEmailSent ? (

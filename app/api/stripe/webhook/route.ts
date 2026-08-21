@@ -3,7 +3,9 @@ import type Stripe from "stripe";
 import { writeAudit } from "@/lib/audit";
 import {
   ensureMemberPortalInvitation,
+  ensureMembershipPlanPrice,
   MEMBERSHIP_INTEGRATION_IDENTIFIER,
+  processMembershipProviderCommands,
 } from "@/lib/membership";
 import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
@@ -136,22 +138,43 @@ async function activateMembershipCheckout(event: Stripe.Event) {
   const planPriceId = session.metadata.membership_plan_price_id;
   const membershipYear = Number(session.metadata.membership_year);
   const expectedAmount = Number(session.metadata.membership_initial_amount_pence);
-  const subscriptionId = stripeId(session.subscription);
   const customerId = stripeId(session.customer);
   if ((!applicationId && !existingMemberId) || (applicationId && existingMemberId)
-    || (existingMemberId && !Number.isSafeInteger(membershipYear))
+    || !Number.isSafeInteger(membershipYear)
     || !planPriceId || !Number.isSafeInteger(expectedAmount)
-    || expectedAmount <= 0 || session.amount_total !== expectedAmount || !subscriptionId || !customerId) {
+    || expectedAmount <= 0 || session.amount_total !== expectedAmount || !customerId) {
     throw new Error("Verified membership Checkout metadata is incomplete.");
   }
 
-  let subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-  if (session.metadata.membership_auto_renew === "false" && !subscription.cancel_at_period_end) {
-    subscription = await getStripe().subscriptions.update(subscription.id, { cancel_at_period_end: true });
-  }
-  const period = subscriptionPeriod(subscription);
+  const subscriptionId = stripeId(session.subscription);
   const invoiceId = stripeId(session.invoice);
-  const paymentIds = invoiceId ? await invoicePaymentIds(invoiceId) : { intentId: stripeId(session.payment_intent), chargeId: null };
+  if (!subscriptionId || !invoiceId) {
+    throw new Error("Verified membership Checkout has no subscription or invoice reference.");
+  }
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+  if (subscription.metadata?.ydsme_integration !== "memberships") {
+    throw new Error("Verified membership subscription metadata is incomplete.");
+  }
+  const payment = await invoicePaymentIds(invoiceId);
+  if (!payment.intentId) throw new Error("Verified membership payment has no payment reference.");
+  const { data: planPrice, error: planPriceError } = await createServiceClient()
+    .from("membership_plan_prices")
+    .select("id,plan_id,stripe_price_id,membership_year")
+    .eq("id", planPriceId)
+    .maybeSingle();
+  if (planPriceError || !planPrice?.stripe_price_id || planPrice.membership_year !== membershipYear) {
+    throw new Error("Verified membership payment refers to an unavailable annual price.");
+  }
+
+  const renewalYear = membershipYear + 1;
+  const renewalPrice = await ensureMembershipPlanPrice(planPrice.plan_id, renewalYear);
+  if (!renewalPrice.stripe_price_id) {
+    throw new Error("The forthcoming annual membership price is not ready for online renewal.");
+  }
+
+  const desiredCancelAtPeriodEnd = session.metadata.membership_auto_renew === "false"
+    || subscription.cancel_at_period_end;
+  const period = subscriptionPeriod(subscription);
   const admin = createServiceClient();
   const common = {
     p_plan_price_id: planPriceId,
@@ -159,12 +182,12 @@ async function activateMembershipCheckout(event: Stripe.Event) {
     p_amount_pence: expectedAmount,
     p_actor_id: null,
     p_stripe_checkout_session_id: session.id,
-    p_stripe_payment_intent_id: paymentIds.intentId,
+    p_stripe_payment_intent_id: payment.intentId,
     p_stripe_invoice_id: invoiceId,
     p_stripe_customer_id: customerId,
-    p_stripe_subscription_id: subscription.id,
+    p_stripe_subscription_id: subscriptionId,
     p_stripe_subscription_status: subscription.status,
-    p_cancel_at_period_end: subscription.cancel_at_period_end,
+    p_cancel_at_period_end: desiredCancelAtPeriodEnd,
     p_current_period_end: period.end,
   };
   const { data, error } = applicationId
@@ -183,10 +206,28 @@ async function activateMembershipCheckout(event: Stripe.Event) {
   if (error) throw new Error(`Unable to activate verified membership: ${error.message}`);
   const memberId = (data as Array<{ member_id: string }> | null)?.[0]?.member_id;
   if (!memberId) throw new Error("Verified membership activation returned no member.");
-  await createServiceClient().from("membership_subscriptions").update({
+  const postActivationAdmin = createServiceClient();
+  await postActivationAdmin.from("membership_subscriptions").update({
     current_period_start: period.start,
+    stripe_price_id: renewalPrice.stripe_price_id,
     stripe_event_created_at: new Date(event.created * 1000).toISOString(),
   }).eq("member_id", memberId);
+  await processMembershipProviderCommands(memberId);
+  await postActivationAdmin.from("membership_checkout_attempts").update({
+    status: "complete",
+    stripe_subscription_id: subscriptionId,
+    stripe_payment_intent_id: payment.intentId,
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq("stripe_checkout_session_id", session.id);
+  if (applicationId) {
+    await postActivationAdmin.from("membership_notifications").update({
+      email_status: "cancelled",
+      updated_at: new Date().toISOString(),
+    }).eq("application_id", applicationId)
+      .eq("kind", "membership.application-payment-reminder")
+      .in("email_status", ["queued", "failed"]);
+  }
   await ensureMemberPortalInvitation(memberId);
   return true;
 }
@@ -198,6 +239,14 @@ async function recordMembershipCheckoutFailure(event: Stripe.Event) {
   const memberId = session.metadata.membership_member_id;
   if (!applicationId && !memberId) return false;
   const admin = createServiceClient();
+  const { error: attemptError } = await admin.from("membership_checkout_attempts").update({
+    status: event.type === "checkout.session.expired" ? "expired" : "failed",
+    last_error: event.type === "checkout.session.expired"
+      ? "The secure payment page expired before payment was completed."
+      : "The payment was not completed and can be retried.",
+    updated_at: new Date(event.created * 1000).toISOString(),
+  }).eq("stripe_checkout_session_id", session.id).in("status", ["creating", "open"]);
+  if (attemptError) throw new Error("Unable to record the failed membership Checkout attempt.");
   const { data: application } = applicationId
     ? await admin.from("membership_applications")
       .select("id,contact_email,status").eq("id", applicationId).maybeSingle()
@@ -206,17 +255,18 @@ async function recordMembershipCheckoutFailure(event: Stripe.Event) {
   const { data: member } = memberId
     ? await admin.from("members").select("id,contact_email,auth_user_id").eq("id", memberId).maybeSingle()
     : { data: null };
-  await admin.from("membership_notifications").insert({
+  const { error: notificationError } = await admin.from("membership_notifications").upsert({
     application_id: application?.id ?? null,
     member_id: member?.id ?? null,
     recipient_user_id: member?.auth_user_id ?? null,
     recipient_email: application?.contact_email ?? member?.contact_email ?? null,
     kind: event.type === "checkout.session.expired" ? "membership.checkout-expired" : "membership.checkout-failed",
     title: "Membership payment was not completed",
-    body: "Your membership has not been activated because Stripe did not confirm the full payment. Use your existing secure payment link or contact the membership officer.",
+    body: "We could not verify the full payment, so membership has not been activated. Use the existing secure payment link or contact the membership officer.",
     portal_visible: false,
-    deduplication_key: `membership-checkout-failure-${event.id}`,
-  });
+    deduplication_key: `membership-checkout-${event.type}-${session.id}`,
+  }, { onConflict: "deduplication_key", ignoreDuplicates: true });
+  if (notificationError) throw new Error("Unable to queue the failed membership Checkout notice.");
   return true;
 }
 
@@ -243,9 +293,33 @@ async function reconcileMembershipInvoice(event: Stripe.Event) {
   if (!subscriptionId || invoice.currency !== "gbp") return false;
   const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
   if (subscription.metadata?.ydsme_integration !== "memberships") return false;
+  // The annual renewal starts after the separately paid current term. Stripe
+  // can emit zero-value invoices both when the subscription is created and
+  // when its future Price is changed without proration. Neither represents a
+  // membership payment and must not overwrite the paid term or notify members.
+  if (invoice.amount_due === 0 && invoice.amount_paid === 0) return true;
+  // Checkout activation records the initial, possibly prorated invoice
+  // atomically with the member and term. Stripe can deliver invoice.paid after
+  // checkout.session.completed; reconciling that same invoice as an annual
+  // renewal would incorrectly replace the prorated amount with the full fee.
+  const { data: recordedCheckoutPayment } = await createServiceClient()
+    .from("membership_payments")
+    .select("id")
+    .eq("stripe_invoice_id", invoice.id)
+    .maybeSingle();
+  if (recordedCheckoutPayment) return true;
   const paid = event.type === "invoice.paid" || event.type === "invoice.payment_succeeded";
   const payment = await invoicePaymentIds(invoice.id);
   const admin = createServiceClient();
+  const { data: storedSubscription } = await admin.from("membership_subscriptions")
+    .select("member_id").eq("stripe_subscription_id", subscriptionId).maybeSingle();
+  const { data: pricedMember } = storedSubscription?.member_id
+    ? await admin.from("members").select("current_plan_id").eq("id", storedSubscription.member_id).maybeSingle()
+    : { data: null };
+  const invoiceYear = new Date(event.created * 1000).getUTCFullYear();
+  if (pricedMember?.current_plan_id) {
+    await ensureMembershipPlanPrice(pricedMember.current_plan_id, invoiceYear);
+  }
   const { data, error } = await admin.rpc("reconcile_membership_invoice", {
     p_stripe_invoice_id: invoice.id,
     p_stripe_subscription_id: subscriptionId,
@@ -263,22 +337,45 @@ async function reconcileMembershipInvoice(event: Stripe.Event) {
     if (member) {
       const actionRequired = event.type === "invoice.payment_action_required";
       const finalizationFailed = event.type === "invoice.finalization_failed";
+      const noticeKind = paid ? "membership.renewal-paid"
+        : actionRequired ? "membership.payment-action-required"
+          : finalizationFailed ? "membership.invoice-finalization-failed" : "membership.renewal-failed";
       await admin.from("membership_notifications").insert({
         member_id: member.id,
         recipient_user_id: member.auth_user_id,
         recipient_email: member.contact_email,
-        kind: paid ? "membership.renewal-paid"
-          : actionRequired ? "membership.payment-action-required"
-            : finalizationFailed ? "membership.invoice-finalization-failed" : "membership.renewal-failed",
+        kind: noticeKind,
         title: paid ? "Your annual membership renewal is paid"
           : actionRequired ? "Your membership payment needs action"
             : finalizationFailed ? "We could not prepare your membership invoice" : "Your membership renewal payment failed",
         body: paid
-          ? `Stripe confirmed your annual membership payment of £${(invoice.amount_paid / 100).toFixed(2)}.`
-          : "Stripe did not confirm the renewal payment. Portal access remains available during the grace or review period; update your payment method or contact the membership officer.",
+          ? `Your annual membership payment of £${(invoice.amount_paid / 100).toFixed(2)} has been confirmed.`
+          : "We could not confirm the renewal payment. Account access remains available during the grace or review period; update your payment method or contact the membership officer.",
         action_href: "/account",
-        deduplication_key: `membership-invoice-notice-${event.id}`,
+        deduplication_key: `membership-invoice-notice-${invoice.id}-${noticeKind}`,
       });
+    }
+  }
+  if (paid && memberId && pricedMember?.current_plan_id) {
+    const nextYearPrice = await ensureMembershipPlanPrice(pricedMember.current_plan_id, invoiceYear + 1);
+    if (!nextYearPrice.stripe_price_id) {
+      throw new Error("The next annual membership price is not ready for online renewal.");
+    }
+    const recurringItem = subscription.items.data.find((item) => item.price.recurring);
+    if (recurringItem && recurringItem.price.id !== nextYearPrice.stripe_price_id) {
+      await getStripe().subscriptions.update(subscription.id, {
+        items: [{ id: recurringItem.id, price: nextYearPrice.stripe_price_id }],
+        metadata: {
+          ...subscription.metadata,
+          membership_plan_price_id: nextYearPrice.id,
+          membership_year: String(nextYearPrice.membership_year),
+        },
+        proration_behavior: "none",
+      });
+      await admin.from("membership_subscriptions").update({
+        stripe_price_id: nextYearPrice.stripe_price_id,
+        updated_at: new Date().toISOString(),
+      }).eq("stripe_subscription_id", subscription.id);
     }
   }
   return true;
@@ -297,7 +394,11 @@ async function recordMembershipReversal(event: Stripe.Event) {
   } else {
     const dispute = event.data.object as Stripe.Dispute;
     chargeId = stripeId(dispute.charge);
-    disputed = true;
+    if (chargeId) {
+      const charge = await getStripe().charges.retrieve(chargeId);
+      paymentIntentId = stripeId(charge.payment_intent);
+    }
+    disputed = dispute.status !== "won";
   }
   const { data, error } = await createServiceClient().rpc("mark_membership_payment_reversal", {
     p_stripe_payment_intent_id: paymentIntentId,
@@ -359,15 +460,18 @@ export async function POST(request: Request) {
           .select("stripe_event_id").maybeSingle();
         if (reclaimError) throw new Error("Unable to recover the stale Stripe event claim.");
         if (!reclaimed) return Response.json({ received: false, retry: true }, { status: 409 });
+      } else if (existing.processing_status === "failed") {
+        const { data: reclaimed, error: reclaimError } = await admin.from("stripe_webhook_events")
+          .update({ processing_status: "processing", claimed_at: new Date().toISOString(), last_error: null })
+          .eq("stripe_event_id", event.id)
+          .eq("processing_status", "failed")
+          .select("stripe_event_id")
+          .maybeSingle();
+        if (reclaimError) throw new Error("Unable to reclaim the failed Stripe event.");
+        if (!reclaimed) return Response.json({ received: false, retry: true }, { status: 409 });
+      } else {
+        return Response.json({ received: false, retry: true }, { status: 409 });
       }
-      const { data: reclaimed, error: reclaimError } = await admin.from("stripe_webhook_events")
-        .update({ processing_status: "processing", claimed_at: new Date().toISOString(), last_error: null })
-        .eq("stripe_event_id", event.id)
-        .eq("processing_status", "failed")
-        .select("stripe_event_id")
-        .maybeSingle();
-      if (reclaimError) throw new Error("Unable to reclaim the failed Stripe event.");
-      if (!reclaimed) return Response.json({ received: false, retry: true }, { status: 409 });
     }
     if (claimError && claimError.code !== "23505") throw new Error("Unable to claim Stripe event for processing.");
 

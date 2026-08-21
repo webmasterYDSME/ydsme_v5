@@ -1,6 +1,7 @@
 import "server-only";
 
 import { generateBookingTicket } from "./booking-ticket";
+import { sendTransactionalEmail, type EmailDeliveryResult } from "./email-delivery";
 
 export type BookingEmailDetails = {
   bookingId: string;
@@ -14,7 +15,7 @@ export type BookingEmailDetails = {
   startTime: string;
 };
 
-type EmailResult = { sent: true } | { sent: false; error: string };
+type EmailResult = EmailDeliveryResult;
 
 type BrandedEmailDetails = {
   preheader: string;
@@ -176,9 +177,8 @@ export async function sendBookingConfirmation(
   details: BookingEmailDetails,
   options: { resend?: boolean } = {},
 ): Promise<EmailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.BOOKINGS_FROM_EMAIL;
-  if (!apiKey || !from) {
+  if (!from) {
     return { sent: false, error: "Booking email is not configured." };
   }
 
@@ -204,14 +204,7 @@ export async function sendBookingConfirmation(
       partySize: details.partySize,
       referenceCode: details.referenceCode,
     });
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify({
+    return sendTransactionalEmail({
         from,
         to: [details.email],
         ...(replyTo ? { reply_to: replyTo } : {}),
@@ -240,14 +233,7 @@ export async function sendBookingConfirmation(
           content_id: ticket.contentId,
           content_type: "image/png",
         }],
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => null) as { message?: string } | null;
-      return { sent: false, error: body?.message || `Email provider returned ${response.status}.` };
-    }
-    return { sent: true };
+      }, idempotencyKey);
   } catch (error) {
     return { sent: false, error: error instanceof Error ? error.message : "Email delivery failed." };
   }
@@ -257,32 +243,18 @@ export async function sendBookingCancellation(
   details: BookingEmailDetails,
   reason?: string,
 ): Promise<EmailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.BOOKINGS_FROM_EMAIL;
-  if (!apiKey || !from) return { sent: false, error: "Booking email is not configured." };
+  if (!from) return { sent: false, error: "Booking email is not configured." };
 
   const replyTo = process.env.BOOKINGS_REPLY_TO;
   const email = renderBookingCancellationEmail(details, reason);
   try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": `booking-${details.bookingId}-cancellation`,
-      },
-      body: JSON.stringify({
+    return sendTransactionalEmail({
         from,
         to: [details.email],
         ...(replyTo ? { reply_to: replyTo } : {}),
         ...email,
-      }),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => null) as { message?: string } | null;
-      return { sent: false, error: body?.message || `Email provider returned ${response.status}.` };
-    }
-    return { sent: true };
+      }, `booking-${details.bookingId}-cancellation`);
   } catch (error) {
     return { sent: false, error: error instanceof Error ? error.message : "Email delivery failed." };
   }
@@ -295,23 +267,16 @@ export async function sendWorkshopReservationUpdate(details: {
   workshopDate: string;
   reserved: boolean;
 }): Promise<EmailResult> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.WORKSHOPS_FROM_EMAIL || process.env.BOOKINGS_FROM_EMAIL;
-  if (!apiKey || !from) return { sent: false, error: "Workshop email is not configured." };
+  if (!from) return { sent: false, error: "Workshop email is not configured." };
   const email = renderWorkshopReservationUpdateEmail(details);
   try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
+    return sendTransactionalEmail({
         from,
         to: [details.email],
         ...(process.env.BOOKINGS_REPLY_TO ? { reply_to: process.env.BOOKINGS_REPLY_TO } : {}),
         ...email,
-      }),
-    });
-    if (!response.ok) return { sent: false, error: `Email provider returned ${response.status}.` };
-    return { sent: true };
+      });
   } catch {
     return { sent: false, error: "Email delivery failed." };
   }

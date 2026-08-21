@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
+import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
 
 const emailSchema = z.string().trim().email().max(254);
 const existingPasswordSchema = z.string().min(6).max(128);
@@ -69,6 +70,14 @@ export async function sendPasswordReset(formData: FormData) {
   });
   if (error) passwordResetAuthError("We could not send the reset email. Please try again.");
   redirect("/signin?sent=password-reset");
+}
+
+export async function switchPortalAccount(formData: FormData) {
+  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  const next = safeNext(formData.get("next"));
+  const supabase = await createClient();
+  await supabase.auth.signOut({ scope: "local" });
+  redirect(`/signin?next=${encodeURIComponent(next)}&notice=account-switched`);
 }
 
 export async function updatePassword(formData: FormData) {

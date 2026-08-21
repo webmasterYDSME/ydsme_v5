@@ -7,8 +7,41 @@ export function ageOn(dateOfBirth: string, onDate = new Date()) {
   return age;
 }
 
+export type MembershipEligibilityPlan = {
+  id: string;
+  slug: string;
+  minimum_age: number;
+  maximum_age: number;
+};
+
+export function eligibleMembershipPlans<T extends MembershipEligibilityPlan>(
+  plans: T[],
+  dateOfBirth: string,
+  onDate = new Date(),
+) {
+  const age = ageOn(dateOfBirth, onDate);
+  return {
+    age,
+    plans: plans.filter((plan) => age >= plan.minimum_age && age <= plan.maximum_age),
+  };
+}
+
+export function defaultMembershipPlan<T extends MembershipEligibilityPlan>(plans: T[]) {
+  return plans.find((plan) => plan.slug === "adult")
+    ?? plans.find((plan) => plan.slug !== "student")
+    ?? null;
+}
+
 export function membershipBillingYear(onDate = new Date()) {
   return onDate.getUTCFullYear() + (onDate.getUTCMonth() === 11 ? 1 : 0);
+}
+
+export function membershipRenewalYear(onDate = new Date()) {
+  return onDate.getUTCFullYear() + (onDate.getUTCMonth() >= 10 ? 1 : 0);
+}
+
+export function membershipRenewalIsOpen(onDate = new Date()) {
+  return onDate.getUTCMonth() >= 10 || onDate.getUTCMonth() <= 2;
 }
 
 export function proratedMembershipFee(annualPence: number, onDate = new Date()) {

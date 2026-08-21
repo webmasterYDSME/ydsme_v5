@@ -42,8 +42,8 @@ export default async function DonationsPage({ searchParams }: { searchParams: Pr
   const [paymentResult, summaryResult] = await Promise.all([
     base.order("paid_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1),
     admin.rpc("donation_management_summary", {
-      p_from: from ? `${from}T00:00:00.000Z` : null,
-      p_until: until,
+      p_from: from ? `${from}T00:00:00.000Z` : undefined,
+      p_until: until ?? undefined,
     }),
   ]);
   const { data: payments, count, error } = paymentResult;
