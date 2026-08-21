@@ -199,7 +199,7 @@ export default async function Settings({
         <form action={saveDonationSettings} className="editor-form">
           <input type="hidden" name="id" value={config.id} />
           <p className="wide form-help donation-manager-help">
-            Each component stays hidden until it is enabled. Donation amounts are collected here, then visitors complete payment on a secure Stripe Checkout page.
+            Each component stays hidden until it is enabled. Donation amounts are collected here, then visitors complete payment on a secure online payment page.
           </p>
 
           <fieldset className="wide donation-settings-card">
@@ -226,7 +226,7 @@ export default async function Settings({
               <label>Button label<input name="target_button_label" defaultValue={donations.target.buttonLabel} required /></label>
               <label className="wide">Description<textarea name="target_description" rows={4} defaultValue={donations.target.description} required /></label>
               <label>Campaign target (£)<input type="number" name="target_pounds" min="1" max="10000000" step="0.01" defaultValue={donations.target.targetPence / 100} required /></label>
-              <p className="donation-total-note">Raised funds update automatically from verified Stripe payments and refunds.</p>
+              <p className="donation-total-note">Raised funds update automatically from verified online payments and refunds.</p>
             </div>
           </fieldset>
 

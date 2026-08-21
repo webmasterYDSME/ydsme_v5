@@ -21,7 +21,7 @@ export default function DonationThankYou() {
           <span className="donation-thanks-icon" aria-hidden="true"><CircleCheck /></span>
           <p className="eyebrow dark"><HeartHandshake aria-hidden="true" /> Thank you</p>
           <h1>Your kindness<br /><em>keeps us moving.</em></h1>
-          <p>Your donation has been submitted securely through Stripe. It will help the Society care for the railway, grounds and the future of model engineering in York.</p>
+          <p>Your donation has been submitted securely. It will help the Society care for the railway, grounds and the future of model engineering in York.</p>
           <div className="button-row">
             <Link className="button dark" href="/">Return home</Link>
             <Link className="button outline" href="/events">See upcoming events</Link>

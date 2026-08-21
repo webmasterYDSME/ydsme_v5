@@ -59,7 +59,7 @@ export function GenericDonation({ campaign }: { campaign: DonationCampaign }) {
       </div>
       <div className="donation-action">
         <DonationForm campaign={campaign} kind="generic" suggestedAmount={10} />
-        <small><LockKeyhole aria-hidden="true" /> Secure donation on Stripe</small>
+        <small><LockKeyhole aria-hidden="true" /> Secure online donation</small>
       </div>
     </section>
   );
@@ -99,7 +99,7 @@ export function TargetDonation({ campaign }: { campaign: TargetDonationCampaign 
           <p><strong>{raised}</strong><span>raised so far</span></p>
           <p><strong>{target}</strong><span>campaign target</span></p>
         </div>
-        <small><LockKeyhole aria-hidden="true" /> Payment is completed securely on Stripe</small>
+        <small><LockKeyhole aria-hidden="true" /> Payment is completed securely online</small>
       </div>
     </section>
   );
