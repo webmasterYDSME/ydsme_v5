@@ -217,8 +217,8 @@ async function openApplicationCheckout(token, applicationId) {
   try {
     const page = await browser.newPage();
     await page.goto(`${siteUrl}/membership/checkout?token=${encodeURIComponent(token)}`);
-    await page.getByRole("heading", { name: "Review the payment" }).waitFor();
-    await page.getByRole("button", { name: "Continue to secure payment" }).click();
+    await page.getByRole("heading", { name: "Review your payment" }).waitFor();
+    await page.getByRole("button", { name: "Continue to payment" }).click();
     await page.waitForURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 20_000 });
   } finally {
     await browser.close();
