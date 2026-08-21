@@ -58,10 +58,10 @@ test("keeps signup mail actionable and combines activation with account setup", 
   assert.match(membership, /membership_active: true/);
   assert.match(membership, /auth\/invite\?next=\/account/);
   assert.match(membership, /eq\("kind", "membership\.activated"\)[\s\S]*email_status/);
-  assert.match(invitation, /if \.Data\.membership_active/);
-  assert.match(invitation, /Your Society membership is active/);
+  assert.match(invitation, /Your account is ready/);
   assert.match(invitation, /No password is needed; future sign-ins use a one-time link/);
   assert.match(invitation, /Open your account/);
+  assert.doesNotMatch(invitation, /Choose a password|Set up your account/);
   assert.match(worker, /providerMessageId/);
   assert.match(worker, /complete_membership_notification/);
   assert.match(activationHold, /new\.email_status := 'cancelled'/);

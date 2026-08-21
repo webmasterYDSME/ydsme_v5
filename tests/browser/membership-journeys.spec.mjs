@@ -480,6 +480,18 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(pendingMember.effective_state).toBe("active");
 
+    await page.goto("/admin/memberships?section=renewals#renewals");
+    const renewalForm = page.locator("form.membership-cash-renewal-form");
+    await renewalForm.locator('select[name="member_id"]').selectOption(linkedMember.id);
+    await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue("2027");
+    await expect(renewalForm.getByText("£60.00", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByText("Full annual fee for 2027.", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeEnabled();
+    await renewalForm.locator('select[name="membership_year"]').selectOption("2026");
+    await expect(renewalForm.getByText("No payment due", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByText(/2026 membership is already paid/)).toBeVisible();
+    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeDisabled();
+
     await signIn(page, "journey.member@example.test", "/account");
     await expect(page.getByRole("heading", { name: "Account details" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Adult" })).toBeVisible();
@@ -514,10 +526,12 @@ test.describe("membership public, member and officer journeys", () => {
       "Honorary manual-contact task was not created",
     );
     await page.goto("/admin/memberships?section=manual-contact#manual-contact");
-    const taskArticle = page.locator(".membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Honorary` }).first();
-    const taskForm = taskArticle.locator("form").filter({ hasText: "Mark as contacted" });
+    const honoraryTasks = page.locator("#manual-contact .membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Honorary` });
+    await expect(honoraryTasks).toHaveCount(1);
+    const taskArticle = honoraryTasks.first();
+    const taskForm = taskArticle.locator("form").filter({ hasText: "Mark all updates as contacted" });
     await taskForm.locator('textarea[name="reason"]').fill("Telephoned the member and confirmed the designation.");
-    await taskForm.getByRole("button", { name: "Mark as contacted" }).click();
+    await taskForm.getByRole("button", { name: "Mark all updates as contacted" }).click();
     await page.waitForURL(/notice=manual-contact-completed/);
     const completed = await databaseRow(
       admin.from("membership_notifications").select("read_at").eq("id", manualTask.id).single(),
