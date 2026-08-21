@@ -412,6 +412,9 @@ test("keeps donation checkout server-side and administrator controlled", async (
   assert.match(checkout, /amount: z\.coerce\.number\(\)\.min\(1\)\.max\(10_000\)/);
   assert.match(checkout, /checkout\.sessions\.create/);
   assert.match(checkout, /submit_type: "donate"/);
+  assert.match(checkout, /payment_type: "donation"/);
+  assert.match(checkout, /payment_intent_data: \{[\s\S]*description: donationLabel[\s\S]*metadata: donationMetadata/);
+  assert.match(checkout, /Donation: \$\{campaign\.title\}/);
   assert.doesNotMatch(checkout, /payment_method_types/);
   assert.match(content, /saveDonationSettings[\s\S]*requireRole\(\["administrator"\]\)/);
   assert.match(cards, /startDonationCheckout/);

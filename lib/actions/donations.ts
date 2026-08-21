@@ -30,6 +30,15 @@ export async function startDonationCheckout(formData: FormData) {
   const amountPence = Math.round(parsed.data.amount * 100);
   const origin = getTrustedAppOrigin();
   const cancelPath = parsed.data.campaign === "target" ? "/" : "/visitors";
+  const donationLabel = parsed.data.campaign === "target"
+    ? `Donation: ${campaign.title}`
+    : "Donation to York Model Engineers";
+  const donationMetadata = {
+    payment_type: "donation",
+    donation_campaign: parsed.data.campaign,
+    donation_campaign_name: campaign.title,
+    ydsme_integration: "donations",
+  };
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     integration_identifier: "ydsme_hkqmwzpt",
@@ -42,21 +51,16 @@ export async function startDonationCheckout(formData: FormData) {
           currency: "gbp",
           unit_amount: amountPence,
           product_data: {
-            name: parsed.data.campaign === "target" ? campaign.title : "Donation to York Model Engineers",
+            name: donationLabel,
             description: campaign.description,
           },
         },
       },
     ],
-    metadata: {
-      donation_campaign: parsed.data.campaign,
-      ydsme_integration: "donations",
-    },
+    metadata: donationMetadata,
     payment_intent_data: {
-      metadata: {
-        donation_campaign: parsed.data.campaign,
-        ydsme_integration: "donations",
-      },
+      description: donationLabel,
+      metadata: donationMetadata,
     },
     success_url: `${origin}/thank-you?donation=success`,
     cancel_url: `${origin}${cancelPath}`,
