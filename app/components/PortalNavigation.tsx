@@ -3,8 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, FileText, Gauge, Hammer, HandCoins, History, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound, UsersRound, Wrench, X } from "lucide-react";
-import { useEffect, useRef, useState, type ComponentType } from "react";
+import {
+  BookOpen, CalendarDays, ChevronDown, Gauge, Globe2, Hammer, HandCoins,
+  History, Landmark, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound,
+  UsersRound, Wrench, X,
+} from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
 import type { AppRole } from "@/lib/auth";
 import { signOut } from "@/lib/actions/auth";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
@@ -13,41 +17,121 @@ type PortalLink = {
   href: string;
   label: string;
   icon: ComponentType;
+  activePaths?: string[];
+  count?: number;
+};
+
+type PortalGroup = {
+  id: string;
+  label: string;
+  icon: ComponentType;
+  links: PortalLink[];
+};
+
+type PortalNavigationProps = {
+  role: AppRole;
+  name: string;
+  canViewContent: boolean;
+  administrator: boolean;
+  membershipOfficer: boolean;
+  membershipTaskCount: number;
 };
 
 const memberLinks: PortalLink[] = [
-  { href: "/dashboard", label: "Overview", icon: Gauge },
-  { href: "/dashboard/workbench", label: "Project Workbench", icon: Hammer },
-  { href: "/dashboard/minutes", label: "Minutes", icon: FileText },
-  { href: "/dashboard/publications", label: "Publications", icon: FileText },
-  { href: "/dashboard/resources", label: "Resources", icon: FileText },
+  { href: "/dashboard/workbench", label: "Project workbench", icon: Hammer },
+  {
+    href: "/dashboard/library",
+    label: "Society library",
+    icon: BookOpen,
+    activePaths: ["/dashboard/minutes", "/dashboard/publications", "/dashboard/resources"],
+  },
 ];
 
 const contentLinks: PortalLink[] = [
   { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
-  { href: "/admin/events", label: "Manage events", icon: CalendarDays },
+  { href: "/admin/events", label: "Events", icon: CalendarDays },
   { href: "/admin/bookings", label: "Visitor bookings", icon: TicketCheck },
   { href: "/admin/workshops", label: "Workshops", icon: Wrench },
 ];
 
 const administratorLinks: PortalLink[] = [
-  { href: "/admin/members", label: "Members", icon: UsersRound },
-  { href: "/admin/donations", label: "Donations", icon: HandCoins },
-  { href: "/admin/audit", label: "Audit history", icon: History },
-  { href: "/settings", label: "Committee & site", icon: Settings },
+  { href: "/settings", label: "Committee and site", icon: Settings },
+  { href: "/admin/audit", label: "Important changes", icon: History },
 ];
 
-export function PortalNavigation({ role, name, canViewContent, administrator, membershipOfficer }: { role: AppRole; name: string; canViewContent: boolean; administrator: boolean; membershipOfficer: boolean }) {
+function pathMatches(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function linkIsCurrent(pathname: string, link: PortalLink) {
+  return pathMatches(pathname, link.href) || Boolean(link.activePaths?.some((href) => pathMatches(pathname, href)));
+}
+
+const navigationStorageKey = "portal-navigation-groups";
+const navigationStorageEvent = "portal-navigation-groups-change";
+
+function subscribeToNavigationStorage(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange);
+  window.addEventListener(navigationStorageEvent, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener(navigationStorageEvent, onStoreChange);
+  };
+}
+
+function getNavigationStorageSnapshot() {
+  return window.localStorage.getItem(navigationStorageKey) || "[]";
+}
+
+function getNavigationStorageServerSnapshot() {
+  return "[]";
+}
+
+export function PortalNavigation(props: PortalNavigationProps) {
   const pathname = usePathname();
+  return <PortalNavigationForPath key={pathname} {...props} pathname={pathname}/>;
+}
+
+function PortalNavigationForPath({
+  role,
+  name,
+  canViewContent,
+  administrator,
+  membershipOfficer,
+  membershipTaskCount,
+  pathname,
+}: PortalNavigationProps & { pathname: string }) {
+  const groups: PortalGroup[] = [
+    { id: "members", label: "For members", icon: UserRound, links: memberLinks },
+    ...(canViewContent ? [{ id: "website", label: "Website", icon: Globe2, links: contentLinks }] : []),
+    ...((membershipOfficer || administrator) ? [{
+      id: "membership",
+      label: "Membership and money",
+      icon: Landmark,
+      links: [
+        ...(membershipOfficer ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
+        ...(administrator ? [
+          { href: "/admin/members", label: "Member register", icon: UsersRound },
+          { href: "/admin/donations", label: "Donations", icon: HandCoins },
+        ] : []),
+      ],
+    }] : []),
+    ...(administrator ? [{ id: "administration", label: "Administration", icon: Settings, links: administratorLinks }] : []),
+  ];
+  const activeGroupId = groups.find((group) => group.links.some((link) => linkIsCurrent(pathname, link)))?.id;
   const [open, setOpen] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroupId ?? null);
+  const storedGroups = useSyncExternalStore(subscribeToNavigationStorage, getNavigationStorageSnapshot, getNavigationStorageServerSnapshot);
+  let rememberedGroups: string[] = [];
+  try {
+    const parsed = JSON.parse(storedGroups);
+    if (Array.isArray(parsed)) rememberedGroups = parsed.filter((value): value is string => typeof value === "string");
+  } catch {
+    rememberedGroups = [];
+  }
+  const visibleGroup = expandedGroup ?? rememberedGroups[0] ?? null;
   const menuButton = useRef<HTMLButtonElement>(null);
   const navigationPanel = useRef<HTMLDivElement>(null);
-  const links = [
-    ...memberLinks,
-    ...(canViewContent ? contentLinks : []),
-    ...(membershipOfficer ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound }] : []),
-    ...(administrator ? administratorLinks : []),
-  ];
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +184,17 @@ export function PortalNavigation({ role, name, canViewContent, administrator, me
     menuButton.current?.focus();
   }
 
+  function toggleGroup(groupId: string) {
+    const next = visibleGroup === groupId ? null : groupId;
+    setExpandedGroup(next);
+    try {
+      window.localStorage.setItem(navigationStorageKey, JSON.stringify(next ? [next] : []));
+      window.dispatchEvent(new Event(navigationStorageEvent));
+    } catch {
+      // Navigation remains usable when browser storage is unavailable.
+    }
+  }
+
   return <>
     <aside className={open ? "portal-sidebar is-open" : "portal-sidebar"}>
       <div className="portal-sidebar-top">
@@ -114,9 +209,31 @@ export function PortalNavigation({ role, name, canViewContent, administrator, me
       </div>
       <div ref={navigationPanel} id="portal-navigation" className="portal-navigation-panel" role={open ? "dialog" : undefined} aria-modal={open ? "true" : undefined} aria-label={open ? "Navigation menu" : undefined}>
         <nav aria-label="Member navigation">
-          {links.map(({ href, label, icon: Icon }) => {
-            const current = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
-            return <Link key={href} href={href} prefetch={false} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon/>{label}</Link>;
+          <Link href="/dashboard" prefetch={false} onClick={closeMenu} aria-current={pathname === "/dashboard" ? "page" : undefined} className={`portal-nav-overview${pathname === "/dashboard" ? " active" : ""}`}><Gauge/>Overview</Link>
+          {groups.map((group) => {
+            const expanded = visibleGroup === group.id;
+            const current = group.id === activeGroupId;
+            const taskCount = group.links.reduce((total, link) => total + (link.count ?? 0), 0);
+            const GroupIcon = group.icon;
+            return <section className={`portal-nav-group${current ? " has-active" : ""}`} key={group.id}>
+              <button type="button" className="portal-nav-group-toggle" aria-expanded={expanded} aria-controls={`portal-nav-${group.id}`} onClick={() => toggleGroup(group.id)}>
+                <GroupIcon aria-hidden="true"/>
+                <span>{group.label}</span>
+                {taskCount > 0 && !expanded ? <span className="portal-nav-count" aria-label={`${taskCount} ${taskCount === 1 ? "task needs" : "tasks need"} attention`}>{taskCount}</span> : null}
+                <ChevronDown className="portal-nav-chevron" aria-hidden="true"/>
+              </button>
+              <div id={`portal-nav-${group.id}`} className={`portal-nav-group-links${expanded ? " is-expanded" : ""}`}>
+                {group.links.map((link) => {
+                  const linkCurrent = linkIsCurrent(pathname, link);
+                  const Icon = link.icon;
+                  return <Link key={link.href} href={link.href} prefetch={false} onClick={closeMenu} aria-current={linkCurrent ? "page" : undefined} className={linkCurrent ? "active" : undefined}>
+                    <Icon aria-hidden="true"/>
+                    <span>{link.label}</span>
+                    {(link.count ?? 0) > 0 ? <span className="portal-nav-count" aria-label={`${link.count} ${link.count === 1 ? "task needs" : "tasks need"} attention`}>{link.count}</span> : null}
+                  </Link>;
+                })}
+              </div>
+            </section>;
           })}
         </nav>
         <div className="portal-account">
