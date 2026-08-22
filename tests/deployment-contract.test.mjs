@@ -14,6 +14,7 @@ test("runs staged verification, migration and deployment automation", async () =
     releaseScript,
     cleanupWorkflow,
     deploymentGuide,
+    migrationSafety,
     localSupabaseStart,
     localSupabaseStop,
   ] = await Promise.all([
@@ -24,6 +25,7 @@ test("runs staged verification, migration and deployment automation", async () =
     read("scripts/release-hosted-environment.mjs"),
     read(".github/workflows/delete-merged-feature-branches.yml"),
     read("DEPLOYMENT.md"),
+    read("scripts/check-migration-safety.mjs"),
     read("scripts/start-local-supabase.mjs"),
     read("scripts/stop-local-supabase.mjs"),
   ]);
@@ -46,6 +48,11 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.match(workflow, /run: npm ci/);
   assert.match(workflow, /Validate migration safety/);
+  assert.match(migrationSafety, /202608180004_secure_dashboard\.sql/);
+  assert.match(migrationSafety, /e85e272056da1c2909227340395075ee3019640c0e2283d3e612475e88fe8018/);
+  assert.match(migrationSafety, /ffde46ca7af154818d0e2da40349f33d7e05d35f3e7ccc24f3d02855a24cdde3/);
+  assert.match(migrationSafety, /sha256\(before\) === reviewedReplayRepair\.before/);
+  assert.match(migrationSafety, /sha256\(after\) === reviewedReplayRepair\.after/);
   assert.match(workflow, /run: npm run test:database/);
   assert.match(workflow, /run: npm run test:browser/);
   assert.match(workflow, /SUPABASE_TEST_WORKDIR: \.supabase-test/);

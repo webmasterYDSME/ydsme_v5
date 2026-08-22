@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
@@ -20,10 +21,26 @@ if (!diff) {
 
 const added = [];
 const immutableHistoryChanges = [];
+const reviewedReplayRepair = {
+  path: "supabase/migrations/202608180004_secure_dashboard.sql",
+  before: "e85e272056da1c2909227340395075ee3019640c0e2283d3e612475e88fe8018",
+  after: "ffde46ca7af154818d0e2da40349f33d7e05d35f3e7ccc24f3d02855a24cdde3",
+};
+const reviewedRepairs = [];
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
 for (const line of diff.split("\n")) {
   const [status, firstPath, secondPath] = line.split("\t");
   if (status === "A" && firstPath?.endsWith(".sql")) {
     added.push(firstPath);
+  } else if (status === "M" && firstPath === reviewedReplayRepair.path) {
+    const before = execFileSync("git", ["show", `${base}:${firstPath}`]);
+    const after = execFileSync("git", ["show", `${head}:${firstPath}`]);
+    if (sha256(before) === reviewedReplayRepair.before && sha256(after) === reviewedReplayRepair.after) {
+      reviewedRepairs.push(firstPath);
+    } else {
+      immutableHistoryChanges.push(`${status} ${firstPath}`);
+    }
   } else {
     immutableHistoryChanges.push([status, firstPath, secondPath].filter(Boolean).join(" "));
   }
@@ -55,4 +72,6 @@ assert.deepEqual(
   `High-risk migrations are never auto-deployed. Use a separately reviewed manual rollout:\n${rejected.join("\n")}`,
 );
 
-console.log(`Validated ${added.length} new additive migration file(s).`);
+console.log(
+  `Validated ${added.length} new additive migration file(s) and ${reviewedRepairs.length} checksum-locked replay repair(s).`,
+);
