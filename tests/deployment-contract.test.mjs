@@ -33,6 +33,7 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.equal(packageJson.scripts.verify, "npm run lint && npm run build && npm run test:unit");
   assert.equal(packageJson.scripts["test:database"], "node tests/run-database-integration.mjs");
   assert.equal(packageJson.scripts["test:browser"], "node tests/run-browser-smoke.mjs");
+  assert.match(packageJson.scripts["admin:bootstrap"], /bootstrap-administrator\.mjs/);
   assert.equal(vercel.buildCommand, "npm run verify");
   assert.deepEqual(vercel.git.deploymentEnabled, {
     "**": false,
@@ -50,7 +51,7 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.match(workflow, /SUPABASE_TEST_WORKDIR: \.supabase-test/);
   assert.match(workflow, /node scripts\/start-local-supabase\.mjs/);
   assert.match(workflow, /node scripts\/stop-local-supabase\.mjs/);
-  assert.match(localSupabaseStart, /Expected at least three active administrators before rollout/);
+  assert.doesNotMatch(localSupabaseStart, /writeFileSync|rolloutGuard|Expected at least three active administrators before rollout/);
   assert.match(localSupabaseStart, /http:\/\/127\.0\.0\.1:55321/);
   assert.match(localSupabaseStop, /--no-backup/);
   assert.match(releaseWorkflow, /workflow_run:/);

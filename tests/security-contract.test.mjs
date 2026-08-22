@@ -250,9 +250,11 @@ test("edits events in an accessible two-section modal", async () => {
 });
 
 test("uses exactly three database-backed application roles", async () => {
-  const [auth, migration, admin] = await Promise.all([
+  const [auth, migration, bootstrapMigration, bootstrapScript, admin] = await Promise.all([
     read("lib/auth.ts"),
     read("supabase/migrations/202608180004_secure_dashboard.sql"),
+    read("supabase/migrations/202608220001_administrator_bootstrap.sql"),
+    read("scripts/bootstrap-administrator.mjs"),
     read("app/admin/[section]/page.tsx"),
   ]);
   assert.match(auth, /appRoles = \["member", "committee", "administrator"\] as const/);
@@ -262,7 +264,22 @@ test("uses exactly three database-backed application roles", async () => {
   assert.match(migration, /role in \('member', 'committee', 'administrator'\)/);
   assert.match(migration, /where role::text in \('moderator', 'read-only-committee'\)/);
   assert.match(migration, /drop type if exists public\.app_permission/);
+  assert.match(migration, /application_users > 0 and active_administrators < 3/);
   assert.match(migration, /Expected at least three active administrators/);
+  assert.match(bootstrapMigration, /if exists\(select 1 from public\.user_roles where role = 'administrator'\)/);
+  assert.match(bootstrapMigration, /v_email_confirmed_at is null/);
+  assert.match(bootstrapMigration, /administrator\.bootstrap/);
+  assert.match(bootstrapMigration, /grant execute on function public\.bootstrap_first_administrator\(uuid\) to service_role/);
+  assert.doesNotMatch(bootstrapMigration, /grant execute[\s\S]*to anon|grant execute[\s\S]*to authenticated/);
+  assert.match(bootstrapScript, /Remote bootstrap requires --confirm-host/);
+  assert.match(bootstrapScript, /email_confirmed_at/);
+  assert.doesNotMatch(bootstrapScript, /createUser|inviteUserByEmail/);
+});
+
+test("keeps online renewals free of legacy offline payment evidence", async () => {
+  const migration = await read("supabase/migrations/202608220002_membership_renewal_parameter_guard.sql");
+  assert.match(migration, /p_cash_receipt_reference is not null/);
+  assert.match(migration, /membership_renewal_parameter_guard_failed/);
 });
 
 test("retires bulk member archiving in favour of reviewed lifecycle controls", async () => {
@@ -302,6 +319,21 @@ test("ships database and HTTP defence in depth", async () => {
   assert.doesNotMatch(proxy, /script-src[^`\n]*'unsafe-inline'/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /Permissions-Policy/);
+});
+
+test("reports denied navigation clearly and keeps account controls labelled", async () => {
+  const [dashboard, account, eventEditor] = await Promise.all([
+    read("app/dashboard/page.tsx"),
+    read("app/account/page.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+  ]);
+  assert.match(dashboard, /"not-authorised": \{ message: "You do not have permission to open that page\.", tone: "error" \}/);
+  assert.doesNotMatch(dashboard, /query\.notice \? <p className="form-message success">Update complete\.<\/p>/);
+  assert.match(account, /htmlFor="new-login-email"/);
+  assert.match(account, /htmlFor="new-membership-contact-email"/);
+  assert.match(eventEditor, /useId/);
+  assert.match(eventEditor, /aria-labelledby=\{detailsTitleId\}/);
+  assert.doesNotMatch(eventEditor, /id="event-editor-details-title"|id="event-editor-artwork-title"/);
 });
 
 test("bounds portal reads and synchronizes member profile updates", async () => {

@@ -426,10 +426,10 @@ test.describe("membership public, member and officer journeys", () => {
     expect(linkedMember.effective_state).toBe("active");
 
     await page.goto(`/admin/memberships?member=${linkedMember.id}&section=member-history#member-history`);
-    const portalForm = page.locator("#member-history form").filter({ hasText: "Assign or invite portal login" });
+    const portalForm = page.locator("#member-history form").filter({ hasText: "Assign or invite website login" });
     await portalForm.locator('input[name="login_email"]').fill("journey.member@example.test");
     await portalForm.locator('textarea[name="reason"]').fill("Confirmed this existing website account belongs to the named member.");
-    await portalForm.getByRole("button", { name: "Assign or invite portal login" }).click();
+    await portalForm.getByRole("button", { name: "Assign or invite website login" }).click();
     await page.waitForURL(/notice=portal-login-assigned/);
     linkedMember = await databaseRow(
       admin.from("members").select("id,auth_user_id,effective_state,portal_invitation_status").eq("id", linkedMember.id).single(),
@@ -499,7 +499,7 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("button", { name: "Continue to payment" })).toHaveCount(0);
     await expect(page.getByText("Your Society membership is active", { exact: true })).toBeVisible();
     await expect(page.getByText("JOURNEY-CASH-001")).toHaveCount(0);
-    await page.getByText("Payment and entitlement history", { exact: true }).click();
+    await page.getByText("Membership and payment history", { exact: true }).click();
     await expect(page.getByText("cash · paid ·", { exact: false })).toBeVisible();
   });
 

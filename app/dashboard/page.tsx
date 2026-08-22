@@ -13,8 +13,14 @@ import { getWorkbenchProjects } from "@/lib/workbench";
 
 export const dynamic = "force-dynamic";
 
+const dashboardNotices: Record<string, { message: string; tone: "success" | "error" }> = {
+  "password-updated": { message: "Your password was updated.", tone: "success" },
+  "not-authorised": { message: "You do not have permission to open that page.", tone: "error" },
+};
+
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
   const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
+  const notice = query.notice ? dashboardNotices[query.notice] : undefined;
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
   const [eventsResult, workshopsResult, feedSnapshotResult, docsResult, workbenchProjects] = await Promise.all([
@@ -78,7 +84,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     </header>
 
     {query.error ? <p className="form-message error">{query.error}</p> : null}
-    {query.notice ? <p className="form-message success">Update complete.</p> : null}
+    {notice ? <p className={`form-message ${notice.tone}`}>{notice.message}</p> : null}
 
     <div className="dashboard-section-grid">
       <section className="portal-card dashboard-primary-card" aria-labelledby="upcoming-running-days">

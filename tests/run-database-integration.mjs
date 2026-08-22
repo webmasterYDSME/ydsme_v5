@@ -24,6 +24,7 @@ assert.ok(projectId, "Unable to identify the local Supabase project.");
 let fixturesCreated = false;
 try {
   const localTests = [
+    "tests/administrator-bootstrap.local.test.mjs",
     "tests/membermojo-apply.local.test.mjs",
     "tests/membership-price-carry-forward.local.test.mjs",
     "tests/membership-offline.local.test.mjs",

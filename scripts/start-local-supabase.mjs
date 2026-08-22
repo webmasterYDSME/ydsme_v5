@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,38 +25,6 @@ assert.match(
   copiedConfig,
   /\[api\][\s\S]*?port\s*=\s*55321/,
   "The isolated test stack must use http://127.0.0.1:55321.",
-);
-
-const migrationPath = join(
-  testRoot,
-  "supabase",
-  "migrations",
-  "202608180004_secure_dashboard.sql",
-);
-const rolloutGuard = `do $$
-declare active_administrators integer;
-begin
-  select count(*)::integer into active_administrators
-  from public.user_roles ur
-  join public.users u on u.id = ur.user_id
-  where ur.role = 'administrator' and u.membership_status = 'active';
-  if active_administrators < 3 then
-    raise exception 'Expected at least three active administrators before rollout; found %', active_administrators;
-  end if;
-end;
-$$;`;
-const migration = readFileSync(migrationPath, "utf8");
-assert.equal(
-  migration.split(rolloutGuard).length - 1,
-  1,
-  "The historical administrator rollout guard changed; review the local test bootstrap.",
-);
-writeFileSync(
-  migrationPath,
-  migration.replace(
-    rolloutGuard,
-    "-- Local CI starts from an empty database, so the production data rollout guard is not applicable.",
-  ),
 );
 
 const result = spawnSync(

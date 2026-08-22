@@ -22,7 +22,7 @@ import { publicPageMetadata } from "@/lib/seo";
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
   title: "Apply for Membership",
-  description: "Apply to join York Model Engineers and choose secure online or cash payment.",
+  description: "Apply to join York Model Engineers and choose online payment, cash, bank transfer or cheque.",
   path: "/membership/apply",
   keywords: ["York Model Engineers application", "join York Model Engineers"],
 });

@@ -61,13 +61,19 @@ alter table public.user_roles add constraint user_roles_role_check
   check (role in ('member', 'committee', 'administrator'));
 
 do $$
-declare active_administrators integer;
+declare
+  application_users integer;
+  active_administrators integer;
 begin
+  select count(*)::integer into application_users from public.users;
   select count(*)::integer into active_administrators
   from public.user_roles ur
   join public.users u on u.id = ur.user_id
   where ur.role = 'administrator' and u.membership_status = 'active';
-  if active_administrators < 3 then
+  -- A fresh installation has nobody to lock out and must be able to replay the
+  -- complete migration chain before its first administrator is bootstrapped.
+  -- Populated upgrades retain the original three-administrator safety gate.
+  if application_users > 0 and active_administrators < 3 then
     raise exception 'Expected at least three active administrators before rollout; found %', active_administrators;
   end if;
 end;
