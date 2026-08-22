@@ -138,7 +138,7 @@ export default async function DonationsPage({ searchParams }: { searchParams: Pr
       { href: "/admin/donations", label: "Payments", count: aggregate.genericCount + aggregate.targetCount, current: true },
       { href: "/admin/donations?view=appeals", label: "Appeals", current: false },
     ]}/>
-    <div className="stat-grid"><article><span>Gross</span><strong>{money.format(aggregate.gross / 100)}</strong></article><article><span>Refunds</span><strong>{money.format(aggregate.refunds / 100)}</strong></article><article><span>Net</span><strong>{money.format((aggregate.gross - aggregate.refunds) / 100)}</strong></article><article><span>Target campaign</span><strong>{money.format(aggregate.target / 100)}</strong></article></div>
+    <div className="stat-grid donation-summary-grid"><article><span>Gross</span><strong>{money.format(aggregate.gross / 100)}</strong></article><article><span>Refunds</span><strong>{money.format(aggregate.refunds / 100)}</strong></article><article><span>Net</span><strong>{money.format((aggregate.gross - aggregate.refunds) / 100)}</strong></article><article><span>Target campaign</span><strong>{money.format(aggregate.target / 100)}</strong></article></div>
     <PortalTabs label="Donation campaign" tabs={[
       { href: campaignHref(), label: "All campaigns", count: aggregate.genericCount + aggregate.targetCount, current: campaign === null },
       { href: campaignHref("generic"), label: "General", count: aggregate.genericCount, current: campaign === "generic" },
