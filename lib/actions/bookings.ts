@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { writeAudit } from "@/lib/audit";
 import { requireCapability } from "@/lib/auth";
 import { bookingAbuseIdentifiers } from "@/lib/booking-abuse";
+import { PUBLIC_EVENTS_CACHE_TAG } from "@/lib/cache-tags";
 import { sendBookingCancellation, sendBookingConfirmation } from "@/lib/booking-email";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -132,6 +133,7 @@ export async function createVisitorBooking(
 
   await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.booking_id, p_sent: email.sent, p_error: email.sent ? "" : "Delivery failed." });
 
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/events");
   revalidatePath(`/events/${event.id}/book`);
   revalidatePath("/admin/bookings");
@@ -257,6 +259,7 @@ export async function cancelBooking(formData: FormData) {
   }, parsed.data.reason);
   await admin.rpc("record_event_booking_email_attempt", { p_booking_id: booking.id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "booking.cancel", entityType: "event_booking", entityId: booking.id, before: { status: booking.status }, after: { status: "cancelled", reason: parsed.data.reason, email_sent: mail.sent } });
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/admin/bookings");
   redirect(mail.sent ? "/admin/bookings?notice=cancelled" : "/admin/bookings?notice=cancelled-email-failed");
 }

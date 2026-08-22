@@ -17,7 +17,13 @@ import {
   ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
 } from "@/lib/announcements";
-import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  ANNOUNCEMENTS_CACHE_TAG,
+  PUBLIC_COMMITTEE_CACHE_TAG,
+  PUBLIC_DONATIONS_CACHE_TAG,
+  PUBLIC_EVENTS_CACHE_TAG,
+  PUBLIC_SITE_CONFIG_CACHE_TAG,
+} from "@/lib/cache-tags";
 
 const text = (min = 1, max = 5000) => z.string().trim().min(min).max(max);
 const idString = z.string().min(1).max(100);
@@ -108,6 +114,7 @@ export async function saveEvent(formData: FormData) {
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode, public_teaser_enabled: values.public_teaser_enabled } });
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect(`/admin/events?status=${saved.lifecycle_status}&notice=event-saved`);
 }
@@ -119,6 +126,7 @@ export async function deleteEvent(formData: FormData) {
   const { data, error } = await createAdminClient().from("events").update({ lifecycle_status: "archived", archived_at: now, archived_by: user.id, updated_at: now }).eq("id", id).neq("lifecycle_status", "archived").select("id,name").maybeSingle();
   if (error) redirect("/admin/events?error=The+event+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.archived", entityType: "event", entityId: id, summary: data.name });
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect("/admin/events?status=archived&notice=event-archived");
 }
@@ -131,6 +139,7 @@ export async function restoreEvent(formData: FormData) {
   if (error) redirect("/admin/events?status=archived&error=The+event+could+not+be+restored.");
   if (!data) redirect("/admin/events?status=archived&error=Past+events+stay+archived.+Use+Reschedule+to+move+the+dates+forward.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.restored", entityType: "event", entityId: id, summary: data.name, after: { lifecycle_status: "draft" } });
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/admin/events");
   redirect("/admin/events?status=draft&notice=event-restored");
 }
@@ -502,6 +511,7 @@ export async function saveCommittee(formData: FormData) {
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "committee-record.updated" : "committee-record.created", entityType: "committee-record", entityId: saved.id, before, after: values });
+  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
   revalidatePath("/committees"); revalidatePath("/settings");
 }
 
@@ -519,6 +529,7 @@ export async function deleteCommittee(formData: FormData) {
   const { data, error } = await admin.from("committees").delete().eq("id", id).select("id").maybeSingle();
   if (error || !data) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+deleted.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "committee-record.deleted", entityType: "committee-record", entityId: id, before });
+  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
   revalidatePath("/committees"); revalidatePath("/settings");
 }
 
@@ -705,6 +716,7 @@ export async function saveSiteConfig(formData: FormData) {
   const { error: linkError } = await admin.rpc("replace_public_site_links", { p_socials: socials.data, p_affiliates: affiliates.data });
   if (linkError) redirect("/settings?tab=site&error=Society+details+were+saved,+but+public+links+could+not+be+updated.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "site-settings.updated", entityType: "site-config", entityId: id, before, after });
+  updateTag(PUBLIC_SITE_CONFIG_CACHE_TAG);
   revalidatePath("/", "layout");
   revalidatePath("/settings");
   redirect("/settings?tab=site&notice=config-saved");
@@ -768,6 +780,7 @@ export async function saveDonationSettings(formData: FormData) {
   const { error: campaignError } = await admin.rpc("replace_donation_campaigns", { p_generic: settings.donations.generic, p_target: settings.donations.target });
   if (campaignError) redirect("/admin/donations?view=appeals&error=save");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "donation-campaigns.updated", entityType: "site-config", entityId: parsed.data.id, before: { donations: currentSettings.donations }, after: { donations: settings.donations } });
+  updateTag(PUBLIC_DONATIONS_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/visitors");
   revalidatePath("/settings");

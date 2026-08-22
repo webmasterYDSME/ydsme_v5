@@ -32,7 +32,7 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(data, /\.eq\("event_type", "public"\)/);
   assert.match(events, /getPublicEvents\(\)/);
   assert.match(home, /getPublicEvents\(\)/);
-  assert.match(data, /getPublicMemberEventTeasers[\s\S]*from\("public_member_event_teasers"\)/);
+  assert.match(data, /loadPublicMemberEventTeasers[\s\S]*from\("public_member_event_teasers"\)/);
   assert.match(data, /memberEventImage[\s\S]*\/images\/member-event-default\.webp/);
   assert.match(events, /src=\{memberEventImage\(event\.file_url\)\}/);
   assert.match(events, /member-event-grid-\$\{memberEvents\.length\}/);
@@ -687,6 +687,68 @@ test("keeps public reads available during the additive projection rollout", asyn
   assert.match(data, /from\("public_committee_roster"\)/);
   assert.match(data, /Permission or policy failures[\s\S]*must never fall through/);
   assert.doesNotMatch(data, /isMissingProjection[\s\S]*42501/);
+});
+
+test("caches reusable public API reads and invalidates them after writes", async () => {
+  const [
+    cacheTags,
+    data,
+    membership,
+    paymentSettings,
+    membershipApply,
+    publicProjects,
+    contentActions,
+    bookingActions,
+    membershipActions,
+    workbenchActions,
+    paymentWebhook,
+  ] = await Promise.all([
+    read("lib/cache-tags.ts"),
+    read("lib/data.ts"),
+    read("lib/membership.ts"),
+    read("lib/membership-settings.ts"),
+    read("app/membership/apply/page.tsx"),
+    read("lib/public-projects.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/actions/bookings.ts"),
+    read("lib/actions/membership.ts"),
+    read("lib/actions/workbench.ts"),
+    read("app/api/stripe/webhook/route.ts"),
+  ]);
+
+  for (const tag of [
+    "PUBLIC_COMMITTEE_CACHE_TAG",
+    "PUBLIC_DONATIONS_CACHE_TAG",
+    "PUBLIC_EVENTS_CACHE_TAG",
+    "PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG",
+    "PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG",
+    "PUBLIC_PROJECTS_CACHE_TAG",
+    "PUBLIC_SITE_CONFIG_CACHE_TAG",
+  ]) assert.match(cacheTags, new RegExp(`export const ${tag}`));
+
+  assert.match(data, /getCachedPublicEvents = unstable_cache[\s\S]*revalidate: 30/);
+  assert.match(data, /getCachedPublicMemberEventTeasers = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(data, /getCachedCommittees = unstable_cache[\s\S]*revalidate: 3600/);
+  assert.match(data, /getCachedPublicSiteConfig = unstable_cache[\s\S]*revalidate: 3600/);
+  assert.match(data, /getCachedDonationSettings = unstable_cache[\s\S]*revalidate: 60/);
+  assert.match(data, /getBookableEvent[\s\S]*await getPublicEvents\(\)/);
+  assert.match(membership, /getPublicMembershipPlans = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(paymentSettings, /select\("configured,treasurer_name,treasurer_email"\)/);
+  assert.match(paymentSettings, /getPublicMembershipPaymentContact = unstable_cache/);
+  assert.match(membershipApply, /Promise\.all\(\[[\s\S]*getPublicMembershipPlans\(\)[\s\S]*getPublicMembershipPaymentContact\(\)/);
+  assert.match(publicProjects, /getCachedPublicFeaturedProjects = unstable_cache/);
+  assert.match(publicProjects, /getCachedPublicFeaturedProject = unstable_cache/);
+  assert.match(publicProjects, /createPublicClient\(\)/);
+  assert.doesNotMatch(publicProjects, /from "@\/lib\/supabase\/server"/);
+  assert.match(contentActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_COMMITTEE_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_SITE_CONFIG_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_DONATIONS_CACHE_TAG\)/);
+  assert.match(bookingActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);
+  assert.match(membershipActions, /updateTag\(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG\)/);
+  assert.match(membershipActions, /updateTag\(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG\)/);
+  assert.match(workbenchActions, /updateTag\(PUBLIC_PROJECTS_CACHE_TAG\)/);
+  assert.match(paymentWebhook, /revalidateTag\(PUBLIC_DONATIONS_CACHE_TAG, "max"\)/);
 });
 
 test("enables the complete membership platform with one flag and otherwise falls back to MemberMojo", async () => {

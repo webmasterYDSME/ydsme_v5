@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import type Stripe from "stripe";
 import { writeAudit } from "@/lib/audit";
+import { PUBLIC_DONATIONS_CACHE_TAG } from "@/lib/cache-tags";
 import {
   ensureMemberPortalInvitation,
   ensureMembershipPlanPrice,
@@ -522,7 +523,11 @@ export async function POST(request: Request) {
       .select("stripe_event_id")
       .single();
     if (completionError) throw new Error("Unable to complete the Stripe event claim.");
-    if (targetChanged) revalidatePath("/");
+    if (targetChanged) {
+      revalidateTag(PUBLIC_DONATIONS_CACHE_TAG, "max");
+      revalidatePath("/");
+      revalidatePath("/visitors");
+    }
     if (membershipChanged) {
       revalidatePath("/account");
       revalidatePath("/admin/memberships");

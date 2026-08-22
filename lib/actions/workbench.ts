@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { canManageContent, requireUser } from "@/lib/auth";
+import { PUBLIC_PROJECTS_CACHE_TAG } from "@/lib/cache-tags";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +31,11 @@ const commentSchema = z.object({
 
 function workbenchPath(id?: string) {
   return id ? `/dashboard/workbench/${id}` : "/dashboard/workbench";
+}
+
+function invalidatePublicProjects() {
+  updateTag(PUBLIC_PROJECTS_CACHE_TAG);
+  revalidatePath("/projects");
 }
 
 function quarantinePaths(formData: FormData, maximum: number) {
@@ -136,6 +142,7 @@ export async function updateProject(formData: FormData) {
     redirect(`${workbenchPath(id.data)}?error=The+project+could+not+be+updated.`);
   }
   if (newCoverPath && before.cover_image_path && before.cover_image_path !== newCoverPath) await removeProjectImages([String(before.cover_image_path)]);
+  invalidatePublicProjects();
   revalidatePath("/dashboard");
   revalidatePath(workbenchPath());
   revalidatePath(workbenchPath(id.data));
@@ -173,6 +180,7 @@ export async function addProjectUpdate(formData: FormData) {
     await removeProjectImages(finalized);
     redirect(`${destination}?error=The+progress+update+could+not+be+posted.`);
   }
+  invalidatePublicProjects();
   revalidatePath("/dashboard");
   revalidatePath(workbenchPath());
   revalidatePath(destination);
@@ -219,6 +227,7 @@ export async function archiveProject(formData: FormData) {
   if (project.owner_id !== user.id && !canManageContent(role)) redirect(`${workbenchPath(id.data)}?error=You+cannot+archive+this+project.`);
   const { error } = await client.from("member_projects").update({ archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id.data);
   if (error) redirect(`${workbenchPath(id.data)}?error=The+project+could+not+be+archived.`);
+  invalidatePublicProjects();
   revalidatePath("/dashboard");
   revalidatePath(workbenchPath());
   redirect(`${workbenchPath()}?notice=project-archived`);
@@ -259,8 +268,8 @@ export async function requestPublicProjectFeature(formData: FormData) {
   });
   if (error) redirect(`${workbenchPath(id.data)}?error=The+public+feature+request+could+not+be+submitted.`);
   await removePublicProjectImages(id.data).catch(() => undefined);
+  invalidatePublicProjects();
   revalidatePath(workbenchPath(id.data));
-  revalidatePath("/projects");
   redirect(`${workbenchPath(id.data)}?notice=feature-requested#public-feature`);
 }
 
@@ -275,8 +284,8 @@ export async function withdrawPublicProjectFeature(formData: FormData) {
   const { error } = await client.rpc("withdraw_public_project_feature", { p_project_id: id.data });
   if (error) redirect(`${workbenchPath(id.data)}?error=Public+featuring+could+not+be+withdrawn.`);
   await removePublicProjectImages(id.data).catch(() => undefined);
+  invalidatePublicProjects();
   revalidatePath(workbenchPath(id.data));
-  revalidatePath("/projects");
   redirect(`${workbenchPath(id.data)}?notice=feature-withdrawn#public-feature`);
 }
 
@@ -339,8 +348,8 @@ export async function approvePublicProjectFeature(formData: FormData) {
     redirect(`${workbenchPath(id.data)}?error=The+public+feature+could+not+be+approved.`);
   }
 
+  invalidatePublicProjects();
   revalidatePath(workbenchPath(id.data));
-  revalidatePath("/projects");
   revalidatePath(`/projects/${slug}`);
   redirect(`${workbenchPath(id.data)}?notice=feature-approved#public-feature`);
 }
@@ -356,7 +365,7 @@ export async function rejectPublicProjectFeature(formData: FormData) {
   });
   if (error) redirect(`${workbenchPath(id.data)}?error=The+public+feature+could+not+be+removed.`);
   await removePublicProjectImages(id.data).catch(() => undefined);
+  invalidatePublicProjects();
   revalidatePath(workbenchPath(id.data));
-  revalidatePath("/projects");
   redirect(`${workbenchPath(id.data)}?notice=feature-rejected#public-feature`);
 }

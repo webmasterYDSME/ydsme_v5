@@ -1,9 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { requireCapability, requireRole, requireUser } from "@/lib/auth";
+import {
+  PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
+  PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
+} from "@/lib/cache-tags";
 import { writeAudit } from "@/lib/audit";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
@@ -1193,6 +1197,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cash_instructions: parsed.data.cash_instructions,
   });
   if (error) redirect("/settings?tab=membership&error=Membership+payment+settings+could+not+be+saved.");
+  updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
   revalidatePath("/settings");
   redirect("/settings?tab=membership&notice=membership-payment-settings-saved");
@@ -1221,6 +1226,7 @@ export async function updateMembershipPlan(formData: FormData) {
     actorUserId: user.id, actorRole: role, action: "membership.plan-updated",
     entityType: "membership-plan", entityId: planId, before, after: values,
   });
+  updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?section=plans&notice=plan-updated#plans");
@@ -1321,6 +1327,7 @@ export async function configureMembershipPrice(formData: FormData) {
     entityType: "membership-plan", entityId: plan.id,
     after: { membership_year: year, amount_pence: amountPence, version: (latest?.[0]?.version ?? 0) + 1 },
   });
+  updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?section=plans&notice=price-saved#plans");

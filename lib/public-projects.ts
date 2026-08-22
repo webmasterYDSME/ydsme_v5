@@ -1,8 +1,10 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { cache } from "react";
+import { PUBLIC_PROJECTS_CACHE_TAG } from "@/lib/cache-tags";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { ProjectCategory, ProjectHelpType } from "@/lib/workbench";
 
 type PublicProjectRow = {
@@ -54,24 +56,39 @@ export type PublicFeaturedProjectCard = PublicProjectRow & {
   cover_image_url: string | null;
 };
 
-export const getPublicFeaturedProjectSitemapEntries = cache(async () => {
-  const client = await createClient();
+async function loadPublicFeaturedProjectSitemapEntries() {
+  const client = createPublicClient();
   const { data, error } = await client.from("public_featured_projects")
     .select("slug,published_at")
     .order("published_at", { ascending: false });
   if (error) throw new Error("Unable to load featured project sitemap entries.");
   return (data ?? []) as Array<{ slug: string; published_at: string }>;
-});
+}
 
-export const getPublicFeaturedProjects = cache(async (limit = 24): Promise<PublicFeaturedProjectCard[]> => {
-  const client = await createClient();
+export const getPublicFeaturedProjectSitemapEntries = unstable_cache(
+  loadPublicFeaturedProjectSitemapEntries,
+  ["public-featured-project-sitemap"],
+  { tags: [PUBLIC_PROJECTS_CACHE_TAG], revalidate: 300 },
+);
+
+async function loadPublicFeaturedProjects(limit: number) {
+  const client = createPublicClient();
   const { data, error } = await client.from("public_featured_projects")
     .select("project_id,slug,title,summary,category,completed_at,owner_byline,cover_image_path,published_at")
     .order("published_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error("Unable to load featured projects.");
+  return (data ?? []) as PublicProjectRow[];
+}
 
-  const projects = (data ?? []) as PublicProjectRow[];
+const getCachedPublicFeaturedProjects = unstable_cache(
+  loadPublicFeaturedProjects,
+  ["public-featured-projects"],
+  { tags: [PUBLIC_PROJECTS_CACHE_TAG], revalidate: 300 },
+);
+
+export const getPublicFeaturedProjects = cache(async (limit = 24): Promise<PublicFeaturedProjectCard[]> => {
+  const projects = await getCachedPublicFeaturedProjects(limit);
   const images = await signedPublicProjectImages(projects.map((project) => project.cover_image_path));
   return projects.map((project) => ({
     ...project,
@@ -86,8 +103,12 @@ export type PublicFeaturedProject = PublicProjectRow & {
   }>;
 };
 
-export const getPublicFeaturedProject = cache(async (slug: string): Promise<PublicFeaturedProject | null> => {
-  const client = await createClient();
+type PublicFeaturedProjectData = PublicProjectRow & {
+  updates: Array<PublicUpdateRow & { photos: PublicPhotoRow[] }>;
+};
+
+async function loadPublicFeaturedProject(slug: string): Promise<PublicFeaturedProjectData | null> {
+  const client = createPublicClient();
   const { data, error } = await client.from("public_featured_projects")
     .select("project_id,slug,title,summary,category,completed_at,owner_byline,cover_image_path,published_at")
     .eq("slug", slug)
@@ -113,19 +134,38 @@ export const getPublicFeaturedProject = cache(async (slug: string): Promise<Publ
   if (photoError) throw new Error("Unable to load public project photographs.");
 
   const photos = (photoData ?? []) as PublicPhotoRow[];
+  return {
+    ...project,
+    updates: updates.map((update) => ({
+      ...update,
+      photos: photos.filter((photo) => photo.update_id === update.id),
+    })),
+  };
+}
+
+const getCachedPublicFeaturedProject = unstable_cache(
+  loadPublicFeaturedProject,
+  ["public-featured-project"],
+  { tags: [PUBLIC_PROJECTS_CACHE_TAG], revalidate: 300 },
+);
+
+export const getPublicFeaturedProject = cache(async (slug: string): Promise<PublicFeaturedProject | null> => {
+  const project = await getCachedPublicFeaturedProject(slug);
+  if (!project) return null;
+  const photos = project.updates.flatMap((update) => update.photos);
   const images = await signedPublicProjectImages([
     project.cover_image_path,
     ...photos.map((photo) => photo.storage_path),
   ]);
-
   return {
     ...project,
     cover_image_url: project.cover_image_path ? images.get(project.cover_image_path) ?? null : null,
-    updates: updates.map((update) => ({
+    updates: project.updates.map((update) => ({
       ...update,
-      photos: photos
-        .filter((photo) => photo.update_id === update.id)
-        .map((photo) => ({ ...photo, image_url: images.get(photo.storage_path) ?? null })),
+      photos: update.photos.map((photo) => ({
+        ...photo,
+        image_url: images.get(photo.storage_path) ?? null,
+      })),
     })),
   };
 });
