@@ -201,6 +201,28 @@ test("requires action-level roles before privileged writes", async () => {
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
 });
 
+test("separates member-register viewing, status management and role administration", async () => {
+  const [auth, adminPage, actions, navigation] = await Promise.all([
+    read("lib/auth.ts"),
+    read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
+    read("app/components/PortalNavigation.tsx"),
+  ]);
+  assert.match(auth, /committee: new Set\([\s\S]*"members\.view"/);
+  assert.match(adminPage, /section === "workshops" \? "workshops\.manage" : "members\.view"/);
+  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: "Member register"/);
+  assert.match(adminPage, /const administrator = session\.role === "administrator"/);
+  assert.match(adminPage, /const canManageMemberStatus = administrator \|\| session\.membershipOfficer/);
+  assert.match(adminPage, /administrator \? <form className="member-role-form" action=\{updateMemberRole\}/);
+  assert.match(adminPage, /canChangeThisStatus[\s\S]*action=\{suspendMember\}[\s\S]*action=\{deleteMember\}/);
+  assert.match(actions, /updateMemberRole[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(actions, /requireMemberStatusManager[\s\S]*session\.role !== "administrator" && !session\.membershipOfficer/);
+  assert.match(actions, /deleteMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+archive\+a\+committee\+member\+or\+administrator/);
+  assert.match(actions, /suspendMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+suspend\+a\+committee\+member\+or\+administrator/);
+  assert.match(actions, /restoreMember[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(actions, /purgeMember[\s\S]*requireRole\(\["administrator"\]\)/);
+});
+
 test("reviews and standardizes event images before secure upload", async () => {
   const [field, editor, admin, styles] = await Promise.all([
     read("app/components/EventImageUploadField.tsx"),

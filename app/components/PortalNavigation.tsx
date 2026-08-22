@@ -106,14 +106,14 @@ function PortalNavigationForPath({
   const groups: PortalGroup[] = [
     { id: "members", label: "For members", icon: UserRound, links: memberLinks },
     ...(canViewContent ? [{ id: "website", label: "Website", icon: Globe2, links: contentLinks }] : []),
-    ...((membershipOfficer || administrator) ? [{
+    ...(role !== "member" ? [{
       id: "membership",
       label: "Membership and money",
       icon: Landmark,
       links: [
         ...(membershipOfficer && membershipEnabled ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
-        ...(administrator ? [{ href: "/admin/members", label: "Member register", icon: UsersRound }] : []),
-        { href: "/admin/donations", label: "Donations", icon: HandCoins },
+        { href: "/admin/members", label: "Member register", icon: UsersRound },
+        ...((membershipOfficer || administrator) ? [{ href: "/admin/donations", label: "Donations", icon: HandCoins }] : []),
       ],
     }] : []),
     ...(administrator ? [{ id: "administration", label: "Administration", icon: Settings, links: administratorLinks }] : []),

@@ -20,6 +20,7 @@ export const capabilities = [
   "bookings.manage",
   "workshops.manage",
   "documents.manage",
+  "members.view",
   "members.manage",
   "memberships.manage",
   "settings.manage",
@@ -34,6 +35,7 @@ const roleCapabilities: Record<AppRole, ReadonlySet<Capability>> = {
   committee: new Set([
     "portal.view", "profile.manage-own", "workshops.reserve-own", "notices.create-own",
     "notices.moderate", "announcements.manage", "events.manage", "bookings.manage", "workshops.manage", "documents.manage",
+    "members.view",
   ]),
   administrator: new Set(capabilities),
 };

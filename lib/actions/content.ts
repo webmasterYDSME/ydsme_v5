@@ -599,12 +599,23 @@ export async function inviteMember(formData: FormData) {
   redirect("/admin/members?notice=invitation-sent");
 }
 
+async function requireMemberStatusManager() {
+  const session = await requireUser();
+  if (session.role !== "administrator" && !session.membershipOfficer) {
+    redirect("/dashboard?notice=not-authorised");
+  }
+  return session;
+}
+
 export async function deleteMember(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireMemberStatusManager();
   const userId = idString.parse(formData.get("user_id"));
   if (userId === user.id) redirect("/admin/members?error=You+cannot+archive+your+own+account.");
   const admin = createAdminClient();
   const { data: targetRole } = await admin.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (role !== "administrator" && (targetRole?.role ?? "member") !== "member") {
+    redirect("/admin/members?error=Only+an+administrator+can+archive+a+committee+member+or+administrator.");
+  }
   if (targetRole?.role === "administrator") {
     if (await activeAdministratorCount() <= 1) redirect("/admin/members?error=The+last+active+administrator+cannot+be+archived.");
   }
@@ -629,11 +640,14 @@ export async function restoreMember(formData: FormData) {
 }
 
 export async function suspendMember(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireMemberStatusManager();
   const userId = idString.parse(formData.get("user_id"));
   if (userId === user.id) redirect("/admin/members?error=You+cannot+suspend+your+own+account.");
   const admin = createAdminClient();
   const { data: targetRole } = await admin.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (role !== "administrator" && (targetRole?.role ?? "member") !== "member") {
+    redirect("/admin/members?error=Only+an+administrator+can+suspend+a+committee+member+or+administrator.");
+  }
   if (targetRole?.role === "administrator") redirect("/admin/members?error=Demote+an+administrator+before+suspending+their+access.");
   const { data, error } = await admin.from("users").update({ membership_status: "suspended", updated_at: new Date().toISOString() }).eq("id", userId).eq("membership_status", "active").select("id,email").maybeSingle();
   if (error || !data) redirect("/admin/members?error=The+member+could+not+be+suspended.");

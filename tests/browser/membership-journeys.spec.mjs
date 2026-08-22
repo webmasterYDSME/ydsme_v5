@@ -126,6 +126,19 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("heading", { name: "Project Workbench" })).toBeVisible();
   });
 
+  test("committee members can review the member register without changing access or roles", async ({ page }) => {
+    await signIn(page, "journey.committee@example.test", "/admin/members?q=journey.member%40example.test");
+    await expect(page.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
+    const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
+    await expect(memberRow).toBeVisible();
+    await expect(memberRow.locator(".member-role-readonly strong")).toHaveText("Member");
+    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Suspend access" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Archive member" })).toHaveCount(0);
+    await expect(page.getByText("Invite a member", { exact: true })).toHaveCount(0);
+  });
+
   test.afterAll(async () => {
     await cleanMembershipFixtures();
     const { data: settings } = await admin.from("membership_payment_settings_versions").select("id,active");
@@ -599,8 +612,15 @@ test.describe("membership public, member and officer journeys", () => {
 
     await signIn(page, "journey.committee@example.test", "/admin/memberships");
     await expect(page.getByRole("heading", { name: "Manage memberships", exact: true })).toBeVisible();
+    await page.goto("/admin/members?q=journey.member%40example.test");
+    const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
+    await expect(memberRow.getByRole("button", { name: "Suspend access" })).toBeVisible();
+    await expect(memberRow.getByRole("button", { name: "Archive member" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
     await admin.from("user_capabilities").delete().eq("user_id", committee.id).eq("capability", "memberships.manage");
     await page.reload();
+    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
+    await page.goto("/admin/memberships");
     await expect(page).not.toHaveURL(/\/admin\/memberships/);
   });
 });
