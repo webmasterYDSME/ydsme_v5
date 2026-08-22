@@ -751,6 +751,55 @@ test("caches reusable public API reads and invalidates them after writes", async
   assert.match(paymentWebhook, /revalidateTag\(PUBLIC_DONATIONS_CACHE_TAG, "max"\)/);
 });
 
+test("caches shared dashboard reads without caching personal member state", async () => {
+  const [
+    cacheTags,
+    dashboardData,
+    dashboard,
+    library,
+    documents,
+    documentDownload,
+    contentActions,
+    workbench,
+  ] = await Promise.all([
+    read("lib/cache-tags.ts"),
+    read("lib/dashboard-data.ts"),
+    read("app/dashboard/page.tsx"),
+    read("app/dashboard/library/page.tsx"),
+    read("app/dashboard/[section]/page.tsx"),
+    read("app/dashboard/documents/[id]/download/route.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/workbench.ts"),
+  ]);
+
+  for (const tag of [
+    "MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG",
+    "MEMBER_DASHBOARD_EVENTS_CACHE_TAG",
+    "MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG",
+  ]) assert.match(cacheTags, new RegExp(`export const ${tag}`));
+
+  assert.match(dashboardData, /getCachedDashboardSharedSnapshot = unstable_cache[\s\S]*revalidate: 60/);
+  assert.match(dashboardData, /getMemberDocumentCounts = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(dashboardData, /getCachedPublishedMemberDocuments = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(dashboardData, /getCachedWorkshopReservationCounts = unstable_cache[\s\S]*revalidate: 15/);
+  assert.match(dashboard, /getDashboardSharedSnapshot\(today\)/);
+  assert.match(dashboard, /getMemberDocumentCounts\(\)/);
+  assert.match(dashboard, /getWorkshopReservationCounts\(workshopIds\)/);
+  assert.match(dashboard, /dashboard_feed_snapshot/);
+  assert.match(dashboard, /\.eq\("participant_id", user\.id\)/);
+  assert.match(dashboard, /own_archived_notices/);
+  assert.match(library, /getMemberDocumentCounts\(\)/);
+  assert.doesNotMatch(library, /createClient|\.from\("documents"\)/);
+  assert.match(documents, /getPublishedMemberDocuments\(config\.categories, firstRow, pageSize\)/);
+  assert.match(documentDownload, /requireUser\(\)/);
+  assert.match(documentDownload, /Cache-Control", "private, no-store, max-age=0"/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_EVENTS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG\)/);
+  assert.doesNotMatch(workbench, /unstable_cache|createAdminClient/);
+  assert.match(workbench, /import \{ createClient \} from "@\/lib\/supabase\/server"/);
+});
+
 test("enables the complete membership platform with one flag and otherwise falls back to MemberMojo", async () => {
   const [features, membershipPage, applicationPage, accountPage, checkout, verification, guardian, switchAccount, settings, actions] = await Promise.all([
     read("lib/features.ts"),

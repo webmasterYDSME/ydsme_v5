@@ -1,4 +1,7 @@
 export const ANNOUNCEMENTS_CACHE_TAG = "announcements";
+export const MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG = "member-dashboard-documents";
+export const MEMBER_DASHBOARD_EVENTS_CACHE_TAG = "member-dashboard-events";
+export const MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG = "member-dashboard-workshops";
 export const PUBLIC_COMMITTEE_CACHE_TAG = "public-committee";
 export const PUBLIC_DONATIONS_CACHE_TAG = "public-donations";
 export const PUBLIC_EVENTS_CACHE_TAG = "public-events";

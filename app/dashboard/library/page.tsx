@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { BookOpen, FileText, Newspaper } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/server";
+import { getMemberDocumentCounts } from "@/lib/dashboard-data";
 
 export const dynamic = "force-dynamic";
 
 const librarySections = [
   {
+    key: "minutes",
     href: "/dashboard/minutes",
     title: "Committee minutes",
     description: "Formal records of Society meetings and committee decisions.",
@@ -14,6 +15,7 @@ const librarySections = [
     icon: FileText,
   },
   {
+    key: "publications",
     href: "/dashboard/publications",
     title: "Society publications",
     description: "Newsletters and publications produced for members.",
@@ -21,6 +23,7 @@ const librarySections = [
     icon: Newspaper,
   },
   {
+    key: "resources",
     href: "/dashboard/resources",
     title: "Member resources",
     description: "Rules, insurance, calendars, boiler guidance and useful files.",
@@ -31,11 +34,7 @@ const librarySections = [
 
 export default async function SocietyLibraryPage() {
   await requireUser();
-  const client = await createClient();
-  const counts = await Promise.all(librarySections.map((section) => client.from("documents")
-    .select("id", { count: "exact", head: true })
-    .in("category", [...section.categories])
-    .eq("lifecycle_status", "published")));
+  const counts = await getMemberDocumentCounts();
 
   return <div className="portal-content">
     <header className="portal-heading">
@@ -47,13 +46,13 @@ export default async function SocietyLibraryPage() {
       <BookOpen aria-hidden="true"/>
     </header>
     <section className="library-grid" aria-label="Library sections">
-      {librarySections.map((section, index) => {
+      {librarySections.map((section) => {
         const Icon = section.icon;
-        const count = counts[index].error ? null : counts[index].count ?? 0;
+        const count = counts[section.key];
         return <Link href={section.href} className="library-card" key={section.href}>
           <span className="library-card-icon"><Icon aria-hidden="true"/></span>
           <div>
-            <span>{count === null ? "Member documents" : `${count} ${count === 1 ? "document" : "documents"}`}</span>
+            <span>{count} {count === 1 ? "document" : "documents"}</span>
             <h2>{section.title}</h2>
             <p>{section.description}</p>
           </div>

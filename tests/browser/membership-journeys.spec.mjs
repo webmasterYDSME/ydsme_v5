@@ -109,6 +109,23 @@ test.describe("membership public, member and officer journeys", () => {
     originalSettingsId = settings.find(({ active }) => active)?.id;
   });
 
+  test("active members can use the cached dashboard, library and Workbench routes", async ({ page }) => {
+    await signIn(page, "journey.member@example.test");
+    await expect(page.getByRole("heading", { name: "Good to see you." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upcoming running days" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Learn & make" })).toBeVisible();
+
+    await page.goto("/dashboard/library");
+    await expect(page.getByRole("heading", { name: "Society library" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Committee minutes/ })).toBeVisible();
+
+    await page.goto("/dashboard/minutes");
+    await expect(page.getByRole("heading", { name: "Committee minutes" })).toBeVisible();
+
+    await page.goto("/dashboard/workbench");
+    await expect(page.getByRole("heading", { name: "Project Workbench" })).toBeVisible();
+  });
+
   test.afterAll(async () => {
     await cleanMembershipFixtures();
     const { data: settings } = await admin.from("membership_payment_settings_versions").select("id,active");

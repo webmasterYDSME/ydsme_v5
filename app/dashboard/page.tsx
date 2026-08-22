@@ -9,6 +9,11 @@ import { NewMemberMarquee } from "@/app/components/NewMemberMarquee";
 import { ResponsiveDashboardCard } from "@/app/components/ResponsiveDashboardCard";
 import { safeHttpUrl } from "@/lib/security-input";
 import { ProjectCard } from "@/app/dashboard/workbench/ProjectCard";
+import {
+  getDashboardSharedSnapshot,
+  getMemberDocumentCounts,
+  getWorkshopReservationCounts,
+} from "@/lib/dashboard-data";
 import { getWorkbenchProjects } from "@/lib/workbench";
 
 export const dynamic = "force-dynamic";
@@ -23,15 +28,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const notice = query.notice ? dashboardNotices[query.notice] : undefined;
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
-  const [eventsResult, workshopsResult, feedSnapshotResult, docsResult, workbenchProjects] = await Promise.all([
-    supabase.from("events").select("id,name,start_date,start_time,event_type", { count: "exact" }).eq("lifecycle_status", "published").gte("end_date", today).order("start_date").limit(6),
-    supabase.from("workshops").select("id,title,date,start_time,venue,maximum_participants", { count: "exact" }).eq("lifecycle_status", "published").gte("date", today).order("date").limit(4),
+  const [sharedSnapshot, documentCounts, feedSnapshotResult, workbenchProjects] = await Promise.all([
+    getDashboardSharedSnapshot(today),
+    getMemberDocumentCounts(),
     supabase.rpc("dashboard_feed_snapshot", { p_limit: 12 }),
-    supabase.from("documents").select("id", { count: "exact", head: true }).eq("lifecycle_status", "published"),
     getWorkbenchProjects({ userId: user.id, limit: 3 }),
   ]);
-  const events = eventsResult.data ?? [];
-  const workshops = workshopsResult.data ?? [];
+  const events = sharedSnapshot.events;
+  const workshops = sharedSnapshot.workshops;
   if (feedSnapshotResult.error) throw new Error("Unable to load member updates.");
   const feedSnapshot = (feedSnapshotResult.data ?? {}) as unknown as Partial<{
     recent: Array<{ id: number; type: string; title: string | null; message: string; url: string | null; author_name: string | null; author_id: string | null; created_at: string }>;
@@ -41,13 +45,15 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   }>;
   const feeds = feedSnapshot.recent ?? [];
   const workshopIds = workshops.map((workshop) => workshop.id);
-  const [{ data: ownReservations }, { data: reservationCounts }] = workshopIds.length ? await Promise.all([
-    supabase.from("participants").select("reference_id").eq("participant_id", user.id).eq("reservation_status", "reserved").in("reference_id", workshopIds),
-    supabase.rpc("workshop_reservation_counts", { p_workshop_ids: workshopIds }),
-  ]) : [{ data: [] }, { data: [] }];
+  const [{ data: ownReservations }, reservationCounts, { data: archivedNotices }] = await Promise.all([
+    workshopIds.length
+      ? supabase.from("participants").select("reference_id").eq("participant_id", user.id).eq("reservation_status", "reserved").in("reference_id", workshopIds)
+      : Promise.resolve({ data: [] }),
+    getWorkshopReservationCounts(workshopIds),
+    supabase.rpc("own_archived_notices", { p_limit: 10 }),
+  ]);
   const ownWorkshopIds = new Set((ownReservations ?? []).map((item) => item.reference_id));
-  const placesByWorkshop = new Map((reservationCounts ?? []).map((item) => [item.reference_id, Number(item.reserved_count)]));
-  const { data: archivedNotices } = await supabase.rpc("own_archived_notices", { p_limit: 10 });
+  const placesByWorkshop = new Map(reservationCounts.map((item) => [item.reference_id, item.reserved_count]));
   const featuredFeeds = [
     { label: "Latest document upload", kind: "document", empty: "No documents have been uploaded yet.", feed: feedSnapshot.latest_document },
     { label: "Latest member post", kind: "message", empty: "No member posts have been shared yet.", feed: feedSnapshot.latest_message },
@@ -152,9 +158,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
 
       <ResponsiveDashboardCard className="dashboard-snapshot" eyebrow="At a glance" heading="Club overview" headingId="society-snapshot">
         <dl>
-          <div><dt><CalendarDays/>Upcoming dates</dt><dd>{eventsResult.count ?? 0}</dd></div>
-          <div><dt><Wrench/>Open workshops</dt><dd>{workshopsResult.count ?? 0}</dd></div>
-          <div><dt><FileText/>Club documents</dt><dd>{docsResult.count ?? 0}</dd></div>
+          <div><dt><CalendarDays/>Upcoming dates</dt><dd>{sharedSnapshot.eventCount}</dd></div>
+          <div><dt><Wrench/>Open workshops</dt><dd>{sharedSnapshot.workshopCount}</dd></div>
+          <div><dt><FileText/>Club documents</dt><dd>{Object.values(documentCounts).reduce((total, count) => total + count, 0)}</dd></div>
         </dl>
       </ResponsiveDashboardCard>
     </div>

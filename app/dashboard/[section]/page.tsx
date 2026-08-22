@@ -3,8 +3,12 @@ import { notFound, redirect } from "next/navigation";
 import { Archive, Download, FileText, Pencil, RotateCcw, Upload } from "lucide-react";
 import { format } from "date-fns";
 import { canManageContent, isAdministrator, requireUser } from "@/lib/auth";
+import {
+  getMemberDocumentCounts,
+  getPublishedMemberDocuments,
+  type MemberDocumentSection,
+} from "@/lib/dashboard-data";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { deleteDocument, purgeDocument, replaceDocumentVersion, restoreDocument, updateDocumentMetadata, uploadDocument } from "@/lib/actions/content";
 import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
@@ -24,31 +28,39 @@ export default async function DocumentsPage({ params, searchParams }: { params: 
   const admin = createAdminClient();
   const editable = canManageContent(role);
   const status = editable && query.status === "archived" ? "archived" : "published";
-  const client = editable ? admin : await createClient();
   const pageSize = 12;
   const requestedPage = Number(query.page);
   const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const firstRow = (currentPage - 1) * pageSize;
-  const otherStatus = status === "published" ? "archived" : "published";
-  const [pageResult, otherCountResult] = await Promise.all([
-    client.from("documents")
+  const pageRequest = status === "published"
+    ? getPublishedMemberDocuments(config.categories, firstRow, pageSize)
+    : admin.from("documents")
       .select("id,name,descriptions,category,created_at,lifecycle_status,version", { count: "exact" })
       .in("category", [...config.categories])
-      .eq("lifecycle_status", status)
+      .eq("lifecycle_status", "archived")
       .order("created_at", { ascending: false })
-      .range(firstRow, firstRow + pageSize - 1),
-    editable
-      ? admin.from("documents").select("id", { count: "exact", head: true }).in("category", [...config.categories]).eq("lifecycle_status", otherStatus)
+      .range(firstRow, firstRow + pageSize - 1)
+      .then((result) => {
+        if (result.error) throw new Error("Unable to load documents.");
+        return { data: result.data ?? [], count: result.count ?? 0 };
+      });
+  const [pageResult, publishedCounts, archivedCountResult] = await Promise.all([
+    pageRequest,
+    status === "archived" ? getMemberDocumentCounts() : Promise.resolve(null),
+    editable && status === "published"
+      ? admin.from("documents").select("id", { count: "exact", head: true }).in("category", [...config.categories]).eq("lifecycle_status", "archived")
       : Promise.resolve({ count: 0, error: null }),
   ]);
-  if (pageResult.error || otherCountResult.error) throw new Error("Unable to load documents.");
-  const selectedCount = pageResult.count ?? 0;
+  if (archivedCountResult.error) throw new Error("Unable to load documents.");
+  const selectedCount = pageResult.count;
   const pageCount = Math.max(1, Math.ceil(selectedCount / pageSize));
   const pageHref = (page: number) => editable ? `/dashboard/${section}?status=${status}&page=${page}` : `/dashboard/${section}?page=${page}`;
   if (currentPage > pageCount) redirect(pageHref(pageCount));
-  const publishedCount = status === "published" ? selectedCount : otherCountResult.count ?? 0;
-  const archivedCount = status === "archived" ? selectedCount : otherCountResult.count ?? 0;
-  const docs = pageResult.data ?? [];
+  const publishedCount = status === "published"
+    ? selectedCount
+    : publishedCounts?.[section as MemberDocumentSection] ?? 0;
+  const archivedCount = status === "archived" ? selectedCount : archivedCountResult.count ?? 0;
+  const docs = pageResult.data;
 
   return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Document archive</p><h1>{config.title}</h1><p>{config.copy}</p></div></header>
     {query.error ? <p className="form-message error">{query.error}</p> : null}
