@@ -49,7 +49,7 @@ For a non-loopback Supabase project, repeat the exact API hostname as an explici
 npm run admin:bootstrap -- --email person@example.org --confirm-host project-ref.supabase.co
 ```
 
-The command refuses unverified accounts, refuses to create or invite an account, and stops permanently once any administrator role exists. It records the promotion in the audit log. After signing in, the first administrator must invite and assign at least two further active administrators through the normal member register before an existing populated installation crosses the historical role-migration safety gate.
+The command refuses unverified accounts, refuses to create or invite an account, and stops permanently once any administrator role exists. It records the promotion in the audit log. After signing in, the first administrator must invite and assign one further active administrator through the normal member register before an existing populated installation crosses the role-migration safety gate. The website prevents either account from being demoted or archived until another active administrator has been assigned.
 
 ## Membership billing rollout
 

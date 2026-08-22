@@ -271,23 +271,28 @@ test("edits events in an accessible two-section modal", async () => {
   assert.match(styles, /\.event-editor-panel\[hidden\]\{display:none\}/);
 });
 
-test("uses exactly three database-backed application roles", async () => {
-  const [auth, migration, bootstrapMigration, bootstrapScript, admin] = await Promise.all([
+test("uses exactly three database-backed application roles and two active administrators", async () => {
+  const [auth, migration, minimumAdministratorsMigration, bootstrapMigration, bootstrapScript, adminPage, actions] = await Promise.all([
     read("lib/auth.ts"),
     read("supabase/migrations/202608180004_secure_dashboard.sql"),
+    read("supabase/migrations/202608220003_require_two_active_administrators.sql"),
     read("supabase/migrations/202608220001_administrator_bootstrap.sql"),
     read("scripts/bootstrap-administrator.mjs"),
     read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
   ]);
   assert.match(auth, /appRoles = \["member", "committee", "administrator"\] as const/);
   assert.doesNotMatch(auth, /read-only-committee|moderator/);
-  assert.doesNotMatch(admin, /read-only-committee|moderator/);
+  assert.doesNotMatch(adminPage, /read-only-committee|moderator/);
   assert.match(migration, /membership_status in \('active', 'suspended', 'archived'\)/);
   assert.match(migration, /role in \('member', 'committee', 'administrator'\)/);
   assert.match(migration, /where role::text in \('moderator', 'read-only-committee'\)/);
   assert.match(migration, /drop type if exists public\.app_permission/);
-  assert.match(migration, /application_users > 0 and active_administrators < 3/);
-  assert.match(migration, /Expected at least three active administrators/);
+  assert.match(migration, /application_users > 0 and active_administrators < 2/);
+  assert.match(migration, /Expected at least two active administrators/);
+  assert.match(actions, /activeAdministratorCount\(\) <= 2[\s\S]*At\+least\+two\+active\+administrators\+are\+required/);
+  assert.match(minimumAdministratorsMigration, /minimum_two_active_administrators_required/);
+  assert.match(minimumAdministratorsMigration, /u\.id<>new\.id[\s\S]*\) < 2/);
   assert.match(bootstrapMigration, /if exists\(select 1 from public\.user_roles where role = 'administrator'\)/);
   assert.match(bootstrapMigration, /v_email_confirmed_at is null/);
   assert.match(bootstrapMigration, /administrator\.bootstrap/);

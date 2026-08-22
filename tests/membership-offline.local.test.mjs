@@ -18,7 +18,8 @@ begin;
 do $test$
 declare
   v_actor uuid := gen_random_uuid();
-  v_backup_administrator uuid := gen_random_uuid();
+  v_backup_administrator_one uuid := gen_random_uuid();
+  v_backup_administrator_two uuid := gen_random_uuid();
   v_plan uuid;
   v_member uuid;
   v_term uuid;
@@ -32,13 +33,27 @@ declare
   v_honorary uuid;
   v_actor_record uuid;
 begin
+  update public.user_roles set role='member' where role='administrator';
   insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
   values(v_actor,'authenticated','authenticated','offline-officer-'||v_actor||'@example.invalid',now(),'{"full_name":"Offline Membership Officer"}',now(),now());
   update public.user_roles set role='administrator' where user_id=v_actor;
   insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
-  values(v_backup_administrator,'authenticated','authenticated','backup-administrator-'||v_backup_administrator||'@example.invalid',now(),
-    '{"full_name":"Backup Administrator"}',now(),now());
-  update public.user_roles set role='administrator' where user_id=v_backup_administrator;
+  values(v_backup_administrator_one,'authenticated','authenticated','backup-administrator-one-'||v_backup_administrator_one||'@example.invalid',now(),
+    '{"full_name":"Backup Administrator One"}',now(),now());
+  update public.user_roles set role='administrator' where user_id=v_backup_administrator_one;
+  begin
+    update public.users set membership_status='archived' where id=v_actor;
+    raise exception 'Two-administrator minimum was not enforced';
+  exception when others then
+    if sqlerrm not like '%minimum_two_active_administrators_required%' then raise; end if;
+  end;
+  if (select membership_status from public.users where id=v_actor)<>'active' then
+    raise exception 'Blocked administrator archive changed the account state';
+  end if;
+  insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
+  values(v_backup_administrator_two,'authenticated','authenticated','backup-administrator-two-'||v_backup_administrator_two||'@example.invalid',now(),
+    '{"full_name":"Backup Administrator Two"}',now(),now());
+  update public.user_roles set role='administrator' where user_id=v_backup_administrator_two;
   select id into v_plan from public.membership_plans where slug='adult';
 
   select member_id,term_id,payment_id into v_member,v_term,v_payment

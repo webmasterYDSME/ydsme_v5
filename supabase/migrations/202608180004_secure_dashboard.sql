@@ -72,9 +72,10 @@ begin
   where ur.role = 'administrator' and u.membership_status = 'active';
   -- A fresh installation has nobody to lock out and must be able to replay the
   -- complete migration chain before its first administrator is bootstrapped.
-  -- Populated upgrades retain the original three-administrator safety gate.
-  if application_users > 0 and active_administrators < 3 then
-    raise exception 'Expected at least three active administrators before rollout; found %', active_administrators;
+  -- Populated upgrades require two active administrators so the website keeps
+  -- a second trusted account available for recovery.
+  if application_users > 0 and active_administrators < 2 then
+    raise exception 'Expected at least two active administrators before rollout; found %', active_administrators;
   end if;
 end;
 $$;

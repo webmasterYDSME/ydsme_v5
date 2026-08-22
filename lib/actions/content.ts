@@ -578,7 +578,7 @@ export async function updateMemberRole(formData: FormData) {
   ]);
   if (target?.membership_status !== "active") redirect("/admin/members?error=Restore+the+member+before+changing+their+role.");
   if (before?.role === "administrator" && role !== "administrator") {
-    if (await activeAdministratorCount() <= 1) redirect("/admin/members?error=The+last+active+administrator+cannot+be+demoted.");
+    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+changing+this+role.");
   }
   const { error } = await admin.from("user_roles").update({ role }).eq("user_id", userId);
   if (error) redirect("/admin/members?error=The+role+could+not+be+updated.");
@@ -617,7 +617,7 @@ export async function deleteMember(formData: FormData) {
     redirect("/admin/members?error=Only+an+administrator+can+archive+a+committee+member+or+administrator.");
   }
   if (targetRole?.role === "administrator") {
-    if (await activeAdministratorCount() <= 1) redirect("/admin/members?error=The+last+active+administrator+cannot+be+archived.");
+    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+archiving+this+account.");
   }
   const now = new Date().toISOString();
   const retentionUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
