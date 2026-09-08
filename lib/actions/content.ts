@@ -3,7 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { canManageContent, requireRole, requireUser } from "@/lib/auth";
+import { canManageContent, requireCapability, requireRole, requireUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +17,16 @@ import {
   ANNOUNCEMENT_DESCRIPTION_MAX_LENGTH,
   ANNOUNCEMENT_TITLE_MAX_LENGTH,
 } from "@/lib/announcements";
-import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  ANNOUNCEMENTS_CACHE_TAG,
+  MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG,
+  MEMBER_DASHBOARD_EVENTS_CACHE_TAG,
+  MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG,
+  PUBLIC_COMMITTEE_CACHE_TAG,
+  PUBLIC_DONATIONS_CACHE_TAG,
+  PUBLIC_EVENTS_CACHE_TAG,
+  PUBLIC_SITE_CONFIG_CACHE_TAG,
+} from "@/lib/cache-tags";
 
 const text = (min = 1, max = 5000) => z.string().trim().min(min).max(max);
 const idString = z.string().min(1).max(100);
@@ -108,6 +117,8 @@ export async function saveEvent(formData: FormData) {
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "event.updated" : "event.created", entityType: "event", entityId: saved.id, before, after: { name: values.name, event_type: values.event_type, lifecycle_status: saved.lifecycle_status, booking_mode: values.booking_mode, public_teaser_enabled: values.public_teaser_enabled } });
+  updateTag(MEMBER_DASHBOARD_EVENTS_CACHE_TAG);
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect(`/admin/events?status=${saved.lifecycle_status}&notice=event-saved`);
 }
@@ -119,6 +130,8 @@ export async function deleteEvent(formData: FormData) {
   const { data, error } = await createAdminClient().from("events").update({ lifecycle_status: "archived", archived_at: now, archived_by: user.id, updated_at: now }).eq("id", id).neq("lifecycle_status", "archived").select("id,name").maybeSingle();
   if (error) redirect("/admin/events?error=The+event+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.archived", entityType: "event", entityId: id, summary: data.name });
+  updateTag(MEMBER_DASHBOARD_EVENTS_CACHE_TAG);
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
   redirect("/admin/events?status=archived&notice=event-archived");
 }
@@ -131,6 +144,8 @@ export async function restoreEvent(formData: FormData) {
   if (error) redirect("/admin/events?status=archived&error=The+event+could+not+be+restored.");
   if (!data) redirect("/admin/events?status=archived&error=Past+events+stay+archived.+Use+Reschedule+to+move+the+dates+forward.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "event.restored", entityType: "event", entityId: id, summary: data.name, after: { lifecycle_status: "draft" } });
+  updateTag(MEMBER_DASHBOARD_EVENTS_CACHE_TAG);
+  updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/admin/events");
   redirect("/admin/events?status=draft&notice=event-restored");
 }
@@ -151,6 +166,7 @@ export async function saveWorkshop(formData: FormData) {
   const { data: saved, error } = await query;
   if (error) redirect("/admin/workshops?error=The+workshop+could+not+be+saved.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "workshop.updated" : "workshop.created", entityType: "workshop", entityId: saved.id, after: { title: values.title, date: values.date, lifecycle_status } });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard"); revalidatePath("/admin/workshops");
   redirect("/admin/workshops?notice=workshop-saved");
 }
@@ -266,6 +282,7 @@ export async function deleteWorkshop(formData: FormData) {
   const { data, error } = await createAdminClient().from("workshops").update({ lifecycle_status: "archived", archived_at: now, archived_by: user.id, updated_at: now }).eq("id", id).select("id,title").maybeSingle();
   if (error) redirect("/admin/workshops?error=The+workshop+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.archived", entityType: "workshop", entityId: id, summary: data.title });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard"); revalidatePath("/admin/workshops");
 }
 
@@ -275,6 +292,7 @@ export async function restoreWorkshop(formData: FormData) {
   const { data, error } = await createAdminClient().from("workshops").update({ lifecycle_status: "draft", archived_at: null, archived_by: null, updated_at: new Date().toISOString() }).eq("id", id).eq("lifecycle_status", "archived").select("id,title").maybeSingle();
   if (error || !data) redirect("/admin/workshops?error=The+workshop+could+not+be+restored.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.restored", entityType: "workshop", entityId: id, summary: data.title, after: { lifecycle_status: "draft" } });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/admin/workshops");
 }
 
@@ -292,6 +310,7 @@ export async function cancelWorkshopReservation(formData: FormData) {
   const mail = workshop && member?.email ? await sendWorkshopReservationUpdate({ email: member.email, memberName: member.full_name || member.email, workshopTitle: workshop.title, workshopDate: workshop.date, reserved: false }) : { sent: false };
   await admin.rpc("record_workshop_email_attempt", { p_reservation_id: id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.reservation-cancelled", entityType: "workshop-reservation", entityId: id, after: { workshop_id: data.reference_id, participant_id: data.participant_id, status: "cancelled", email_sent: mail.sent } });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/admin/workshops");
   revalidatePath("/dashboard");
   redirect("/admin/workshops?notice=reservation-cancelled");
@@ -312,6 +331,7 @@ export async function joinWorkshop(formData: FormData) {
   const reservationId = data?.[0]?.reservation_id;
   if (reservationId) await admin.rpc("record_workshop_email_attempt", { p_reservation_id: reservationId, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.reserved", entityType: "workshop", entityId: referenceId, after: { reservation_id: data?.[0]?.reservation_id, email_sent: mail.sent } });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard");
 }
 
@@ -329,6 +349,7 @@ export async function leaveWorkshop(formData: FormData) {
   const { data: reservation } = await admin.from("participants").select("id").eq("reference_id", referenceId).eq("participant_id", user.id).maybeSingle();
   if (cancelled && reservation) await admin.rpc("record_workshop_email_attempt", { p_reservation_id: reservation.id, p_sent: mail.sent, p_error: mail.sent ? "" : "Delivery failed." });
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "workshop.reservation-cancelled-own", entityType: "workshop", entityId: referenceId, after: { cancelled, email_sent: mail.sent } });
+  updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard");
 }
 
@@ -407,6 +428,7 @@ export async function uploadDocument(formData: FormData) {
   const { data, error } = await admin.from("documents").insert({ name: name.data, descriptions: String(formData.get("descriptions") || "").slice(0, 5000), category: category.data, file_url: upload.canonicalPath, created_by: user.id, lifecycle_status: "published" }).select("id").single();
   if (error) { await admin.storage.from("documents").remove([upload.path]); redirect("/dashboard/resources?error=The+document+record+could+not+be+saved."); }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.created", entityType: "document", entityId: data.id, summary: name.data, after: { category: category.data, path: upload.canonicalPath } });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
@@ -417,6 +439,7 @@ export async function deleteDocument(formData: FormData) {
   const { data, error } = await createAdminClient().from("documents").update({ lifecycle_status: "archived", archived_at: now, archived_by: user.id, updated_at: now }).eq("id", id).select("id,name").maybeSingle();
   if (error) redirect("/dashboard/resources?error=The+document+could+not+be+archived.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.archived", entityType: "document", entityId: id, summary: data.name });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
@@ -426,6 +449,7 @@ export async function restoreDocument(formData: FormData) {
   const { data, error } = await createAdminClient().from("documents").update({ lifecycle_status: "published", archived_at: null, archived_by: null, updated_at: new Date().toISOString() }).eq("id", id).eq("lifecycle_status", "archived").select("id,name").maybeSingle();
   if (error || !data) redirect("/dashboard/resources?error=The+document+could+not+be+restored.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.restored", entityType: "document", entityId: id, summary: data.name });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
@@ -437,6 +461,7 @@ export async function updateDocumentMetadata(formData: FormData) {
   const { data, error } = await createAdminClient().from("documents").update({ name: parsed.data.name, descriptions: parsed.data.descriptions, updated_at: new Date().toISOString() }).eq("id", parsed.data.id).select("id").maybeSingle();
   if (error || !data) redirect("/dashboard/resources?error=The+document+could+not+be+updated.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.metadata-updated", entityType: "document", entityId: data.id, before, after: { name: parsed.data.name, descriptions: parsed.data.descriptions } });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
@@ -459,12 +484,13 @@ export async function replaceDocumentVersion(formData: FormData) {
   const oldPath = before.file_url.startsWith("documents/") ? before.file_url.slice("documents/".length) : before.file_url;
   if (oldPath && !oldPath.includes("..")) await admin.storage.from("documents").remove([oldPath]);
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.version-replaced", entityType: "document", entityId: id, summary: before.name, before: { version: before.version, path: before.file_url }, after: { version: before.version + 1, path: upload.canonicalPath } });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
 export async function purgeDocument(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
-  const parsed = z.object({ id: z.string().uuid(), confirmation: z.literal("PURGE DOCUMENT") }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ id: z.string().uuid(), confirmation: z.literal("DELETE DOCUMENT") }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/dashboard/resources?error=Type+PURGE+DOCUMENT+to+confirm.");
   const admin = createAdminClient();
   const { data: doc } = await admin.from("documents").select("id,name,file_url,lifecycle_status,version").eq("id", parsed.data.id).maybeSingle();
@@ -477,6 +503,7 @@ export async function purgeDocument(formData: FormData) {
   const { data: deleted, error } = await admin.from("documents").delete().eq("id", doc.id).eq("lifecycle_status", "archived").select("id").maybeSingle();
   if (error || !deleted) redirect("/dashboard/resources?error=The+document+could+not+be+purged.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.purged", entityType: "document", entityId: doc.id, summary: doc.name, before: { version: doc.version, path: doc.file_url } });
+  updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
 }
 
@@ -502,6 +529,7 @@ export async function saveCommittee(formData: FormData) {
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
   }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "committee-record.updated" : "committee-record.created", entityType: "committee-record", entityId: saved.id, before, after: values });
+  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
   revalidatePath("/committees"); revalidatePath("/settings");
 }
 
@@ -519,6 +547,7 @@ export async function deleteCommittee(formData: FormData) {
   const { data, error } = await admin.from("committees").delete().eq("id", id).select("id").maybeSingle();
   if (error || !data) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+deleted.");
   if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "committee-record.deleted", entityType: "committee-record", entityId: id, before });
+  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
   revalidatePath("/committees"); revalidatePath("/settings");
 }
 
@@ -549,7 +578,7 @@ export async function updateMemberRole(formData: FormData) {
   ]);
   if (target?.membership_status !== "active") redirect("/admin/members?error=Restore+the+member+before+changing+their+role.");
   if (before?.role === "administrator" && role !== "administrator") {
-    if (await activeAdministratorCount() <= 1) redirect("/admin/members?error=The+last+active+administrator+cannot+be+demoted.");
+    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+changing+this+role.");
   }
   const { error } = await admin.from("user_roles").update({ role }).eq("user_id", userId);
   if (error) redirect("/admin/members?error=The+role+could+not+be+updated.");
@@ -570,14 +599,25 @@ export async function inviteMember(formData: FormData) {
   redirect("/admin/members?notice=invitation-sent");
 }
 
+async function requireMemberStatusManager() {
+  const session = await requireUser();
+  if (session.role !== "administrator" && !session.membershipOfficer) {
+    redirect("/dashboard?notice=not-authorised");
+  }
+  return session;
+}
+
 export async function deleteMember(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireMemberStatusManager();
   const userId = idString.parse(formData.get("user_id"));
   if (userId === user.id) redirect("/admin/members?error=You+cannot+archive+your+own+account.");
   const admin = createAdminClient();
   const { data: targetRole } = await admin.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (role !== "administrator" && (targetRole?.role ?? "member") !== "member") {
+    redirect("/admin/members?error=Only+an+administrator+can+archive+a+committee+member+or+administrator.");
+  }
   if (targetRole?.role === "administrator") {
-    if (await activeAdministratorCount() <= 1) redirect("/admin/members?error=The+last+active+administrator+cannot+be+archived.");
+    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+archiving+this+account.");
   }
   const now = new Date().toISOString();
   const retentionUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -600,11 +640,14 @@ export async function restoreMember(formData: FormData) {
 }
 
 export async function suspendMember(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireMemberStatusManager();
   const userId = idString.parse(formData.get("user_id"));
   if (userId === user.id) redirect("/admin/members?error=You+cannot+suspend+your+own+account.");
   const admin = createAdminClient();
   const { data: targetRole } = await admin.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (role !== "administrator" && (targetRole?.role ?? "member") !== "member") {
+    redirect("/admin/members?error=Only+an+administrator+can+suspend+a+committee+member+or+administrator.");
+  }
   if (targetRole?.role === "administrator") redirect("/admin/members?error=Demote+an+administrator+before+suspending+their+access.");
   const { data, error } = await admin.from("users").update({ membership_status: "suspended", updated_at: new Date().toISOString() }).eq("id", userId).eq("membership_status", "active").select("id,email").maybeSingle();
   if (error || !data) redirect("/admin/members?error=The+member+could+not+be+suspended.");
@@ -705,13 +748,14 @@ export async function saveSiteConfig(formData: FormData) {
   const { error: linkError } = await admin.rpc("replace_public_site_links", { p_socials: socials.data, p_affiliates: affiliates.data });
   if (linkError) redirect("/settings?tab=site&error=Society+details+were+saved,+but+public+links+could+not+be+updated.");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "site-settings.updated", entityType: "site-config", entityId: id, before, after });
+  updateTag(PUBLIC_SITE_CONFIG_CACHE_TAG);
   revalidatePath("/", "layout");
   revalidatePath("/settings");
   redirect("/settings?tab=site&notice=config-saved");
 }
 
 export async function saveDonationSettings(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
+  const { user, role } = await requireCapability("donations.manage");
   const parsed = z.object({
     id: z.coerce.number().int().positive(),
     generic_title: text(2, 120),
@@ -724,13 +768,13 @@ export async function saveDonationSettings(formData: FormData) {
   }).safeParse(Object.fromEntries(formData));
 
   if (!parsed.success) {
-    redirect("/settings?tab=donations&error=Please+check+the+donation+content+and+campaign+amounts.");
+    redirect("/admin/donations?view=appeals&error=invalid");
   }
 
   const genericEnabled = bool(formData, "generic_enabled");
   const targetEnabled = bool(formData, "target_enabled");
   if ((genericEnabled || targetEnabled) && !process.env.STRIPE_SECRET_KEY) {
-    redirect("/settings?tab=donations&error=Add+the+Stripe+secret+key+before+enabling+donations.");
+    redirect("/admin/donations?view=appeals&error=payment-configuration");
   }
 
   const admin = createAdminClient();
@@ -739,7 +783,7 @@ export async function saveDonationSettings(formData: FormData) {
     .select("settings")
     .eq("id", parsed.data.id)
     .single();
-  if (readError) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+loaded.");
+  if (readError) redirect("/admin/donations?view=appeals&error=load");
 
   const currentSettings = config.settings && typeof config.settings === "object" && !Array.isArray(config.settings)
     ? config.settings
@@ -764,14 +808,15 @@ export async function saveDonationSettings(formData: FormData) {
   };
 
   const { error } = await admin.from("configs").update({ settings }).eq("id", parsed.data.id);
-  if (error) redirect("/settings?tab=donations&error=Donation+settings+could+not+be+saved.");
+  if (error) redirect("/admin/donations?view=appeals&error=save");
   const { error: campaignError } = await admin.rpc("replace_donation_campaigns", { p_generic: settings.donations.generic, p_target: settings.donations.target });
-  if (campaignError) redirect("/settings?tab=donations&error=Donation+campaigns+could+not+be+saved.");
+  if (campaignError) redirect("/admin/donations?view=appeals&error=save");
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "donation-campaigns.updated", entityType: "site-config", entityId: parsed.data.id, before: { donations: currentSettings.donations }, after: { donations: settings.donations } });
+  updateTag(PUBLIC_DONATIONS_CACHE_TAG);
   revalidatePath("/");
   revalidatePath("/visitors");
   revalidatePath("/settings");
-  redirect("/settings?tab=donations&notice=donations-saved");
+  redirect("/admin/donations?view=appeals&notice=donations-saved");
 }
 
 function parseCsv(file: File) {

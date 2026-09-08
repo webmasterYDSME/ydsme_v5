@@ -123,7 +123,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(checkoutRoute, /continueApplicationCheckout/);
   assert.match(applicationPage, /"payment-unavailable"[\s\S]*Application safely saved/);
   assert.match(officerPage, /Online payments need attention/);
-  assert.match(officerPage, /Online payment configuration is incomplete/);
+  assert.match(officerPage, /Online payments are not fully set up/);
   assert.match(officerPage, /Online payments\{checkoutProblemCount \? <span/);
   assert.match(officerPage, /title=\{checkoutProblemCount \? "Online payments need attention" : "Online payments are ready"\}/);
   assert.match(officerPage, /Online payments are ready/);
@@ -179,6 +179,23 @@ test("shows a single paid membership amount because partial payments are unsuppo
   assert.match(accountPage, /term\.amount_paid_pence !== term\.amount_due_pence/);
 });
 
+test("keeps officer contact and renewal work safe and understandable", async () => {
+  const root = new URL("../", import.meta.url);
+  const [officerPage, renewalForm, actions] = await Promise.all([
+    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readFile(new URL("app/admin/memberships/OfficerRenewalPaymentForm.tsx", root), "utf8"),
+    readFile(new URL("lib/actions/membership.ts", root), "utf8"),
+  ]);
+  assert.match(officerPage, /const manualContactTasks = Array\.from\(new Map/);
+  assert.match(officerPage, /Mark all updates as contacted/);
+  assert.match(officerPage, /Each person appears once/);
+  assert.match(renewalForm, /Amount to record/);
+  assert.match(renewalForm, /No payment due/);
+  assert.match(actions, /membership-year-already-paid/);
+  assert.match(actions, /honorary-year-no-payment/);
+  assert.match(actions, /payment-review-required/);
+});
+
 test("uses the junior applicant name in guardian consent messages without claiming an extra email was sent", async () => {
   const root = new URL("../", import.meta.url);
   const [verificationRoute, actions, guardianPage] = await Promise.all([
@@ -196,7 +213,7 @@ test("uses the junior applicant name in guardian consent messages without claimi
 
 test("supports verified public applications and auditable officer-managed offline membership", async () => {
   const root = new URL("../", import.meta.url);
-  const [schema, workflows, guards, actions, membershipCore, applicationPage, applicationWizard, eligibilityFields, guardianPage, settingsPage] = await Promise.all([
+  const [schema, workflows, guards, actions, membershipCore, applicationPage, applicationWizard, eligibilityFields, officerEligibilityFields, guardianPage, settingsPage] = await Promise.all([
     readFile(new URL("supabase/migrations/202608200023_membership_offline_payments_and_actor_history.sql", root), "utf8"),
     readFile(new URL("supabase/migrations/202608200024_membership_officer_and_offline_workflows.sql", root), "utf8"),
     readFile(new URL("supabase/migrations/202608200025_membership_guardian_and_offboarding_guards.sql", root), "utf8"),
@@ -205,6 +222,7 @@ test("supports verified public applications and auditable officer-managed offlin
     readFile(new URL("app/membership/apply/page.tsx", root), "utf8"),
     readFile(new URL("app/membership/apply/MembershipApplicationWizard.tsx", root), "utf8"),
     readFile(new URL("app/membership/apply/MembershipEligibilityFields.tsx", root), "utf8"),
+    readFile(new URL("app/admin/memberships/OfficerMembershipEligibilityFields.tsx", root), "utf8"),
     readFile(new URL("app/membership/guardian-consent/page.tsx", root), "utf8"),
     readFile(new URL("app/settings/page.tsx", root), "utf8"),
   ]);
@@ -218,6 +236,9 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(guards, /Former membership officer/);
   assert.match(actions, /confirmGuardianMembershipConsent/);
   assert.match(actions, /resendMembershipVerification/);
+  assert.match(actions, /const selectedPlan = formData\.get\("student_declaration"\) === "on"[\s\S]*defaultMembershipPlan\(eligible\.plans\)/);
+  assert.match(actions, /p_plan_id: selectedPlan\.id/);
+  assert.match(officerEligibilityFields, /name="date_of_birth"[\s\S]*onInput=/);
   assert.match(eligibilityFields, /name="guardian_email"[\s\S]*required/);
   assert.match(applicationPage, /MembershipApplicationWizard/);
   assert.match(applicationWizard, /list="membership-title-options"/);

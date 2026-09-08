@@ -24,7 +24,7 @@ export default async function Membership({ searchParams }: { searchParams: Promi
   const query = await searchParams;
   const enabled = membershipBillingEnabled();
   if (enabled && query.application) redirect(`/membership/apply?application=${encodeURIComponent(query.application)}`);
-  const plans = enabled ? (await getPublicMembershipPlans()).sort((a, b) => (planOrder.get(a.slug) ?? 9) - (planOrder.get(b.slug) ?? 9)) : [];
+  const plans = enabled ? [...await getPublicMembershipPlans()].sort((a, b) => (planOrder.get(a.slug) ?? 9) - (planOrder.get(b.slug) ?? 9)) : [];
   const year = plans[0]?.membership_year ?? new Date().getFullYear();
 
   return <PageShell>

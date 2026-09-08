@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useState } from "react";
+import { type FormEvent, useCallback, useId, useState } from "react";
 import { ArrowLeft, ArrowRight, ImagePlus, Pencil, Plus } from "lucide-react";
 import { saveEvent } from "@/lib/actions/content";
 import { EditorDialog } from "@/app/components/EditorDialog";
@@ -45,6 +45,9 @@ export function EventEditorDialog({
   const [dirty, setDirty] = useState(false);
   const [imageReviewState, setImageReviewState] = useState<EventImageReviewState>("idle");
   const [instance, setInstance] = useState(0);
+  const editorId = useId();
+  const detailsTitleId = `${editorId}-details-title`;
+  const artworkTitleId = `${editorId}-artwork-title`;
   const mode = event?.booking_mode === "website" || event?.booking_enabled ? "website" : "none";
   const triggerLabel = intent === "create" ? "Create event" : intent === "reschedule" ? "Reschedule" : "Edit";
   const title = intent === "create" ? "Create an event" : intent === "reschedule" ? `Reschedule ${event?.name || "event"}` : `Edit ${event?.name || "event"}`;
@@ -94,8 +97,8 @@ export function EventEditorDialog({
       <button type="button" aria-current={step === "artwork" ? "step" : undefined} onClick={() => setStep("artwork")}><span>2</span><div><strong>Artwork & preview</strong><small>Optional image and card crop</small></div></button>
     </nav>
 
-    <section className="event-editor-panel event-editor-details" aria-labelledby="event-editor-details-title" hidden={step !== "details"}>
-      <div className="event-editor-panel-heading"><div><span>Section 1 of 2</span><h3 id="event-editor-details-title">Event details</h3></div><p>Required fields are marked by the browser when you save.</p></div>
+    <section className="event-editor-panel event-editor-details" aria-labelledby={detailsTitleId} hidden={step !== "details"}>
+      <div className="event-editor-panel-heading"><div><span>Section 1 of 2</span><h3 id={detailsTitleId}>Event details</h3></div><p>Required fields are marked by the browser when you save.</p></div>
       <div className="event-editor-details-grid">
         <label className="wide">Event name<input name="name" defaultValue={event?.name} required/></label>
         <label className="wide">Description<textarea name="descriptions" defaultValue={event?.descriptions} rows={4} required/></label>
@@ -111,8 +114,8 @@ export function EventEditorDialog({
       </div>
     </section>
 
-    <section className="event-editor-panel event-editor-artwork" aria-labelledby="event-editor-artwork-title" hidden={step !== "artwork"}>
-      <div className="event-editor-panel-heading"><div><span>Section 2 of 2 · Optional</span><h3 id="event-editor-artwork-title">Artwork & preview</h3></div><p>Review the final crop before confirming a replacement.</p></div>
+    <section className="event-editor-panel event-editor-artwork" aria-labelledby={artworkTitleId} hidden={step !== "artwork"}>
+      <div className="event-editor-panel-heading"><div><span>Section 2 of 2 · Optional</span><h3 id={artworkTitleId}>Artwork & preview</h3></div><p>Review the final crop before confirming a replacement.</p></div>
       <EventImageUploadField label={event ? "Replace event image (optional)" : "Event image (optional)"} initialEventName={event?.name} currentImage={currentImage} onReviewStateChange={handleImageReviewState}/>
     </section>
 

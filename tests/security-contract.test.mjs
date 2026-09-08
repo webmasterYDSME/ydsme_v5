@@ -32,7 +32,7 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(data, /\.eq\("event_type", "public"\)/);
   assert.match(events, /getPublicEvents\(\)/);
   assert.match(home, /getPublicEvents\(\)/);
-  assert.match(data, /getPublicMemberEventTeasers[\s\S]*from\("public_member_event_teasers"\)/);
+  assert.match(data, /loadPublicMemberEventTeasers[\s\S]*from\("public_member_event_teasers"\)/);
   assert.match(data, /memberEventImage[\s\S]*\/images\/member-event-default\.webp/);
   assert.match(events, /src=\{memberEventImage\(event\.file_url\)\}/);
   assert.match(events, /member-event-grid-\$\{memberEvents\.length\}/);
@@ -201,6 +201,28 @@ test("requires action-level roles before privileged writes", async () => {
   assert.doesNotMatch(actions, /read-only-committee"\]\)/);
 });
 
+test("separates member-register viewing, status management and role administration", async () => {
+  const [auth, adminPage, actions, navigation] = await Promise.all([
+    read("lib/auth.ts"),
+    read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
+    read("app/components/PortalNavigation.tsx"),
+  ]);
+  assert.match(auth, /committee: new Set\([\s\S]*"members\.view"/);
+  assert.match(adminPage, /section === "workshops" \? "workshops\.manage" : "members\.view"/);
+  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: "Member register"/);
+  assert.match(adminPage, /const administrator = session\.role === "administrator"/);
+  assert.match(adminPage, /const canManageMemberStatus = administrator \|\| session\.membershipOfficer/);
+  assert.match(adminPage, /administrator \? <form className="member-role-form" action=\{updateMemberRole\}/);
+  assert.match(adminPage, /canChangeThisStatus[\s\S]*action=\{suspendMember\}[\s\S]*action=\{deleteMember\}/);
+  assert.match(actions, /updateMemberRole[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(actions, /requireMemberStatusManager[\s\S]*session\.role !== "administrator" && !session\.membershipOfficer/);
+  assert.match(actions, /deleteMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+archive\+a\+committee\+member\+or\+administrator/);
+  assert.match(actions, /suspendMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+suspend\+a\+committee\+member\+or\+administrator/);
+  assert.match(actions, /restoreMember[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(actions, /purgeMember[\s\S]*requireRole\(\["administrator"\]\)/);
+});
+
 test("reviews and standardizes event images before secure upload", async () => {
   const [field, editor, admin, styles] = await Promise.all([
     read("app/components/EventImageUploadField.tsx"),
@@ -249,20 +271,42 @@ test("edits events in an accessible two-section modal", async () => {
   assert.match(styles, /\.event-editor-panel\[hidden\]\{display:none\}/);
 });
 
-test("uses exactly three database-backed application roles", async () => {
-  const [auth, migration, admin] = await Promise.all([
+test("uses exactly three database-backed application roles and two active administrators", async () => {
+  const [auth, migration, minimumAdministratorsMigration, bootstrapMigration, bootstrapScript, adminPage, actions] = await Promise.all([
     read("lib/auth.ts"),
     read("supabase/migrations/202608180004_secure_dashboard.sql"),
+    read("supabase/migrations/202608220003_require_two_active_administrators.sql"),
+    read("supabase/migrations/202608220001_administrator_bootstrap.sql"),
+    read("scripts/bootstrap-administrator.mjs"),
     read("app/admin/[section]/page.tsx"),
+    read("lib/actions/content.ts"),
   ]);
   assert.match(auth, /appRoles = \["member", "committee", "administrator"\] as const/);
   assert.doesNotMatch(auth, /read-only-committee|moderator/);
-  assert.doesNotMatch(admin, /read-only-committee|moderator/);
+  assert.doesNotMatch(adminPage, /read-only-committee|moderator/);
   assert.match(migration, /membership_status in \('active', 'suspended', 'archived'\)/);
   assert.match(migration, /role in \('member', 'committee', 'administrator'\)/);
   assert.match(migration, /where role::text in \('moderator', 'read-only-committee'\)/);
   assert.match(migration, /drop type if exists public\.app_permission/);
-  assert.match(migration, /Expected at least three active administrators/);
+  assert.match(migration, /application_users > 0 and active_administrators < 2/);
+  assert.match(migration, /Expected at least two active administrators/);
+  assert.match(actions, /activeAdministratorCount\(\) <= 2[\s\S]*At\+least\+two\+active\+administrators\+are\+required/);
+  assert.match(minimumAdministratorsMigration, /minimum_two_active_administrators_required/);
+  assert.match(minimumAdministratorsMigration, /u\.id<>new\.id[\s\S]*\) < 2/);
+  assert.match(bootstrapMigration, /if exists\(select 1 from public\.user_roles where role = 'administrator'\)/);
+  assert.match(bootstrapMigration, /v_email_confirmed_at is null/);
+  assert.match(bootstrapMigration, /administrator\.bootstrap/);
+  assert.match(bootstrapMigration, /grant execute on function public\.bootstrap_first_administrator\(uuid\) to service_role/);
+  assert.doesNotMatch(bootstrapMigration, /grant execute[\s\S]*to anon|grant execute[\s\S]*to authenticated/);
+  assert.match(bootstrapScript, /Remote bootstrap requires --confirm-host/);
+  assert.match(bootstrapScript, /email_confirmed_at/);
+  assert.doesNotMatch(bootstrapScript, /createUser|inviteUserByEmail/);
+});
+
+test("keeps online renewals free of legacy offline payment evidence", async () => {
+  const migration = await read("supabase/migrations/202608220002_membership_renewal_parameter_guard.sql");
+  assert.match(migration, /p_cash_receipt_reference is not null/);
+  assert.match(migration, /membership_renewal_parameter_guard_failed/);
 });
 
 test("retires bulk member archiving in favour of reviewed lifecycle controls", async () => {
@@ -302,6 +346,21 @@ test("ships database and HTTP defence in depth", async () => {
   assert.doesNotMatch(proxy, /script-src[^`\n]*'unsafe-inline'/);
   assert.match(config, /X-Frame-Options/);
   assert.match(config, /Permissions-Policy/);
+});
+
+test("reports denied navigation clearly and keeps account controls labelled", async () => {
+  const [dashboard, account, eventEditor] = await Promise.all([
+    read("app/dashboard/page.tsx"),
+    read("app/account/page.tsx"),
+    read("app/components/EventEditorDialog.tsx"),
+  ]);
+  assert.match(dashboard, /"not-authorised": \{ message: "You do not have permission to open that page\.", tone: "error" \}/);
+  assert.doesNotMatch(dashboard, /query\.notice \? <p className="form-message success">Update complete\.<\/p>/);
+  assert.match(account, /htmlFor="new-login-email"/);
+  assert.match(account, /htmlFor="new-membership-contact-email"/);
+  assert.match(eventEditor, /useId/);
+  assert.match(eventEditor, /aria-labelledby=\{detailsTitleId\}/);
+  assert.doesNotMatch(eventEditor, /id="event-editor-details-title"|id="event-editor-artwork-title"/);
 });
 
 test("bounds portal reads and synchronizes member profile updates", async () => {
@@ -397,8 +456,8 @@ test("publishes reviewed legal notices and original Society PDFs", async () => {
   assert.ok(historyPdf.size > 100_000);
 });
 
-test("keeps donation checkout server-side and administrator controlled", async () => {
-  const [checkout, stripe, content, cards, webhook, migration, settings] = await Promise.all([
+test("keeps donation checkout server-side and officer managed", async () => {
+  const [checkout, stripe, content, cards, webhook, migration, settings, auth, donationsAdmin, donationExport] = await Promise.all([
     read("lib/actions/donations.ts"),
     read("lib/stripe.ts"),
     read("lib/actions/content.ts"),
@@ -406,14 +465,26 @@ test("keeps donation checkout server-side and administrator controlled", async (
     read("app/api/stripe/webhook/route.ts"),
     read("supabase/migrations/202608180002_donation_webhook.sql"),
     read("app/settings/page.tsx"),
+    read("lib/auth.ts"),
+    read("app/admin/donations/page.tsx"),
+    read("app/admin/donations/export/route.ts"),
   ]);
   assert.match(stripe, /process\.env\.STRIPE_SECRET_KEY/);
   assert.match(stripe, /import "server-only"/);
   assert.match(checkout, /amount: z\.coerce\.number\(\)\.min\(1\)\.max\(10_000\)/);
   assert.match(checkout, /checkout\.sessions\.create/);
   assert.match(checkout, /submit_type: "donate"/);
+  assert.match(checkout, /payment_type: "donation"/);
+  assert.match(checkout, /payment_intent_data: \{[\s\S]*description: donationLabel[\s\S]*metadata: donationMetadata/);
+  assert.match(checkout, /Donation: \$\{campaign\.title\}/);
   assert.doesNotMatch(checkout, /payment_method_types/);
-  assert.match(content, /saveDonationSettings[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(content, /saveDonationSettings[\s\S]*requireCapability\("donations\.manage"\)/);
+  assert.match(auth, /membershipOfficerCapabilities[\s\S]*"donations\.view"[\s\S]*"donations\.manage"/);
+  assert.match(donationsAdmin, /requireCapability\("donations\.view"\)/);
+  assert.match(donationsAdmin, /view === "appeals"[\s\S]*requireCapability\("donations\.manage"\)/);
+  assert.match(donationsAdmin, /saveDonationSettings/);
+  assert.match(donationExport, /isMembershipOfficer\(user\.id, role\)/);
+  assert.doesNotMatch(settings, /saveDonationSettings/);
   assert.match(cards, /startDonationCheckout/);
   assert.doesNotMatch(cards, /STRIPE_SECRET_KEY/);
   assert.match(webhook, /request\.text\(\)/);
@@ -475,7 +546,7 @@ test("keeps visitor bookings private, capacity-safe and staff verified", async (
   assert.match(form, /Please do not make multiple bookings/);
   assert.match(admin, /checkInBooking/);
   assert.match(admin, /booking_management_summary/);
-  assert.match(admin, /Export CSV/);
+  assert.match(admin, /Download spreadsheet/);
   assert.match(data, /available_places/);
   assert.match(email, /sendTransactionalEmail/);
   assert.match(emailDelivery, /Idempotency-Key/);
@@ -643,6 +714,117 @@ test("keeps public reads available during the additive projection rollout", asyn
   assert.match(data, /from\("public_committee_roster"\)/);
   assert.match(data, /Permission or policy failures[\s\S]*must never fall through/);
   assert.doesNotMatch(data, /isMissingProjection[\s\S]*42501/);
+});
+
+test("caches reusable public API reads and invalidates them after writes", async () => {
+  const [
+    cacheTags,
+    data,
+    membership,
+    paymentSettings,
+    membershipApply,
+    publicProjects,
+    contentActions,
+    bookingActions,
+    membershipActions,
+    workbenchActions,
+    paymentWebhook,
+  ] = await Promise.all([
+    read("lib/cache-tags.ts"),
+    read("lib/data.ts"),
+    read("lib/membership.ts"),
+    read("lib/membership-settings.ts"),
+    read("app/membership/apply/page.tsx"),
+    read("lib/public-projects.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/actions/bookings.ts"),
+    read("lib/actions/membership.ts"),
+    read("lib/actions/workbench.ts"),
+    read("app/api/stripe/webhook/route.ts"),
+  ]);
+
+  for (const tag of [
+    "PUBLIC_COMMITTEE_CACHE_TAG",
+    "PUBLIC_DONATIONS_CACHE_TAG",
+    "PUBLIC_EVENTS_CACHE_TAG",
+    "PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG",
+    "PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG",
+    "PUBLIC_PROJECTS_CACHE_TAG",
+    "PUBLIC_SITE_CONFIG_CACHE_TAG",
+  ]) assert.match(cacheTags, new RegExp(`export const ${tag}`));
+
+  assert.match(data, /getCachedPublicEvents = unstable_cache[\s\S]*revalidate: 30/);
+  assert.match(data, /getCachedPublicMemberEventTeasers = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(data, /getCachedCommittees = unstable_cache[\s\S]*revalidate: 3600/);
+  assert.match(data, /getCachedPublicSiteConfig = unstable_cache[\s\S]*revalidate: 3600/);
+  assert.match(data, /getCachedDonationSettings = unstable_cache[\s\S]*revalidate: 60/);
+  assert.match(data, /getBookableEvent[\s\S]*await getPublicEvents\(\)/);
+  assert.match(membership, /getPublicMembershipPlans = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(paymentSettings, /select\("configured,treasurer_name,treasurer_email"\)/);
+  assert.match(paymentSettings, /getPublicMembershipPaymentContact = unstable_cache/);
+  assert.match(membershipApply, /Promise\.all\(\[[\s\S]*getPublicMembershipPlans\(\)[\s\S]*getPublicMembershipPaymentContact\(\)/);
+  assert.match(publicProjects, /getCachedPublicFeaturedProjects = unstable_cache/);
+  assert.match(publicProjects, /getCachedPublicFeaturedProject = unstable_cache/);
+  assert.match(publicProjects, /createPublicClient\(\)/);
+  assert.doesNotMatch(publicProjects, /from "@\/lib\/supabase\/server"/);
+  assert.match(contentActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_COMMITTEE_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_SITE_CONFIG_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(PUBLIC_DONATIONS_CACHE_TAG\)/);
+  assert.match(bookingActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);
+  assert.match(membershipActions, /updateTag\(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG\)/);
+  assert.match(membershipActions, /updateTag\(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG\)/);
+  assert.match(workbenchActions, /updateTag\(PUBLIC_PROJECTS_CACHE_TAG\)/);
+  assert.match(paymentWebhook, /revalidateTag\(PUBLIC_DONATIONS_CACHE_TAG, "max"\)/);
+});
+
+test("caches shared dashboard reads without caching personal member state", async () => {
+  const [
+    cacheTags,
+    dashboardData,
+    dashboard,
+    library,
+    documents,
+    documentDownload,
+    contentActions,
+    workbench,
+  ] = await Promise.all([
+    read("lib/cache-tags.ts"),
+    read("lib/dashboard-data.ts"),
+    read("app/dashboard/page.tsx"),
+    read("app/dashboard/library/page.tsx"),
+    read("app/dashboard/[section]/page.tsx"),
+    read("app/dashboard/documents/[id]/download/route.ts"),
+    read("lib/actions/content.ts"),
+    read("lib/workbench.ts"),
+  ]);
+
+  for (const tag of [
+    "MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG",
+    "MEMBER_DASHBOARD_EVENTS_CACHE_TAG",
+    "MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG",
+  ]) assert.match(cacheTags, new RegExp(`export const ${tag}`));
+
+  assert.match(dashboardData, /getCachedDashboardSharedSnapshot = unstable_cache[\s\S]*revalidate: 60/);
+  assert.match(dashboardData, /getMemberDocumentCounts = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(dashboardData, /getCachedPublishedMemberDocuments = unstable_cache[\s\S]*revalidate: 300/);
+  assert.match(dashboardData, /getCachedWorkshopReservationCounts = unstable_cache[\s\S]*revalidate: 15/);
+  assert.match(dashboard, /getDashboardSharedSnapshot\(today\)/);
+  assert.match(dashboard, /getMemberDocumentCounts\(\)/);
+  assert.match(dashboard, /getWorkshopReservationCounts\(workshopIds\)/);
+  assert.match(dashboard, /dashboard_feed_snapshot/);
+  assert.match(dashboard, /\.eq\("participant_id", user\.id\)/);
+  assert.match(dashboard, /own_archived_notices/);
+  assert.match(library, /getMemberDocumentCounts\(\)/);
+  assert.doesNotMatch(library, /createClient|\.from\("documents"\)/);
+  assert.match(documents, /getPublishedMemberDocuments\(config\.categories, firstRow, pageSize\)/);
+  assert.match(documentDownload, /requireUser\(\)/);
+  assert.match(documentDownload, /Cache-Control", "private, no-store, max-age=0"/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_EVENTS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG\)/);
+  assert.match(contentActions, /updateTag\(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG\)/);
+  assert.doesNotMatch(workbench, /unstable_cache|createAdminClient/);
+  assert.match(workbench, /import \{ createClient \} from "@\/lib\/supabase\/server"/);
 });
 
 test("enables the complete membership platform with one flag and otherwise falls back to MemberMojo", async () => {

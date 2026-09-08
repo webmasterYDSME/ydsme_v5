@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import type Stripe from "stripe";
 import { writeAudit } from "@/lib/audit";
+import { PUBLIC_DONATIONS_CACHE_TAG } from "@/lib/cache-tags";
 import {
   ensureMemberPortalInvitation,
   ensureMembershipPlanPrice,
@@ -249,20 +250,21 @@ async function recordMembershipCheckoutFailure(event: Stripe.Event) {
   if (attemptError) throw new Error("Unable to record the failed membership Checkout attempt.");
   const { data: application } = applicationId
     ? await admin.from("membership_applications")
-      .select("id,contact_email,status").eq("id", applicationId).maybeSingle()
+      .select("id,contact_email,full_name,status").eq("id", applicationId).maybeSingle()
     : { data: null };
   if (applicationId && (!application || application.status === "converted")) return true;
   const { data: member } = memberId
-    ? await admin.from("members").select("id,contact_email,auth_user_id").eq("id", memberId).maybeSingle()
+    ? await admin.from("members").select("id,contact_email,full_name,auth_user_id").eq("id", memberId).maybeSingle()
     : { data: null };
+  const memberName = application?.full_name ?? member?.full_name ?? "The member";
   const { error: notificationError } = await admin.from("membership_notifications").upsert({
     application_id: application?.id ?? null,
     member_id: member?.id ?? null,
     recipient_user_id: member?.auth_user_id ?? null,
     recipient_email: application?.contact_email ?? member?.contact_email ?? null,
     kind: event.type === "checkout.session.expired" ? "membership.checkout-expired" : "membership.checkout-failed",
-    title: "Membership payment was not completed",
-    body: "We could not verify the full payment, so membership has not been activated. Use the existing secure payment link or contact the membership officer.",
+    title: `${memberName}'s membership payment was not completed`,
+    body: `We could not verify ${memberName}'s full payment, so membership has not been activated. Use the existing secure payment link or contact the membership officer.`,
     portal_visible: false,
     deduplication_key: `membership-checkout-${event.type}-${session.id}`,
   }, { onConflict: "deduplication_key", ignoreDuplicates: true });
@@ -333,7 +335,7 @@ async function reconcileMembershipInvoice(event: Stripe.Event) {
   const memberId = typeof data === "string" ? data : null;
   if (memberId && invoice.billing_reason !== "subscription_create") {
     const { data: member } = await admin.from("members")
-      .select("id,auth_user_id,contact_email").eq("id", memberId).maybeSingle();
+      .select("id,full_name,auth_user_id,contact_email").eq("id", memberId).maybeSingle();
     if (member) {
       const actionRequired = event.type === "invoice.payment_action_required";
       const finalizationFailed = event.type === "invoice.finalization_failed";
@@ -345,12 +347,12 @@ async function reconcileMembershipInvoice(event: Stripe.Event) {
         recipient_user_id: member.auth_user_id,
         recipient_email: member.contact_email,
         kind: noticeKind,
-        title: paid ? "Your annual membership renewal is paid"
-          : actionRequired ? "Your membership payment needs action"
-            : finalizationFailed ? "We could not prepare your membership invoice" : "Your membership renewal payment failed",
+        title: paid ? `${member.full_name}'s annual membership renewal is paid`
+          : actionRequired ? `${member.full_name}'s membership payment needs action`
+            : finalizationFailed ? `We could not prepare ${member.full_name}'s membership payment` : `${member.full_name}'s membership renewal payment failed`,
         body: paid
-          ? `Your annual membership payment of £${(invoice.amount_paid / 100).toFixed(2)} has been confirmed.`
-          : "We could not confirm the renewal payment. Account access remains available during the grace or review period; update your payment method or contact the membership officer.",
+          ? `${member.full_name}'s annual membership payment of £${(invoice.amount_paid / 100).toFixed(2)} has been confirmed.`
+          : `We could not confirm ${member.full_name}'s renewal payment. Account access remains available during the grace or review period; update the payment method or contact the membership officer.`,
         action_href: "/account",
         deduplication_key: `membership-invoice-notice-${invoice.id}-${noticeKind}`,
       });
@@ -521,7 +523,11 @@ export async function POST(request: Request) {
       .select("stripe_event_id")
       .single();
     if (completionError) throw new Error("Unable to complete the Stripe event claim.");
-    if (targetChanged) revalidatePath("/");
+    if (targetChanged) {
+      revalidateTag(PUBLIC_DONATIONS_CACHE_TAG, "max");
+      revalidatePath("/");
+      revalidatePath("/visitors");
+    }
     if (membershipChanged) {
       revalidatePath("/account");
       revalidatePath("/admin/memberships");

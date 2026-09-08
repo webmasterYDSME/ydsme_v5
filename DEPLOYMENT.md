@@ -2,6 +2,23 @@
 
 The application follows one promotion path: feature branch → `preview` → `main`. Git-triggered Vercel deployments are disabled. After a branch push passes GitHub CI, the `Release` workflow applies pending migrations, deploys the repository's Edge Functions to that branch's Supabase project, and only then calls its branch-specific Vercel deploy hook. This keeps application, function and database deployment ordered as one release operation.
 
+## Under Review / maintenance page
+
+`MAINTENANCE_MODE` is an optional server-only environment flag. Set it to
+`true` in the intended deployment environment to show the existing Under Review
+page on every hostname. Leave it unset or set it to `false` for normal access,
+including launch day. Only `true` (case-insensitive, ignoring surrounding spaces)
+enables the gate; no hostname is special-cased.
+
+After changing the flag in Vercel, redeploy that environment to apply it. Restart
+local development after changing the local environment. No database setting or
+migration is required.
+
+The gate applies before sign-in, so administrators also see the holding page.
+API routes, static assets, and `/under-review` remain available. Webhooks and
+scheduled jobs continue to run: this flag does not pause billing or background
+processing. The existing Under Review wording is retained for future use.
+
 ## Required rules
 
 1. Merge through pull requests in order: feature branches target `preview`, and only `preview` targets `main`. The `Validate promotion path` check rejects every other route.
@@ -9,7 +26,7 @@ The application follows one promotion path: feature branch → `preview` → `ma
 3. Do not merge with a failing promotion, migration-safety, source/build, database-integration, or browser check. Feature branches do not deploy to Vercel; the merged result is reviewed at the stable `preview` deployment.
 4. Delete feature branches after they merge into `preview`. The cleanup workflow does this automatically and explicitly preserves `preview` and `main`.
 5. Never run seeds, fixtures, resets, or data-writing tests against remote Supabase. Data-writing tests must use the loopback stack at `http://127.0.0.1:55321`.
-6. Database changes must use expand-and-contract deployment. Existing migration files are immutable, and migrations containing `DROP TABLE`, `DROP SCHEMA`, `TRUNCATE`, or `ALTER TABLE ... DROP COLUMN` are rejected from automatic release:
+6. Database changes must use expand-and-contract deployment. Existing migration files are immutable. The only exception is a separately reviewed replay repair that preserves the behaviour already applied to populated deployments and is required to make a fresh migration replay possible. Migrations containing `DROP TABLE`, `DROP SCHEMA`, `TRUNCATE`, or `ALTER TABLE ... DROP COLUMN` are rejected from automatic release:
    - Expand: add and locally validate new tables, columns, views, policies, and grants without removing behavior used by the live application.
    - Migrate: apply the reviewed additive migration through the explicitly authorized production migration process before deploying code that requires it.
    - Deploy: release code that works with both the existing and expanded schema when practical. Public pages must degrade safely while an additive public projection is unavailable.
@@ -34,6 +51,22 @@ Configure these GitHub repository secrets before merging the release workflow:
 The two project IDs must differ. A missing secret, a failed `supabase db push --dry-run`, a failed migration, a failed Edge Function deployment, or a rejected deploy hook fails closed: Vercel is not triggered and production source is not mirrored. Supabase applies each pending migration once using its migration-history table. Never repair hosted migration history automatically; investigate and explicitly review any `migration repair` operation.
 
 For the one-time rollout of this workflow, configure all secrets and hooks first, then promote the workflow to `main`. GitHub loads `workflow_run` definitions from the default branch, so the first preview release will not start until `release.yml` exists on `main`; rerun the latest successful preview CI workflow after that promotion.
+
+## First administrator bootstrap
+
+A fresh installation intentionally creates no default administrator and stores no privileged password in source or seed data. Apply the full migration chain first, then create and verify the intended administrator in Supabase Auth. Promote that existing Auth identity with the guarded one-time command:
+
+```sh
+npm run admin:bootstrap -- --email person@example.org
+```
+
+For a non-loopback Supabase project, repeat the exact API hostname as an explicit safety confirmation:
+
+```sh
+npm run admin:bootstrap -- --email person@example.org --confirm-host project-ref.supabase.co
+```
+
+The command refuses unverified accounts, refuses to create or invite an account, and stops permanently once any administrator role exists. It records the promotion in the audit log. After signing in, the first administrator must invite and assign one further active administrator through the normal member register before an existing populated installation crosses the role-migration safety gate. The website prevents either account from being demoted or archived until another active administrator has been assigned.
 
 ## Membership billing rollout
 

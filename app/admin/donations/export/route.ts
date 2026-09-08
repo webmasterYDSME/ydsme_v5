@@ -1,4 +1,4 @@
-import { getCurrentUser, getRole, hasCapability } from "@/lib/auth";
+import { getCurrentUser, getRole, hasCapability, isMembershipOfficer } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function csv(value: unknown) {
@@ -10,12 +10,19 @@ function csv(value: unknown) {
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorised", { status: 401 });
-  if (!hasCapability(await getRole(user.id), "donations.view")) return new Response("Forbidden", { status: 403 });
+  const admin = createAdminClient();
+  const [role, { data: profile }] = await Promise.all([
+    getRole(user.id),
+    admin.from("users").select("membership_status").eq("id", user.id).maybeSingle(),
+  ]);
+  const authorised = profile?.membership_status === "active"
+    && (hasCapability(role, "donations.view") || await isMembershipOfficer(user.id, role));
+  if (!authorised) return new Response("Forbidden", { status: 403 });
   const params = new URL(request.url).searchParams;
   const campaign = ["generic", "target"].includes(params.get("campaign") || "") ? params.get("campaign")! : null;
   const from = /^\d{4}-\d{2}-\d{2}$/.test(params.get("from") || "") ? params.get("from") : null;
   const to = /^\d{4}-\d{2}-\d{2}$/.test(params.get("to") || "") ? params.get("to") : null;
-  let query = createAdminClient().from("donation_payments").select("paid_at,campaign,amount_pence,refunded_pence,currency,payment_status,stripe_checkout_session_id,stripe_payment_intent_id,stripe_event_id");
+  let query = admin.from("donation_payments").select("paid_at,campaign,amount_pence,refunded_pence,currency,payment_status,stripe_checkout_session_id,stripe_payment_intent_id,stripe_event_id");
   if (campaign) query = query.eq("campaign", campaign);
   if (from) query = query.gte("paid_at", `${from}T00:00:00.000Z`);
   if (to) query = query.lt("paid_at", `${to}T23:59:59.999Z`);

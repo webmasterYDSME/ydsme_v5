@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { unstable_cache } from "next/cache";
+import { PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG } from "@/lib/cache-tags";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
@@ -162,7 +164,7 @@ async function getEffectiveMembershipPlanPrice(planId: string, membershipYear: n
   return data as MembershipPlanPrice | null;
 }
 
-export async function getPublicMembershipPlans(): Promise<PublicMembershipPlan[]> {
+async function loadPublicMembershipPlans(): Promise<PublicMembershipPlan[]> {
   const { data, error } = await createServiceClient()
     .from("public_membership_plans")
     .select("id,slug,name,description,minimum_age,maximum_age,requires_approval,membership_year,amount_pence,currency")
@@ -171,6 +173,12 @@ export async function getPublicMembershipPlans(): Promise<PublicMembershipPlan[]
   if (error) throw new Error("Unable to load membership plans.");
   return (data ?? []) as PublicMembershipPlan[];
 }
+
+export const getPublicMembershipPlans = unstable_cache(
+  loadPublicMembershipPlans,
+  ["public-membership-plans"],
+  { tags: [PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG], revalidate: 300 },
+);
 
 export async function getMembershipAccount(userId: string): Promise<MembershipAccount | null> {
   const admin = createServiceClient();
@@ -408,12 +416,12 @@ async function recordApplicationCheckoutProblem(
   resumeHref: string | null,
 ) {
   const admin = createServiceClient();
-  const applicantBody = `Your application has been saved, but online payment is temporarily unavailable. No payment has been taken.${resumeHref ? " Use the secure link below to try again after the issue is fixed." : ""} A membership officer has been notified and will contact you if anything else is needed.`;
+  const applicantBody = `${application.full_name}'s application has been saved, but online payment is temporarily unavailable. No payment has been taken.${resumeHref ? " Use the secure link below to try again after the issue is fixed." : ""} A membership officer has been notified and will contact you if anything else is needed.`;
   await admin.from("membership_notifications").upsert({
     application_id: application.id,
     recipient_email: application.contact_email,
     kind: "membership.application-payment-unavailable",
-    title: "Your membership application has been saved",
+    title: `${application.full_name}'s membership application has been saved`,
     body: applicantBody,
     action_href: resumeHref,
     portal_visible: false,

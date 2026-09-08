@@ -109,6 +109,36 @@ test.describe("membership public, member and officer journeys", () => {
     originalSettingsId = settings.find(({ active }) => active)?.id;
   });
 
+  test("active members can use the cached dashboard, library and Workbench routes", async ({ page }) => {
+    await signIn(page, "journey.member@example.test");
+    await expect(page.getByRole("heading", { name: "Good to see you." })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Upcoming running days" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Learn & make" })).toBeVisible();
+
+    await page.goto("/dashboard/library");
+    await expect(page.getByRole("heading", { name: "Society library" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Committee minutes/ })).toBeVisible();
+
+    await page.goto("/dashboard/minutes");
+    await expect(page.getByRole("heading", { name: "Committee minutes" })).toBeVisible();
+
+    await page.goto("/dashboard/workbench");
+    await expect(page.getByRole("heading", { name: "Project Workbench" })).toBeVisible();
+  });
+
+  test("committee members can review the member register without changing access or roles", async ({ page }) => {
+    await signIn(page, "journey.committee@example.test", "/admin/members?q=journey.member%40example.test");
+    await expect(page.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
+    const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
+    await expect(memberRow).toBeVisible();
+    await expect(memberRow.locator(".member-role-readonly strong")).toHaveText("Member");
+    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Suspend access" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Archive member" })).toHaveCount(0);
+    await expect(page.getByText("Invite a member", { exact: true })).toHaveCount(0);
+  });
+
   test.afterAll(async () => {
     await cleanMembershipFixtures();
     const { data: settings } = await admin.from("membership_payment_settings_versions").select("id,active");
@@ -426,10 +456,10 @@ test.describe("membership public, member and officer journeys", () => {
     expect(linkedMember.effective_state).toBe("active");
 
     await page.goto(`/admin/memberships?member=${linkedMember.id}&section=member-history#member-history`);
-    const portalForm = page.locator("#member-history form").filter({ hasText: "Assign or invite portal login" });
+    const portalForm = page.locator("#member-history form").filter({ hasText: "Assign or invite website login" });
     await portalForm.locator('input[name="login_email"]').fill("journey.member@example.test");
     await portalForm.locator('textarea[name="reason"]').fill("Confirmed this existing website account belongs to the named member.");
-    await portalForm.getByRole("button", { name: "Assign or invite portal login" }).click();
+    await portalForm.getByRole("button", { name: "Assign or invite website login" }).click();
     await page.waitForURL(/notice=portal-login-assigned/);
     linkedMember = await databaseRow(
       admin.from("members").select("id,auth_user_id,effective_state,portal_invitation_status").eq("id", linkedMember.id).single(),
@@ -480,6 +510,18 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(pendingMember.effective_state).toBe("active");
 
+    await page.goto("/admin/memberships?section=renewals#renewals");
+    const renewalForm = page.locator("form.membership-cash-renewal-form");
+    await renewalForm.locator('select[name="member_id"]').selectOption(linkedMember.id);
+    await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue("2027");
+    await expect(renewalForm.getByText("£60.00", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByText("Full annual fee for 2027.", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeEnabled();
+    await renewalForm.locator('select[name="membership_year"]').selectOption("2026");
+    await expect(renewalForm.getByText("No payment due", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByText(/2026 membership is already paid/)).toBeVisible();
+    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeDisabled();
+
     await signIn(page, "journey.member@example.test", "/account");
     await expect(page.getByRole("heading", { name: "Account details" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Adult" })).toBeVisible();
@@ -487,7 +529,7 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("button", { name: "Continue to payment" })).toHaveCount(0);
     await expect(page.getByText("Your Society membership is active", { exact: true })).toBeVisible();
     await expect(page.getByText("JOURNEY-CASH-001")).toHaveCount(0);
-    await page.getByText("Payment and entitlement history", { exact: true }).click();
+    await page.getByText("Membership and payment history", { exact: true }).click();
     await expect(page.getByText("cash · paid ·", { exact: false })).toBeVisible();
   });
 
@@ -514,10 +556,12 @@ test.describe("membership public, member and officer journeys", () => {
       "Honorary manual-contact task was not created",
     );
     await page.goto("/admin/memberships?section=manual-contact#manual-contact");
-    const taskArticle = page.locator(".membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Honorary` }).first();
-    const taskForm = taskArticle.locator("form").filter({ hasText: "Mark as contacted" });
+    const honoraryTasks = page.locator("#manual-contact .membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Honorary` });
+    await expect(honoraryTasks).toHaveCount(1);
+    const taskArticle = honoraryTasks.first();
+    const taskForm = taskArticle.locator("form").filter({ hasText: "Mark all updates as contacted" });
     await taskForm.locator('textarea[name="reason"]').fill("Telephoned the member and confirmed the designation.");
-    await taskForm.getByRole("button", { name: "Mark as contacted" }).click();
+    await taskForm.getByRole("button", { name: "Mark all updates as contacted" }).click();
     await page.waitForURL(/notice=manual-contact-completed/);
     const completed = await databaseRow(
       admin.from("membership_notifications").select("read_at").eq("id", manualTask.id).single(),
@@ -568,8 +612,15 @@ test.describe("membership public, member and officer journeys", () => {
 
     await signIn(page, "journey.committee@example.test", "/admin/memberships");
     await expect(page.getByRole("heading", { name: "Manage memberships", exact: true })).toBeVisible();
+    await page.goto("/admin/members?q=journey.member%40example.test");
+    const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
+    await expect(memberRow.getByRole("button", { name: "Suspend access" })).toBeVisible();
+    await expect(memberRow.getByRole("button", { name: "Archive member" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
     await admin.from("user_capabilities").delete().eq("user_id", committee.id).eq("capability", "memberships.manage");
     await page.reload();
+    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
+    await page.goto("/admin/memberships");
     await expect(page).not.toHaveURL(/\/admin\/memberships/);
   });
 });

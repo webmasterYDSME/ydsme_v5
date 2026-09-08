@@ -1,9 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { requireCapability, requireRole, requireUser } from "@/lib/auth";
+import {
+  PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
+  PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
+} from "@/lib/cache-tags";
 import { writeAudit } from "@/lib/audit";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
@@ -129,8 +133,8 @@ export async function submitMembershipApplication(formData: FormData) {
     await admin.from("membership_notifications").insert({
       member_id: existingMember.id, recipient_user_id: existingMember.auth_user_id,
       recipient_email: existingMember.contact_email, kind: "membership.duplicate-application",
-      title: "A membership application used your email address",
-      body: "A new application was submitted with the email on your membership record. No duplicate membership or payment was created. Sign in to renew, or contact the membership officer if this was not you.",
+      title: `A membership application used ${existingMember.full_name}'s email address`,
+      body: `A new application was submitted using the correspondence email on ${existingMember.full_name}'s membership record. No duplicate membership or payment was created. Sign in to renew, or contact the membership officer if this was not you.`,
       action_href: existingMember.auth_user_id ? "/account" : null, portal_visible: Boolean(existingMember.auth_user_id),
       deduplication_key: `duplicate-membership-application-${existingMember.id}-${new Date().toISOString().slice(0, 10)}`,
     });
@@ -320,7 +324,9 @@ export async function resendMembershipVerification(formData: FormData) {
       application_id: application.id,
       recipient_email: recipient,
       kind: guardian ? "membership.guardian-verification" : "membership.application-verify",
-      title: guardian ? "Confirm a junior membership application" : "Verify your membership application",
+      title: guardian
+        ? `Confirm ${application.full_name}'s Junior membership application`
+        : `Verify ${application.full_name}'s membership application`,
       body: guardian
         ? `${application.full_name || "A junior applicant"} named you as their guardian. Confirm that you consent to this membership application.`
         : `Confirm your email address to continue ${application.full_name}'s Society membership application.`,
@@ -339,7 +345,7 @@ export async function reviewMembershipApplication(formData: FormData) {
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: application } = await admin.from("membership_applications")
-    .select("id,contact_email,payment_method,status,payment_settings_version_id")
+    .select("id,contact_email,full_name,payment_method,status,payment_settings_version_id")
     .eq("id", applicationId).eq("status", "awaiting_approval").maybeSingle();
   if (!application) redirect("/admin/memberships?error=application-unavailable");
 
@@ -349,8 +355,8 @@ export async function reviewMembershipApplication(formData: FormData) {
     }).eq("id", application.id);
     await admin.from("membership_notifications").insert({
       application_id: application.id, recipient_email: application.contact_email,
-      kind: "membership.application-rejected", title: "Membership application update",
-      body: `Your membership application was not approved. ${reason}`,
+      kind: "membership.application-rejected", title: `${application.full_name}'s membership application update`,
+      body: `${application.full_name}'s membership application was not approved. ${reason}`,
       portal_visible: false, deduplication_key: `application-rejected-${application.id}`,
     });
     redirect("/admin/memberships?notice=application-rejected");
@@ -375,10 +381,10 @@ export async function reviewMembershipApplication(formData: FormData) {
     : offlinePaymentInstructions(application.payment_method, settings, reference);
   await admin.from("membership_notifications").insert({
     application_id: application.id, recipient_email: application.contact_email,
-    kind: "membership.application-approved", title: "Your membership application is approved",
+    kind: "membership.application-approved", title: `${application.full_name}'s membership application is approved`,
     body: application.payment_method === "stripe"
-      ? "Your application is approved. Continue to secure online payment to activate membership."
-      : `Your application is approved. ${instructions} Membership activates only after an officer confirms the complete payment.`,
+      ? `${application.full_name}'s application is approved. Continue to secure online payment to activate membership.`
+      : `${application.full_name}'s application is approved. ${instructions} Membership activates only after an officer confirms the complete payment.`,
     action_href: application.payment_method === "stripe" ? `/membership/checkout?token=${encodeURIComponent(token)}` : null,
     portal_visible: false, deduplication_key: `application-approved-${application.id}`,
   });
@@ -458,7 +464,7 @@ export async function confirmOfflineMembership(formData: FormData) {
 export async function createOfficerManagedMembership(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
-    plan_id: z.string().uuid(),
+    plan_id: z.string().uuid().optional(),
     title: z.string().trim().max(30).default(""),
     full_name: z.string().trim().min(2).max(180),
     date_of_birth: z.iso.date(),
@@ -497,13 +503,23 @@ export async function createOfficerManagedMembership(formData: FormData) {
   const membershipDate = parsed.data.received_on
     ? new Date(`${parsed.data.received_on}T12:00:00Z`)
     : new Date();
+  const admin = createServiceClient();
+  const { data: activePlans } = await admin.from("membership_plans")
+    .select("id,slug,name,minimum_age,maximum_age,requires_approval,active")
+    .eq("active", true);
+  const eligible = eligibleMembershipPlans(activePlans ?? [], parsed.data.date_of_birth, membershipDate);
+  const studentPlan = eligible.plans.find((plan) => plan.slug === "student") ?? null;
+  const selectedPlan = formData.get("student_declaration") === "on"
+    ? studentPlan
+    : defaultMembershipPlan(eligible.plans);
+  if (!selectedPlan) redirect("/admin/memberships?error=plan-age-mismatch");
   try {
-    await ensureMembershipPlanPrice(parsed.data.plan_id, membershipBillingYear(membershipDate));
+    await ensureMembershipPlanPrice(selectedPlan.id, membershipBillingYear(membershipDate));
   } catch {
     redirect("/admin/memberships?error=price-unavailable");
   }
-  const { data, error } = await createServiceClient().rpc("create_officer_managed_membership", {
-    p_plan_id: parsed.data.plan_id,
+  const { data, error } = await admin.rpc("create_officer_managed_membership", {
+    p_plan_id: selectedPlan.id,
     p_title: parsed.data.title,
     p_full_name: parsed.data.full_name,
     p_date_of_birth: parsed.data.date_of_birth,
@@ -594,7 +610,7 @@ export async function toggleMembershipAutoRenew(formData: FormData) {
   const enable = formData.get("enable") === "true";
   const admin = createServiceClient();
   const { data } = await admin.from("members")
-    .select("id,membership_subscriptions(stripe_subscription_id)")
+    .select("id,full_name,membership_subscriptions(stripe_subscription_id)")
     .eq("auth_user_id", user.id).maybeSingle();
   const subscriptions = data?.membership_subscriptions as Array<{ stripe_subscription_id: string }> | null;
   const subscriptionId = subscriptions?.[0]?.stripe_subscription_id;
@@ -626,10 +642,12 @@ export async function toggleMembershipAutoRenew(formData: FormData) {
   if (command?.status !== "complete") redirect("/account?error=renewal-update-pending");
   await admin.from("membership_notifications").insert({
     member_id: data.id, recipient_user_id: user.id, recipient_email: user.email,
-    kind: "membership.auto-renew-changed", title: enable ? "Auto-renewal enabled" : "Auto-renewal switched off",
+    kind: "membership.auto-renew-changed", title: enable
+      ? `${data.full_name}'s automatic renewal is enabled`
+      : `${data.full_name}'s automatic renewal is switched off`,
     body: enable
-      ? "Your membership will renew automatically at the next annual renewal date."
-      : "Your current paid membership remains active, but it will not charge automatically at the next renewal.",
+      ? `${data.full_name}'s membership will renew automatically at the next annual renewal date.`
+      : `${data.full_name}'s current paid membership remains active, but it will not charge automatically at the next renewal.`,
     action_href: "/account", deduplication_key: `auto-renew-${commandKey}`,
   });
   revalidatePath("/account");
@@ -699,18 +717,22 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   }
   const admin = createServiceClient();
   const { data: member } = await admin.from("members")
-    .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,revoked_effective_on,replacement_plan_id)")
+    .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)")
     .eq("id", memberId).maybeSingle();
   if (!member?.current_plan_id) redirect("/admin/memberships?error=offline-member-unavailable");
   const { data: transition } = await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", memberId).eq("membership_year", year)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
   if (transition?.status === "awaiting_student_review") redirect("/admin/memberships?error=student-request-pending");
-  const honoraryRows = member.honorary_memberships as Array<{ status: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
+  const honoraryRows = member.honorary_memberships as Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
   const honoraryTransition = member.effective_state === "honorary"
     ? honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
       && item.revoked_effective_on?.startsWith(`${year}-`) && item.replacement_plan_id) ?? null
     : null;
+  const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+    && item.effective_from <= `${year}-12-31`
+    && (!item.revoked_effective_on || item.revoked_effective_on > `${year}-01-01`)) ?? null;
+  if (honoraryForYear && !honoraryTransition) redirect("/admin/memberships?error=honorary-year-no-payment");
   const price = await ensureMembershipPlanPrice(
     honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id,
     year,
@@ -721,6 +743,10 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const { data: pendingInitialTerm } = await admin.from("membership_terms")
     .select("plan_price_id,status,source,amount_due_pence,amount_paid_pence")
     .eq("member_id", memberId).eq("membership_year", year).maybeSingle();
+  if (pendingInitialTerm?.status === "paid" && pendingInitialTerm.amount_paid_pence >= pendingInitialTerm.amount_due_pence) {
+    redirect("/admin/memberships?error=membership-year-already-paid");
+  }
+  if (pendingInitialTerm?.status === "payment_review") redirect("/admin/memberships?error=payment-review-required");
   const completesInitialTerm = pendingInitialTerm?.plan_price_id === price.id
     && pendingInitialTerm.status === "scheduled"
     && pendingInitialTerm.amount_paid_pence === 0
@@ -1171,6 +1197,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cash_instructions: parsed.data.cash_instructions,
   });
   if (error) redirect("/settings?tab=membership&error=Membership+payment+settings+could+not+be+saved.");
+  updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
   revalidatePath("/settings");
   redirect("/settings?tab=membership&notice=membership-payment-settings-saved");
@@ -1199,6 +1226,7 @@ export async function updateMembershipPlan(formData: FormData) {
     actorUserId: user.id, actorRole: role, action: "membership.plan-updated",
     entityType: "membership-plan", entityId: planId, before, after: values,
   });
+  updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?section=plans&notice=plan-updated#plans");
@@ -1299,6 +1327,7 @@ export async function configureMembershipPrice(formData: FormData) {
     entityType: "membership-plan", entityId: plan.id,
     after: { membership_year: year, amount_pence: amountPence, version: (latest?.[0]?.version ?? 0) + 1 },
   });
+  updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?section=plans&notice=price-saved#plans");

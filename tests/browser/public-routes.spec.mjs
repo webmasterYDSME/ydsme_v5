@@ -27,7 +27,26 @@ test("the membership application fits common browser widths", async ({ page }) =
     expect(overflow, `Application overflowed at ${width}px`).toBeLessThanOrEqual(1);
     const continueButton = await page.getByRole("button", { name: "Continue" }).boundingBox();
     expect(continueButton?.height ?? 0, `Continue target was too short at ${width}px`).toBeGreaterThanOrEqual(44);
-    if (width <= 760) await expect(page.locator(".membership-apply-steps")).toBeHidden();
+    if (width <= 900) {
+      await expect(page.locator(".membership-apply-steps")).toBeHidden();
+      const application = await page.locator(".membership-application-card").boundingBox();
+      const help = await page.locator(".membership-apply-aside").boundingBox();
+      expect(help?.y ?? 0, `Membership help appeared before the form at ${width}px`).toBeGreaterThan(application?.y ?? 0);
+    }
+  }
+});
+
+test("public pages share the same wide-screen content boundary", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  for (const route of ["/membership", "/visitors", "/events", "/news", "/club-history", "/committees", "/projects"]) {
+    await page.goto(route, { waitUntil: "domcontentloaded" });
+    const section = page.locator(".section").first();
+    await expect(section, `${route} has no standard public section`).toBeVisible();
+    const contentWidth = await section.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return element.getBoundingClientRect().width - Number.parseFloat(styles.paddingLeft) - Number.parseFloat(styles.paddingRight);
+    });
+    expect(contentWidth, `${route} did not use the shared public width cap`).toBeCloseTo(1344, 0);
   }
 });
 

@@ -28,9 +28,9 @@ export function AuditChangeDetails({ id }: { id: string }) {
   return <details className="audit-changes" onToggle={(event) => {
     if (event.currentTarget.open) void load();
   }}>
-    <summary>View redacted changes</summary>
+    <summary>View technical change details</summary>
     {status === "loading" ? <p>Loading changes…</p> : null}
     {status === "error" ? <p>Unable to load changes.</p> : null}
-    {state ? (state.before || state.after ? <pre>{JSON.stringify(state, null, 2)}</pre> : <p>No value changes were recorded.</p>) : null}
+    {state ? (state.before || state.after ? <><p>These details are intended for website support and exclude protected values.</p><pre>{JSON.stringify(state, null, 2)}</pre></> : <p>No value changes were recorded.</p>) : null}
   </details>;
 }

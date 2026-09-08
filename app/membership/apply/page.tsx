@@ -16,13 +16,13 @@ import { MembershipApplicationWizard } from "@/app/membership/apply/MembershipAp
 import { resendMembershipVerification } from "@/lib/actions/membership";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
 import { getPublicMembershipPlans, proratedMembershipFee } from "@/lib/membership";
-import { getMembershipPaymentSettings } from "@/lib/membership-settings";
+import { getPublicMembershipPaymentContact } from "@/lib/membership-settings";
 import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
   title: "Apply for Membership",
-  description: "Apply to join York Model Engineers and choose secure online or cash payment.",
+  description: "Apply to join York Model Engineers and choose online payment, cash, bank transfer or cheque.",
   path: "/membership/apply",
   keywords: ["York Model Engineers application", "join York Model Engineers"],
 });
@@ -148,8 +148,11 @@ export default async function MembershipApplication({ searchParams }: { searchPa
     </PageShell>;
   }
 
-  const plans = (await getPublicMembershipPlans()).sort((a, b) => (planOrder.get(a.slug) ?? 9) - (planOrder.get(b.slug) ?? 9));
-  const paymentSettings = await getMembershipPaymentSettings();
+  const [availablePlans, paymentSettings] = await Promise.all([
+    getPublicMembershipPlans(),
+    getPublicMembershipPaymentContact(),
+  ]);
+  const plans = [...availablePlans].sort((a, b) => (planOrder.get(a.slug) ?? 9) - (planOrder.get(b.slug) ?? 9));
   const today = new Date().toISOString().slice(0, 10);
   const errorMessage = query.application ? applicationErrors[query.application] : null;
 

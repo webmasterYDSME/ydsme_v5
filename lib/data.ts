@@ -2,7 +2,13 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { connection } from "next/server";
-import { ANNOUNCEMENTS_CACHE_TAG } from "@/lib/cache-tags";
+import {
+  ANNOUNCEMENTS_CACHE_TAG,
+  PUBLIC_COMMITTEE_CACHE_TAG,
+  PUBLIC_DONATIONS_CACHE_TAG,
+  PUBLIC_EVENTS_CACHE_TAG,
+  PUBLIC_SITE_CONFIG_CACHE_TAG,
+} from "@/lib/cache-tags";
 import { createPublicClient, publicStorageUrl } from "@/lib/supabase/public";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { defaultDonationSettings } from "@/lib/donations";
@@ -130,10 +136,8 @@ function isMissingProjection(error: { code?: string } | null) {
   return error?.code === "PGRST205";
 }
 
-export async function getPublicEvents() {
-  await connection();
+async function loadPublicEvents(today: string) {
   const supabase = createPublicClient();
-  const today = new Date().toISOString().slice(0, 10);
   const projection = await supabase
     .from("public_events")
     .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,booking_enabled,booking_mode,booking_capacity")
@@ -184,9 +188,18 @@ export async function getPublicEvents() {
   }) as EventRecord[];
 }
 
-export async function getPublicMemberEventTeasers(limit = 3) {
+const getCachedPublicEvents = unstable_cache(
+  loadPublicEvents,
+  ["public-events"],
+  { tags: [PUBLIC_EVENTS_CACHE_TAG], revalidate: 30 },
+);
+
+export async function getPublicEvents() {
   await connection();
-  const today = new Date().toISOString().slice(0, 10);
+  return getCachedPublicEvents(new Date().toISOString().slice(0, 10));
+}
+
+async function loadPublicMemberEventTeasers(today: string, limit: number) {
   const { data, error } = await createPublicClient()
     .from("public_member_event_teasers")
     .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time")
@@ -201,35 +214,24 @@ export async function getPublicMemberEventTeasers(limit = 3) {
   return (data ?? []) as MemberEventTeaserRecord[];
 }
 
-export async function getBookableEvent(id: number) {
-  await connection();
-  const admin = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: event, error } = await admin.from("events")
-    .select("id,name,descriptions,file_url,start_date,end_date,start_time,end_time,event_type,display_in_homepage,is_ticket_required,booking_enabled,booking_mode,booking_capacity")
-    .eq("id", id)
-    .eq("event_type", "public")
-    .eq("lifecycle_status", "published")
-    .gte("end_date", today)
-    .maybeSingle();
-  if (error) throw new Error("Unable to load the event.");
-  if (!event || event.booking_mode !== "website" || !event.booking_enabled || !event.booking_capacity) return null;
+const getCachedPublicMemberEventTeasers = unstable_cache(
+  loadPublicMemberEventTeasers,
+  ["public-member-event-teasers"],
+  { tags: [PUBLIC_EVENTS_CACHE_TAG], revalidate: 300 },
+);
 
-  const { data: bookings, error: bookingError } = await admin.from("event_bookings")
-    .select("party_size")
-    .eq("event_id", id)
-    .in("status", ["confirmed", "checked_in"]);
-  if (bookingError) throw new Error("Unable to load event availability.");
-  const bookedPlaces = (bookings ?? []).reduce((total, booking) => total + booking.party_size, 0);
-  return {
-    ...event,
-    booked_places: bookedPlaces,
-    available_places: Math.max(0, event.booking_capacity - bookedPlaces),
-  } as EventRecord;
+export async function getPublicMemberEventTeasers(limit = 3) {
+  await connection();
+  return getCachedPublicMemberEventTeasers(new Date().toISOString().slice(0, 10), limit);
 }
 
-export async function getCommittees() {
-  await connection();
+export async function getBookableEvent(id: number) {
+  const event = (await getPublicEvents()).find((candidate) => candidate.id === id);
+  if (!event || event.booking_mode !== "website" || !event.booking_enabled || !event.booking_capacity) return null;
+  return event;
+}
+
+async function loadCommittees() {
   const supabase = createPublicClient();
   const projection = await supabase
     .from("public_committee_roster")
@@ -245,6 +247,17 @@ export async function getCommittees() {
   }
   if (projection.error) throw new Error("Unable to load the committee.");
   return (projection.data ?? []) as CommitteeRecord[];
+}
+
+const getCachedCommittees = unstable_cache(
+  loadCommittees,
+  ["public-committee"],
+  { tags: [PUBLIC_COMMITTEE_CACHE_TAG], revalidate: 3600 },
+);
+
+export async function getCommittees() {
+  await connection();
+  return getCachedCommittees();
 }
 
 async function loadPublicAnnouncements(limit?: number) {
@@ -307,8 +320,7 @@ export async function getCarriageAnnouncements(limit = 6) {
   }));
 }
 
-export async function getPublicSiteConfig() {
-  await connection();
+async function loadPublicSiteConfig() {
   const supabase = createPublicClient();
   const [configResult, linksResult] = await Promise.all([
     supabase
@@ -345,8 +357,18 @@ export async function getPublicSiteConfig() {
   } satisfies PublicSiteConfig;
 }
 
-export async function getDonationSettings() {
+const getCachedPublicSiteConfig = unstable_cache(
+  loadPublicSiteConfig,
+  ["public-site-config"],
+  { tags: [PUBLIC_SITE_CONFIG_CACHE_TAG], revalidate: 3600 },
+);
+
+export async function getPublicSiteConfig() {
   await connection();
+  return getCachedPublicSiteConfig();
+}
+
+async function loadDonationSettings() {
   const admin = createAdminClient();
   const [{ data, error }, { data: raisedPence, error: totalError }] = await Promise.all([
     admin.from("donation_campaigns").select("kind,enabled,title,description,button_label,target_pence"),
@@ -368,6 +390,17 @@ export async function getDonationSettings() {
       raisedPence: totalError ? 0 : Number(raisedPence ?? 0),
     },
   };
+}
+
+const getCachedDonationSettings = unstable_cache(
+  loadDonationSettings,
+  ["public-donations"],
+  { tags: [PUBLIC_DONATIONS_CACHE_TAG], revalidate: 60 },
+);
+
+export async function getDonationSettings() {
+  await connection();
+  return getCachedDonationSettings();
 }
 
 export function eventImage(path?: string | null) {

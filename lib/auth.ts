@@ -20,10 +20,12 @@ export const capabilities = [
   "bookings.manage",
   "workshops.manage",
   "documents.manage",
+  "members.view",
   "members.manage",
   "memberships.manage",
   "settings.manage",
   "donations.view",
+  "donations.manage",
   "audit.view",
 ] as const;
 export type Capability = (typeof capabilities)[number];
@@ -33,6 +35,7 @@ const roleCapabilities: Record<AppRole, ReadonlySet<Capability>> = {
   committee: new Set([
     "portal.view", "profile.manage-own", "workshops.reserve-own", "notices.create-own",
     "notices.moderate", "announcements.manage", "events.manage", "bookings.manage", "workshops.manage", "documents.manage",
+    "members.view",
   ]),
   administrator: new Set(capabilities),
 };
@@ -40,6 +43,12 @@ const roleCapabilities: Record<AppRole, ReadonlySet<Capability>> = {
 export function hasCapability(role: AppRole, capability: Capability) {
   return roleCapabilities[role].has(capability);
 }
+
+const membershipOfficerCapabilities: ReadonlySet<Capability> = new Set([
+  "memberships.manage",
+  "donations.view",
+  "donations.manage",
+]);
 
 export const getCurrentUser = cache(async () => {
   const supabase = await createClient();
@@ -54,6 +63,14 @@ export const getRole = cache(async (userId: string): Promise<AppRole> => {
   return appRoles.includes(role ?? "member") ? (role ?? "member") : "member";
 });
 
+export const isMembershipOfficer = cache(async (userId: string, role: AppRole) => role === "administrator"
+  || (role === "committee" && Boolean((await createServiceClient()
+    .from("user_capabilities")
+    .select("user_id")
+    .eq("user_id", userId)
+    .eq("capability", "memberships.manage")
+    .maybeSingle()).data)));
+
 export const requireUser = cache(async () => {
   const user = await getCurrentUser();
   if (!user) redirect("/signin");
@@ -63,12 +80,7 @@ export const requireUser = cache(async () => {
     getRole(user.id),
   ]);
   if (profile?.membership_status !== "active") redirect("/signin?error=Your+Society+access+is+not+active.");
-  const membershipOfficer = membershipAdministrationEnabled() && (role === "administrator" || (role === "committee" && Boolean((await createServiceClient()
-    .from("user_capabilities")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .eq("capability", "memberships.manage")
-    .maybeSingle()).data)));
+  const membershipOfficer = await isMembershipOfficer(user.id, role);
   return { user, role, fullName: profile.full_name, membershipOfficer };
 });
 
@@ -84,7 +96,7 @@ export async function requireCapability(capability: Capability) {
     redirect("/dashboard?notice=not-authorised");
   }
   if (!hasCapability(session.role, capability)
-    && !(capability === "memberships.manage" && session.membershipOfficer)) {
+    && !(session.membershipOfficer && membershipOfficerCapabilities.has(capability))) {
     redirect("/dashboard?notice=not-authorised");
   }
   return session;

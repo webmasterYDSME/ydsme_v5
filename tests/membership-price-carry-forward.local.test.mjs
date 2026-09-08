@@ -2,14 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { readLocalSupabaseEnvironment } from "./local-supabase.mjs";
 
-test("carries the latest officer-set fee into an immutable membership-year snapshot", (t) => {
-  const status = spawnSync("npx", ["supabase", "status", "-o", "env"], { encoding: "utf8" });
-  if (status.status !== 0) return t.skip("Local Supabase is not running.");
-  const apiUrl = status.stdout.match(/^API_URL="([^"]+)"$/m)?.[1];
-  assert.ok(apiUrl, "Supabase status did not return API_URL.");
-  const endpoint = new URL(apiUrl);
-  assert.ok(["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname), `Refusing data-writing test against ${endpoint.hostname}.`);
+test("carries the latest officer-set fee into an immutable membership-year snapshot", () => {
+  readLocalSupabaseEnvironment("Membership price carry-forward tests");
   const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
   const projectId = config.match(/^project_id\s*=\s*"([^"]+)"/m)?.[1];
   assert.ok(projectId);

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+import { PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG } from "@/lib/cache-tags";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 export type MembershipPaymentSettings = {
@@ -31,6 +33,30 @@ export const defaultMembershipPaymentSettings: Omit<MembershipPaymentSettings, "
   cheque_delivery_instructions: "Contact the Society Treasurer to arrange delivery of your cheque.",
   cash_instructions: "Contact the Society Treasurer to arrange a complete cash payment.",
 };
+
+export type PublicMembershipPaymentContact = Pick<
+  MembershipPaymentSettings,
+  "configured" | "treasurer_name" | "treasurer_email"
+>;
+
+async function loadPublicMembershipPaymentContact(): Promise<PublicMembershipPaymentContact> {
+  const { data } = await createServiceClient()
+    .from("membership_payment_settings_versions")
+    .select("configured,treasurer_name,treasurer_email")
+    .eq("active", true)
+    .maybeSingle();
+  return data ?? {
+    configured: defaultMembershipPaymentSettings.configured,
+    treasurer_name: defaultMembershipPaymentSettings.treasurer_name,
+    treasurer_email: defaultMembershipPaymentSettings.treasurer_email,
+  };
+}
+
+export const getPublicMembershipPaymentContact = unstable_cache(
+  loadPublicMembershipPaymentContact,
+  ["public-membership-payment-contact"],
+  { tags: [PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG], revalidate: 3600 },
+);
 
 export async function getMembershipPaymentSettings(id?: string | null): Promise<MembershipPaymentSettings> {
   const admin = createServiceClient();

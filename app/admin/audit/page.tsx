@@ -19,6 +19,11 @@ const auditCategories = {
   site: ["site-config", "committee-record"],
 } as const;
 
+const plainAuditLabel = (value: string) => {
+  const words = value.split(/[._-]+/).filter(Boolean).join(" ");
+  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}` : "Recorded change";
+};
+
 export default async function AuditPage({ searchParams }: { searchParams: Promise<Query> }) {
   const [params] = await Promise.all([searchParams, requireCapability("audit.view")]);
   const page = Math.max(1, Number.parseInt(params.page || "1", 10) || 1);
@@ -39,7 +44,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const categoryHref = (value: string) => `/admin/audit?${new URLSearchParams({ ...(q ? { q } : {}), ...(action ? { action } : {}), ...(value !== "all" ? { category: value } : {}) })}`;
   const hasFilters = Boolean(q || action);
 
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Audit history</h1><p>Review the append-only record of security-sensitive and administrative changes. Stored values are redacted.</p></div><span className="count-badge"><ShieldCheck/>{count ?? 0} matching</span></header>
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>Important changes</h1><p>Review important changes made by administrators and automated processes. Sensitive values are hidden.</p></div><span className="count-badge"><ShieldCheck/>{count ?? 0} matching</span></header>
     <PortalTabs label="Audit category" tabs={[
       { href: categoryHref("all"), label: "All activity", current: category === "all" },
       { href: categoryHref("members"), label: "Members", current: category === "members" },
@@ -47,9 +52,9 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
       { href: categoryHref("transactions"), label: "Bookings & payments", current: category === "transactions" },
       { href: categoryHref("site"), label: "Committee & site", current: category === "site" },
     ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="category" value={category === "all" ? "" : category}/><div className="portal-filter-heading"><div><h2>Search the record</h2><p>Find an entity, identifier, summary or exact family of actions.</p></div>{hasFilters ? <Link prefetch={false} className="portal-filter-clear" href={categoryHref(category)} >Clear search</Link> : null}</div><div className="portal-filter-grid audit-filter-grid"><label className="portal-filter-search">Entity, identifier or summary<span><Search/><input name="q" defaultValue={q} placeholder="Member email or record ID" autoComplete="off"/></span></label><label>Action contains<input name="action" defaultValue={action} placeholder="member.role-changed" autoComplete="off"/></label><button className="button dark" type="submit">Filter history</button></div></form>
-    <div className="audit-list">{(entries ?? []).map((entry) => { const actor = entry.actor_id ? actors.get(entry.actor_id) : null; const actorName = actor?.display_name || (entry.actor_role === "system" ? "Automated system" : entry.actor_role); return <article className="audit-entry" key={entry.id}><div className="audit-entry-main"><div className="audit-entry-meta"><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</time><span>{entry.entity_type.replaceAll("_", " ")}</span></div><h2>{entry.action}</h2><p>{entry.summary || "No additional summary was recorded."}</p><code>{entry.entity_id}</code></div><div className="audit-entry-actor"><span>Performed by</span><strong>{actorName}</strong><small>{actor ? `${actor.reference_code} · ${actor.status}` : entry.actor_role}</small></div><AuditChangeDetails id={entry.id}/></article>; })}</div>
-    {!entries?.length ? <div className="empty-state"><h2>No matching audit entries</h2></div> : null}
-    <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="entries" href={pageHref} ariaLabel="Audit history pages"/>
+    <form className="portal-filter-panel" method="get"><input type="hidden" name="category" value={category === "all" ? "" : category}/><div className="portal-filter-heading"><div><h2>Search the record</h2><p>Search by member, record reference, description or type of change.</p></div>{hasFilters ? <Link prefetch={false} className="portal-filter-clear" href={categoryHref(category)} >Clear search</Link> : null}</div><div className="portal-filter-grid audit-filter-grid"><label className="portal-filter-search">Member, reference or description<span><Search/><input name="q" defaultValue={q} placeholder="Name, email or reference" autoComplete="off"/></span></label><label>Type of change contains<input name="action" defaultValue={action} placeholder="For example, role" autoComplete="off"/></label><button className="button dark" type="submit">Filter history</button></div></form>
+    <div className="audit-list">{(entries ?? []).map((entry) => { const actor = entry.actor_id ? actors.get(entry.actor_id) : null; const actorName = actor?.display_name || (entry.actor_role === "system" ? "Automated system" : entry.actor_role); return <article className="audit-entry" key={entry.id}><div className="audit-entry-main"><div className="audit-entry-meta"><time dateTime={entry.occurred_at}>{new Date(entry.occurred_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</time><span>{plainAuditLabel(entry.entity_type)}</span></div><h2>{plainAuditLabel(entry.action)}</h2><p>{entry.summary || "No additional description was recorded."}</p><details><summary>Record reference</summary><code>{entry.entity_id}</code></details></div><div className="audit-entry-actor"><span>Performed by</span><strong>{actorName}</strong><small>{actor ? `${actor.reference_code} · ${actor.status}` : plainAuditLabel(entry.actor_role)}</small></div><AuditChangeDetails id={entry.id}/></article>; })}</div>
+    {!entries?.length ? <div className="empty-state"><h2>No matching changes</h2></div> : null}
+    <PortalPagination currentPage={page} totalPages={pages} totalItems={count ?? 0} itemLabel="changes" href={pageHref} ariaLabel="Important changes pages"/>
   </div>;
 }
