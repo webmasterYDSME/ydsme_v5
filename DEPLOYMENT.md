@@ -2,6 +2,23 @@
 
 The application follows one promotion path: feature branch → `preview` → `main`. Git-triggered Vercel deployments are disabled. After a branch push passes GitHub CI, the `Release` workflow applies pending migrations, deploys the repository's Edge Functions to that branch's Supabase project, and only then calls its branch-specific Vercel deploy hook. This keeps application, function and database deployment ordered as one release operation.
 
+## Under Review / maintenance page
+
+`MAINTENANCE_MODE` is an optional server-only environment flag. Set it to
+`true` in the intended deployment environment to show the existing Under Review
+page on every hostname. Leave it unset or set it to `false` for normal access,
+including launch day. Only `true` (case-insensitive, ignoring surrounding spaces)
+enables the gate; no hostname is special-cased.
+
+After changing the flag in Vercel, redeploy that environment to apply it. Restart
+local development after changing the local environment. No database setting or
+migration is required.
+
+The gate applies before sign-in, so administrators also see the holding page.
+API routes, static assets, and `/under-review` remain available. Webhooks and
+scheduled jobs continue to run: this flag does not pause billing or background
+processing. The existing Under Review wording is retained for future use.
+
 ## Required rules
 
 1. Merge through pull requests in order: feature branches target `preview`, and only `preview` targets `main`. The `Validate promotion path` check rejects every other route.

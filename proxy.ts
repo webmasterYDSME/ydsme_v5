@@ -35,11 +35,7 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", policy);
-  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
-  const requestHost = forwardedHost || request.headers.get("host") || request.nextUrl.hostname;
-  const hostname = requestHost.split(":")[0];
-
-  if (shouldShowHoldingPage(hostname, request.nextUrl.pathname)) {
+  if (shouldShowHoldingPage(process.env.MAINTENANCE_MODE, request.nextUrl.pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = HOLDING_PAGE_PATH;
     url.search = "";
