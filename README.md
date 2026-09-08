@@ -14,6 +14,8 @@ npm run dev -- --port 3010
 
 Open the website at [http://localhost:3010](http://localhost:3010), local Supabase Studio at [http://127.0.0.1:55323](http://127.0.0.1:55323), and captured local email at [http://127.0.0.1:55324](http://127.0.0.1:55324).
 
+This project's Supabase services use the dedicated `55320–55329` port range: API `55321`, database `55322`, Studio `55323`, local email `55324`, and Edge Function debugger `55328`. Keep other local Supabase projects on different ranges to avoid collisions.
+
 Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Stripe, Facebook, production SMTP and production webhooks should remain disabled during local development.
 
 Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables allowlisted website journeys; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
