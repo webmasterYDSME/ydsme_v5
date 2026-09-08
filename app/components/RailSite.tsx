@@ -180,7 +180,7 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
           <div className="footer-registration-item"><span>Registered society</span><p>{siteConfig.registeredName}<br/>Company no. {siteConfig.companyNumber}</p></div>
           <div className="footer-registration-item"><span>Registered office</span><address><CompactAddressLines address={siteConfig.registeredAddress}/></address></div>
         </div>
-        <div className="footer-meta"><p className="footer-copyright">© {new Date().getFullYear()} {siteConfig.shortName}</p><p className="footer-credit">Website by <a href="https://nomen.hunkymonkey.net" target="_blank" rel="author noreferrer">Nomen Ama</a></p></div>
+        <div className="footer-meta"><p className="footer-copyright">© {new Date().getFullYear()} {siteConfig.shortName}</p><p className="footer-credit">Website by <a href="https://nomen.hunkymonkey.net" target="_blank" rel="author noreferrer">Nomen A</a></p></div>
       </div>
     </footer>
   </>;
