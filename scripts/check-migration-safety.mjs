@@ -23,7 +23,12 @@ const added = [];
 const immutableHistoryChanges = [];
 const reviewedReplayRepair = {
   path: "supabase/migrations/202608180004_secure_dashboard.sql",
-  before: "ffde46ca7af154818d0e2da40349f33d7e05d35f3e7ccc24f3d02855a24cdde3",
+  // Both reviewed source versions can be promoted to the same repaired file:
+  // original production, or the intermediate staging replay repair.
+  before: [
+    "e85e272056da1c2909227340395075ee3019640c0e2283d3e612475e88fe8018",
+    "ffde46ca7af154818d0e2da40349f33d7e05d35f3e7ccc24f3d02855a24cdde3",
+  ],
   after: "072c264e427363a7ece9f812298cadb6df5a286d26e76f5430d6238be2363bf0",
 };
 const reviewedRepairs = [];
@@ -36,7 +41,7 @@ for (const line of diff.split("\n")) {
   } else if (status === "M" && firstPath === reviewedReplayRepair.path) {
     const before = execFileSync("git", ["show", `${base}:${firstPath}`]);
     const after = execFileSync("git", ["show", `${head}:${firstPath}`]);
-    if (sha256(before) === reviewedReplayRepair.before && sha256(after) === reviewedReplayRepair.after) {
+    if (reviewedReplayRepair.before.includes(sha256(before)) && sha256(after) === reviewedReplayRepair.after) {
       reviewedRepairs.push(firstPath);
     } else {
       immutableHistoryChanges.push(`${status} ${firstPath}`);
