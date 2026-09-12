@@ -21,7 +21,7 @@ jobs:
   deploy-preview:
     name: Migrate and deploy preview
     if: >-
-      github.repository == 'nomenama/ydsme_v5' &&
+      github.repository == 'webmasterYDSME/ydsme_v5' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'preview' &&
       github.event.workflow_run.conclusion == 'success'
@@ -53,14 +53,12 @@ jobs:
   deploy-production:
     name: Migrate and deploy production
     if: >-
-      github.repository == 'nomenama/ydsme_v5' &&
+      github.repository == 'webmasterYDSME/ydsme_v5' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    outputs:
-      released_sha: ${{ steps.release.outputs.released_sha }}
     steps:
       - name: Check out the verified commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -84,37 +82,3 @@ jobs:
           SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PRODUCTION_PROJECT_ID }}
           VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_PRODUCTION_DEPLOY_HOOK }}
         run: node scripts/release-hosted-environment.mjs
-
-  mirror-production:
-    name: Mirror verified production source
-    needs:
-      - deploy-production
-    if: needs.deploy-production.outputs.released_sha != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check out the released commit
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          ref: ${{ needs.deploy-production.outputs.released_sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Configure deploy key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.YDSME_V5_REPO_DEPLOY_KEY }}
-        run: |
-          if [[ -z "$SSH_PRIVATE_KEY" ]]; then
-            echo "::error::YDSME_V5_REPO_DEPLOY_KEY is not configured"
-            exit 1
-          fi
-
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
-      - name: Copy released main branch to the public repository
-        run: |
-          git push --force \
-            git@github.com:webmasterYDSME/ydsme_v5.git \
-            HEAD:main
