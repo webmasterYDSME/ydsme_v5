@@ -67,7 +67,8 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.match(releaseWorkflow, /SUPABASE_PREVIEW_PROJECT_ID/);
   assert.match(releaseWorkflow, /SUPABASE_PRODUCTION_PROJECT_ID/);
   assert.match(releaseWorkflow, /node scripts\/release-hosted-environment\.mjs/);
-  assert.match(releaseWorkflow, /Mirror verified production source/);
+  assert.equal((releaseWorkflow.match(/github\.repository == 'webmasterYDSME\/ydsme_v5'/g) || []).length, 2);
+  assert.doesNotMatch(releaseWorkflow, /nomenama|mirror-production|git push --force/);
   assert.match(releaseScript, /\["functions", "deploy", "--project-ref", process\.env\.SUPABASE_PROJECT_ID, "--yes"\]/);
   assert.ok(releaseScript.indexOf('["db", "push", "--linked", "--yes", "--skip-vault"]') < releaseScript.indexOf('["functions", "deploy"'));
   assert.ok(releaseScript.indexOf('["functions", "deploy"') < releaseScript.indexOf("fetch(hook"));

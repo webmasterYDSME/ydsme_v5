@@ -2,6 +2,29 @@
 
 The application follows one promotion path: feature branch → `preview` → `main`. Git-triggered Vercel deployments are disabled. After a branch push passes GitHub CI, the `Release` workflow applies pending migrations, deploys the repository's Edge Functions to that branch's Supabase project, and only then calls its branch-specific Vercel deploy hook. This keeps application, function and database deployment ordered as one release operation.
 
+## Repository ownership and local maintenance
+
+The canonical repository is `webmasterYDSME/ydsme_v5`, connected to the YDSME
+Vercel project `ydsme-v5`. Release jobs run only in this repository. The former
+personal repository must no longer run its Release workflow after cutover,
+because its deploy hooks and mirror job target the former deployment path.
+
+This Mac uses the `github-ydsme` SSH alias with a separate authentication key.
+The repository-local commit identity is `webmasterYDSME` with the account's
+GitHub noreply address. Other projects retain their existing Git settings.
+The old repository is retained as the `personal` remote for reference.
+
+Continue using feature branch → `preview` → `main`, with reviewed pull requests.
+Git SSH authentication is separate from the GitHub CLI login: `gh` must also be
+authenticated as `webmasterYDSME` before using it to create or merge pull requests.
+Do not rewrite historical commit authors to change ownership.
+
+For the account cutover, configure the eight release secrets below in YDSME,
+verify the Supabase project IDs and Vercel hook targets, and complete preview
+verification before switching custom domains or retiring the former hosting.
+Existing GitHub Actions secret values cannot be read back from the old repository;
+retrieve them from their original secure storage or issue replacement credentials.
+
 ## Under Review / maintenance page
 
 `MAINTENANCE_MODE` is an optional server-only environment flag. Set it to
@@ -46,9 +69,8 @@ Configure these GitHub repository secrets before merging the release workflow:
 - `SUPABASE_PREVIEW_ACCESS_TOKEN`, `SUPABASE_PREVIEW_DB_PASSWORD`, `SUPABASE_PREVIEW_PROJECT_ID`
 - `SUPABASE_PRODUCTION_ACCESS_TOKEN`, `SUPABASE_PRODUCTION_DB_PASSWORD`, `SUPABASE_PRODUCTION_PROJECT_ID`
 - `VERCEL_PREVIEW_DEPLOY_HOOK`, `VERCEL_PRODUCTION_DEPLOY_HOOK`
-- `YDSME_V5_REPO_DEPLOY_KEY` for the existing public source mirror
 
-The two project IDs must differ. A missing secret, a failed `supabase db push --dry-run`, a failed migration, a failed Edge Function deployment, or a rejected deploy hook fails closed: Vercel is not triggered and production source is not mirrored. Supabase applies each pending migration once using its migration-history table. Never repair hosted migration history automatically; investigate and explicitly review any `migration repair` operation.
+The two project IDs must differ. A missing secret, a failed `supabase db push --dry-run`, a failed migration, a failed Edge Function deployment, or a rejected deploy hook fails closed: Vercel is not triggered. Supabase applies each pending migration once using its migration-history table. Never repair hosted migration history automatically; investigate and explicitly review any `migration repair` operation.
 
 For the one-time rollout of this workflow, configure all secrets and hooks first, then promote the workflow to `main`. GitHub loads `workflow_run` definitions from the default branch, so the first preview release will not start until `release.yml` exists on `main`; rerun the latest successful preview CI workflow after that promotion.
 
@@ -96,7 +118,7 @@ Before applying `202608180021_event_management_lifecycle.sql` to a hosted projec
 6. Merge the feature PR only after all GitHub checks pass. A successful `preview` push CI run automatically applies pending preview migrations, deploys Preview Edge Functions and triggers the preview deploy hook.
 7. Wait for the Vercel preview deployment to report success, then smoke-test the stable preview deployment.
 8. Open a `preview` to `main` pull request and merge it only after all checks pass.
-9. A successful `main` push CI run automatically applies pending production migrations, deploys Production Edge Functions, triggers the production deploy hook, and mirrors that released source commit to the public repository.
+9. A successful `main` push CI run automatically applies pending production migrations, deploys Production Edge Functions, triggers the production deploy hook in the YDSME Vercel project.
 10. Wait for the Vercel production deployment to report success.
 11. Smoke-test these routes against the production alias:
    - `/`
