@@ -48,13 +48,12 @@ test("exposes only explicitly selected member event teasers through a limited pu
 });
 
 test("keeps event management current and uses only the website booking system", async () => {
-  const [migration, admin, bookingFields, actions, publicEvents, eventsCarousel] = await Promise.all([
+  const [migration, admin, bookingFields, actions, publicEvents] = await Promise.all([
     read("supabase/migrations/202608180021_event_management_lifecycle.sql"),
     read("app/admin/[section]/page.tsx"),
     read("app/components/EventBookingFields.tsx"),
     read("lib/actions/content.ts"),
     read("app/events/page.tsx"),
-    read("app/events/EventsCarousel.tsx"),
   ]);
   assert.match(migration, /end_date < current_date/);
   assert.match(migration, /create trigger archive_past_event_on_write/);
@@ -70,14 +69,10 @@ test("keeps event management current and uses only the website booking system", 
   assert.doesNotMatch(bookingFields, /external/i);
   assert.doesNotMatch(publicEvents, /featuredExternalUrl|safeHttpUrl/);
   assert.match(actions, /booking_mode: z\.enum\(\["none", "website"\]\)/);
-  assert.match(publicEvents, /events\.find\(\(event\) => event\.booking_enabled && event\.available_places > 0\)/);
-  assert.match(publicEvents, /advanceBooking/);
-  assert.match(publicEvents, /featured\.available_places > 0[\s\S]*View event details/);
-  assert.match(publicEvents, /<EventsCarousel events=\{more\}/);
-  assert.match(eventsCarousel, /const EVENTS_PER_VIEW = 3/);
-  assert.match(eventsCarousel, /Previous three events/);
-  assert.match(eventsCarousel, /Next three events/);
-  assert.match(eventsCarousel, /id=\{`event-\$\{event\.id\}`\}/);
+  assert.match(publicEvents, /upcomingEvents\(publicEvents\)/);
+  assert.match(publicEvents, /event.available_places > 0 \? "Book free places" : "View booking details"/);
+  assert.match(publicEvents, /more.map\(event =>/);
+  assert.match(publicEvents, /id=\{`event-\$\{event.id\}`\}/);
   assert.match(await read("app/events/[id]/book/page.tsx"), /href=\{`\/events#event-\$\{event\.id\}`\}/);
 });
 
