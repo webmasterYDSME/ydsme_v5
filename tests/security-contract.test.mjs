@@ -167,7 +167,7 @@ test("publishes and caches announcements through safe active and news projection
   assert.match(home, /<InteractiveSteamTrain announcements=/);
   assert.match(train, /setInterval\([\s\S]*setAnnouncementIndex/);
   assert.match(train, /announcement \? <Link className="train-banner" href="\/news"/);
-  assert.match(train, /announcement \? <span className="train-coupler"/);
+  assert.match(train, /announcement \? <span className="train-coupler(?: [^"]*)?"/);
   assert.doesNotMatch(train, /const nav = \[[^\n]*News/);
   assert.match(train, /Footer navigation[\s\S]*href="\/news"/);
   assert.match(sitemap, /path: "\/news"/);
