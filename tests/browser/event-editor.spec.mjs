@@ -28,7 +28,7 @@ test("creates and edits events with required artwork and conditional booking", a
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("Event name", { exact: true }).fill(name);
     const description = dialog.getByRole("textbox", { name: "Description", exact: true });
-    const polish = dialog.getByRole("button", { name: "Polish this", exact: true });
+    const polish = dialog.getByRole("button", { name: "Improve description", exact: true });
     await expect(polish).toBeDisabled();
     await expect(description).toHaveAttribute("placeholder", /Rough notes are fine/);
     await description.fill("a".repeat(49));
@@ -54,7 +54,7 @@ test("creates and edits events with required artwork and conditional booking", a
     const heldResponse = new Promise(resolve => { finishPolishing = resolve; });
     await page.route("**/api/events/polish", async route => { await heldResponse; await route.fulfill({ json: { description: "An outdated suggestion." } }); });
     await polish.click();
-    await expect(dialog.getByRole("button", { name: "Polishing…" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Improving…" })).toBeDisabled();
     await description.fill(rough + " Bring your tools.");
     finishPolishing();
     await expect(polish).toBeEnabled();

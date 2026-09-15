@@ -40,10 +40,10 @@ export function EventDescriptionField({ value, onChange, name, audience, booking
   return <div className="event-description-field wide">
     <div className="event-description-field-heading">
       <label htmlFor={id}>Description</label>
-      <button type="button" className="event-polish-button" disabled={pending || remaining > 0} aria-describedby={hintId} onClick={polish}><Sparkles size={14} aria-hidden="true"/>{pending ? "Polishing…" : "Polish this"}</button>
+      <button type="button" className="event-polish-button" disabled={pending || remaining > 0} aria-describedby={hintId} onClick={polish}><Sparkles size={14} aria-hidden="true"/>{pending ? "Improving…" : "Improve description"}</button>
     </div>
     <textarea id={id} name="descriptions" value={value} onChange={event => { onChange(event.target.value); setError(""); }} rows={4} minLength={2} maxLength={5000} required aria-invalid={invalid || undefined} aria-describedby={[hintId, errorId].filter(Boolean).join(" ")}
-      placeholder="Tell visitors what’s happening and what they can expect. Add any confirmed activities, refreshments or practical details. Rough notes are fine—write at least 50 characters, then choose Polish this."/>
+      placeholder="Tell visitors what’s happening and what they can expect. Add any confirmed activities, refreshments or practical details. Rough notes are fine—write at least 50 characters, then choose Improve description."/>
     <p id={hintId} className="event-polish-hint">{remaining ? `Write ${remaining} more ${remaining === 1 ? "character" : "characters"} to enable AI polishing.` : "AI improves your wording. You review the suggestion before applying it."}</p>
     {pending && <p className="event-polish-hint" role="status">Preparing a suggestion…</p>}
     {error && <p className="form-message error" role="alert">{error}</p>}
