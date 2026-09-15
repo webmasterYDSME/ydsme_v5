@@ -62,7 +62,7 @@ export function EventsCarousel({ events }: { events: EventRecord[] }) {
           const actionLabel = event.available_places > 0 ? `Book places for ${event.name}` : `View details for ${event.name}`;
           return <article className="event-row" id={`event-${event.id}`} key={event.id}>
             <div className="event-date"><strong>{format(parseISO(event.start_date), "dd")}</strong><span>{format(parseISO(event.start_date), "MMM").toUpperCase()}</span></div>
-            <div><p className="eyebrow dark">Public running day · {bookingStatus(event)}</p><h3>{event.name}</h3><p>{event.descriptions}</p></div>
+            <div><p className="eyebrow dark">Public running day · {bookingStatus(event)}</p><h3>{event.name}</h3><p className="event-description">{event.descriptions}</p></div>
             <time dateTime={`${event.start_date}T${eventTime(event.start_time)}`}>{eventTime(event.start_time)}</time>
             {url ? <Link className="event-row-booking" href={url} aria-label={actionLabel}><span>{action}</span><ArrowRight/></Link> : null}
           </article>;

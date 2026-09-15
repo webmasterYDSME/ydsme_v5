@@ -506,3 +506,6 @@ select:not([multiple])[size="1"]:dir(rtl){background-position:left 14px center!i
     background-image:none!important;
   }
 }
+
+/* Preserve paragraphs and line breaks entered in event descriptions. */
+.event-description{white-space:pre-wrap;overflow-wrap:anywhere}

@@ -88,7 +88,7 @@ export default async function Events() {
       <div>
         <p className="eyebrow dark">Next departure · Public event</p>
         <h2>{featured.name}</h2>
-        <p>{featured.descriptions}</p>
+        <p className="event-description">{featured.descriptions}</p>
         <div className="event-meta"><span><CalendarDays/> {format(parseISO(featured.start_date), "EEEE")}</span><span>{eventTime(featured.start_time)}</span><span>{bookingStatus(featured)}</span></div>
         {featured.booking_enabled ? <Link className="button dark" href={`/events/${featured.id}/book`}>{featured.available_places > 0 ? <><span>Reserve free places</span><Ticket size={17}/></> : <><span>View event details</span><ArrowRight size={17}/></>}</Link> : null}
       </div>
@@ -108,7 +108,7 @@ export default async function Events() {
           <p className="member-event-label"><LockKeyhole/> Members only</p>
           <p className="member-event-date">{format(parseISO(event.start_date), "EEEE d MMMM")} · {eventTime(event.start_time)}</p>
           <h3>{event.name}</h3>
-          <p>{event.descriptions}</p>
+          <p className="event-description">{event.descriptions}</p>
           <Link href="/membership" aria-label={`Explore membership for ${event.name}`}>Explore membership <ArrowRight/></Link>
         </div>
       </article>)}</div>
