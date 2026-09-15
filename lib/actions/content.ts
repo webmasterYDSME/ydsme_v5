@@ -445,16 +445,18 @@ export async function uploadDocument(formData: FormData) {
   const quarantinePath = String(formData.get("quarantine_path") || "");
   const category = z.enum(["minute", "publication", "insurance-policy", "club-rule", "calendar", "boiler-guide", "others"]).safeParse(formData.get("category"));
   const name = text(2, 180).safeParse(formData.get("name"));
-  if (!quarantinePath || !category.success || !name.success) redirect("/dashboard/resources?error=Upload+a+PDF+and+enter+a+name.");
+  if (!quarantinePath || !category.success || !name.success) return { error: "Choose a PDF and enter a document name of at least two characters." };
   const admin = createAdminClient();
   let upload: Awaited<ReturnType<typeof finalizeQuarantinedUpload>>;
   try { upload = await finalizeQuarantinedUpload("document", quarantinePath, user.id); }
-  catch { redirect("/dashboard/resources?error=The+PDF+failed+security+validation."); }
+  catch { return { error: "The PDF failed security validation. Please choose a valid PDF again.", reselectFile: true }; }
   const { data, error } = await admin.from("documents").insert({ name: name.data, descriptions: String(formData.get("descriptions") || "").slice(0, 5000), category: category.data, file_url: upload.canonicalPath, created_by: user.id, lifecycle_status: "published" }).select("id").single();
-  if (error) { await admin.storage.from("documents").remove([upload.path]); redirect("/dashboard/resources?error=The+document+record+could+not+be+saved."); }
+  if (error) { await admin.storage.from("documents").remove([upload.path]); return { error: "The document could not be saved. Please choose the PDF again and retry.", reselectFile: true }; }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.created", entityType: "document", entityId: data.id, summary: name.data, after: { category: category.data, path: upload.canonicalPath } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  const section = category.data === "minute" ? "minutes" : category.data === "publication" ? "publications" : "resources";
+  return { url: `/dashboard/${section}?status=published` };
 }
 
 export async function deleteDocument(formData: FormData) {
@@ -478,39 +480,41 @@ export async function restoreDocument(formData: FormData) {
   revalidatePath("/dashboard", "layout");
 }
 
-export async function updateDocumentMetadata(formData: FormData) {
+export async function updateDocumentMetadata(formData: FormData): Promise<{ error?: string; success?: boolean; reselectFile?: boolean }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = z.object({ id: z.string().uuid(), name: text(2, 180), descriptions: z.string().trim().max(5000) }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/dashboard/resources?error=Please+check+the+document+metadata.");
+  if (!parsed.success) return { error: "Please check the document name and description." };
   const { data: before } = await createAdminClient().from("documents").select("name,descriptions").eq("id", parsed.data.id).maybeSingle();
   const { data, error } = await createAdminClient().from("documents").update({ name: parsed.data.name, descriptions: parsed.data.descriptions, updated_at: new Date().toISOString() }).eq("id", parsed.data.id).select("id").maybeSingle();
-  if (error || !data) redirect("/dashboard/resources?error=The+document+could+not+be+updated.");
+  if (error || !data) return { error: "The document could not be updated. Please try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.metadata-updated", entityType: "document", entityId: data.id, before, after: { name: parsed.data.name, descriptions: parsed.data.descriptions } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  return { success: true };
 }
 
-export async function replaceDocumentVersion(formData: FormData) {
+export async function replaceDocumentVersion(formData: FormData): Promise<{ error?: string; success?: boolean; reselectFile?: boolean }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const id = z.string().uuid().parse(formData.get("id"));
   const quarantinePath = String(formData.get("quarantine_path") || "");
-  if (!quarantinePath) redirect("/dashboard/resources?error=Upload+a+replacement+PDF.");
+  if (!quarantinePath) return { error: "Choose a replacement PDF before saving." };
   const admin = createAdminClient();
   const { data: before } = await admin.from("documents").select("file_url,version,name").eq("id", id).maybeSingle();
-  if (!before) redirect("/dashboard/resources?error=Document+not+found.");
+  if (!before) return { error: "This document could not be found. Refresh the page and try again." };
   let upload: Awaited<ReturnType<typeof finalizeQuarantinedUpload>>;
   try { upload = await finalizeQuarantinedUpload("document", quarantinePath, user.id); }
-  catch { redirect("/dashboard/resources?error=The+replacement+PDF+failed+security+validation."); }
+  catch { return { error: "The replacement PDF failed security validation. Please choose a valid PDF again.", reselectFile: true }; }
   const { data, error } = await admin.from("documents").update({ file_url: upload.canonicalPath, version: before.version + 1, updated_at: new Date().toISOString() }).eq("id", id).eq("version", before.version).select("id").maybeSingle();
   if (error || !data) {
     await admin.storage.from("documents").remove([upload.path]);
-    redirect("/dashboard/resources?error=The+document+changed+while+you+were+editing+it.");
+    return { error: "The document changed while you were editing it. Please choose the PDF again and retry.", reselectFile: true };
   }
   const oldPath = before.file_url.startsWith("documents/") ? before.file_url.slice("documents/".length) : before.file_url;
   if (oldPath && !oldPath.includes("..")) await admin.storage.from("documents").remove([oldPath]);
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.version-replaced", entityType: "document", entityId: id, summary: before.name, before: { version: before.version, path: before.file_url }, after: { version: before.version + 1, path: upload.canonicalPath } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  return { success: true };
 }
 
 export async function purgeDocument(formData: FormData) {

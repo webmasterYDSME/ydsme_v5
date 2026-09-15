@@ -672,3 +672,19 @@ select:not([multiple])[size="1"]:dir(rtl){background-position:left 14px center!i
   .workshop-editor-form .event-editor-footer>div>.button{flex:1 1 145px;min-width:0;white-space:normal;line-height:1.35;text-align:center;padding:12px}
   .workshop-editor-form .event-editor-footer>.button{order:2;width:100%!important}
 }
+
+.document-upload-dialog{width:min(800px,calc(100vw - 36px));height:min(90svh,760px)}
+.document-upload-file{padding:18px;border:1px dashed #a8b5a7;background:#f9f7f0}
+.document-upload-file .event-step-help{margin:12px 0 0}
+@media(max-width:720px){.document-upload-dialog{width:100vw;height:100svh}}
+@media(max-width:520px){
+.document-upload-form .event-editor-footer{display:flex;flex-direction:column;align-items:stretch}
+.document-upload-form .event-editor-footer>div{display:flex;width:100%}
+.document-upload-form .event-editor-footer>div>.button{width:100%!important;white-space:normal}
+.document-upload-form .event-editor-footer>.button{order:2;width:100%!important}
+}
+.document-upload-form .button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:520px){.document-upload-form .event-editor-footer>div>.button{flex:1 1 100%;min-width:0}}
+.document-editor-dialog{height:min(90svh,620px)}
+@media(max-width:720px){.document-editor-dialog{height:100svh}}
+.document-replacement-name{margin:0;font:500 24px/1.2 var(--font-display);overflow-wrap:anywhere}
