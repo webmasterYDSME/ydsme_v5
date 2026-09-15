@@ -537,7 +537,7 @@ export async function purgeDocument(formData: FormData) {
 
 export async function updateProfile(formData: FormData) {
   await requireUser();
-  const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(30), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(10), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/account?error=Please+check+your+profile+details.");
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_own_member_profile", {

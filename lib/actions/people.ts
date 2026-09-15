@@ -9,6 +9,8 @@ import { storageObjectPath } from "@/lib/storage-path";
 import { PUBLIC_COMMITTEE_CACHE_TAG } from "@/lib/cache-tags";
 
 const schema = z.object({
+  full_name: z.string().trim().min(2).max(180).optional(),
+  expected_full_name: z.string().max(180).optional(),
   user_id: z.union([z.literal(""), z.string().uuid()]),
   role: z.enum(["member", "committee", "administrator"]),
   expected_role: z.enum(["member", "committee", "administrator"]),
@@ -31,6 +33,7 @@ export async function savePeople(formData: FormData) {
   });
   if (!parsed.success) return { error: "Please check the access and committee listing details." };
   const input = parsed.data;
+  if (input.full_name !== undefined && (!input.user_id || input.expected_full_name === undefined)) return { error: "Refresh the member details before changing their name." };
   if (input.has_listing && input.title.length < 2) return { error: "Enter a committee position." };
   if (!input.user_id && !input.has_listing) return { error: "Add a committee position before saving." };
   const admin = createServiceClient();
@@ -55,7 +58,7 @@ export async function savePeople(formData: FormData) {
   });
   if (error) {
     if (uploadedPath) await admin.storage.from("images").remove([uploadedPath]);
-    const known = /^(Administrator access|Restore this account|Choose a valid role|The role changed|You cannot change your own role|At least two active administrators|Membership access can only|A linked committee listing|Choose a committee account|The committee position|The committee listing changed|Enter a committee position)/;
+    const known = /^(Enter a valid full name|The name changed|Administrator access|Restore this account|Choose a valid role|The role changed|You cannot change your own role|At least two active administrators|Membership access can only|A linked committee listing|Choose a committee account|The committee position|The committee listing changed|Enter a committee position)/;
     return { error: known.test(error.message) ? error.message : "The changes could not be saved. Please try again.", reselectFile: Boolean(uploadedPath) };
   }
   if (uploadedPath) {
@@ -65,6 +68,7 @@ export async function savePeople(formData: FormData) {
   updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
   revalidatePath("/committees"); revalidatePath("/admin/members");
   revalidatePath("/admin/people"); revalidatePath("/admin/memberships");
+  revalidatePath("/account");
   revalidatePath("/dashboard", "layout");
   return { success: true };
 }

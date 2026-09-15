@@ -116,7 +116,6 @@ function PortalNavigationForPath({
         ...((membershipOfficer || administrator) ? [{ href: "/admin/donations", label: "Donations", icon: HandCoins }] : []),
       ],
     }] : []),
-    ...(administrator ? [{ id: "administration", label: "Administration", icon: Settings, links: administratorLinks }] : []),
   ];
   const activeGroupId = groups.find((group) => group.links.some((link) => linkIsCurrent(pathname, link)))?.id;
   const [open, setOpen] = useState(false);
@@ -234,6 +233,11 @@ function PortalNavigationForPath({
                 })}
               </div>
             </section>;
+          })}
+          {administrator && administratorLinks.map((link) => {
+            const current = linkIsCurrent(pathname, link);
+            const Icon = link.icon;
+            return <Link key={link.href} href={link.href} prefetch={false} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon aria-hidden="true"/><span>{link.label}</span></Link>;
           })}
         </nav>
         <div className="portal-account">

@@ -55,7 +55,7 @@ const normalizeIdentityName = (value: string) => value.trim().replace(/\s+/g, " 
 const postgrestLikeLiteral = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 const applicationSchema = z.object({
   plan_id: z.string().uuid().optional(),
-  title: z.string().trim().max(30).default(""),
+  title: z.string().trim().max(10).default(""),
   full_name: z.string().trim().min(2).max(180),
   contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
   contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
@@ -465,7 +465,7 @@ export async function createOfficerManagedMembership(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
     plan_id: z.string().uuid().optional(),
-    title: z.string().trim().max(30).default(""),
+    title: z.string().trim().max(10).default(""),
     full_name: z.string().trim().min(2).max(180),
     date_of_birth: z.iso.date(),
     contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),

@@ -105,6 +105,16 @@ test("People consolidates account permissions and explicit committee publication
 
     await page.goto(`/admin/members?q=${encodeURIComponent(name)}`);
     await row.getByRole("button", { name: "Manage member", exact: true }).click();
+    await expect(dialog.getByLabel("Full name", { exact: true })).toHaveValue(name);
+    await dialog.getByLabel("Full name", { exact: true }).fill(name + " corrected");
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    expect((await admin.from("users").select("full_name").eq("id", targetId).single()).data.full_name).toBe(name + " corrected");
+    expect((await admin.from("committees").select("name").eq("id", hidden.data.id).single()).data.name).toBe(name + " public");
+    const staleName = await admin.rpc("save_people_management", { p_actor_id: actorId, p_input: { user_id: targetId, role: "committee", expected_role: "committee", officer: true, has_listing: false, full_name: "Stale overwrite", expected_full_name: name } });
+    expect(staleName.error.message).toContain("The name changed");
+    await row.getByRole("button", { name: "Manage member", exact: true }).click();
+    await expect(dialog.getByLabel("Full name", { exact: true })).toHaveValue(name + " corrected");
     await dialog.getByRole("combobox", { name: "Website role" }).selectOption("member");
     await expect(dialog).toContainText("hide and unlink all committee listings");
     await dialog.getByRole("button", { name: "Save changes" }).click();

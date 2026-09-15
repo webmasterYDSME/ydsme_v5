@@ -304,7 +304,7 @@ export default async function MembershipAdministration({ searchParams }: { searc
     <MembershipAdminSection id="add-member" eyebrow="Add a member" title="Create a membership manually" description="Add someone who applied in person or cannot use the online application. Their membership type and amount due are calculated from their date of birth and start date." icon={<UserPlus/>} defaultOpen={sectionOpen("add-member")}>
       <form action={createOfficerManagedMembership} className="editor-form membership-manual-create-form">
       <div className="membership-form-block"><div className="membership-form-block-heading"><span>1</span><div><h3>About the member</h3><p>Enter their name and the date their membership should begin.</p></div></div>
-        <div className="form-grid"><label>Full name<input name="full_name" required/></label><label>Title <em>Optional</em><input name="title" maxLength={30}/></label></div>
+        <div className="form-grid"><label>Full name<input name="full_name" required/></label><label>Title <em>Optional</em><input name="title" maxLength={10}/></label></div>
         <OfficerMembershipEligibilityFields today={today} plans={plans.filter((plan) => plan.active).map((plan) => ({ id: plan.id, slug: plan.slug, name: plan.name, minimum_age: plan.minimum_age, maximum_age: plan.maximum_age }))} prices={prices.map((price) => ({ plan_id: price.plan_id, membership_year: price.membership_year, amount_pence: price.amount_pence }))}/>
       </div>
       <div className="membership-form-block"><div className="membership-form-block-heading"><span>2</span><div><h3>Contact details</h3><p>Add the details available. Email is optional for a membership created by an officer.</p></div></div>

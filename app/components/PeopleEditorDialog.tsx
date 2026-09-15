@@ -24,7 +24,7 @@ export function PeopleEditorDialog({ member, listing, accounts = [], actorId, me
     triggerClassName={!member && !listing ? "button dark" : "people-manage-button"} className="people-editor-dialog"
     eyebrow="People" title={title} description={member ? member.full_name || member.email : "Manage public positions, including vacancies and people without accounts."}
     dirty={dirty} busy={busy} onAfterClose={() => { setDirty(false); setInstance(value => value + 1); }}>
-    {({ requestClose }) => <div className="people-dialog-body"><PeopleForm externalBusy={busy} key={`${instance}:${member?.role}:${member?.officer}:${listing?.updated_at}`} {...{ member, listing, accounts, actorId, membershipEnabled, requestClose, setDirty, setBusy }}/>{manageAccess && member && member.id !== actorId && <MemberAccessActions userId={member.id} disabled={dirty || busy} setBusy={setBusy}/>}</div>}
+    {({ requestClose }) => <div className="people-dialog-body"><PeopleForm externalBusy={busy} key={`${instance}:${member?.full_name}:${member?.role}:${member?.officer}:${listing?.updated_at}`} {...{ member, listing, accounts, actorId, membershipEnabled, requestClose, setDirty, setBusy }}/>{manageAccess && member && member.id !== actorId && <MemberAccessActions userId={member.id} disabled={dirty || busy} setBusy={setBusy}/>}</div>}
   </EditorDialog>;
 }
 
@@ -57,6 +57,7 @@ function PeopleForm({ member, listing, accounts, actorId, membershipEnabled, req
     if (!form.reportValidity()) return;
     const data = new FormData(form);
     data.set("user_id", selectedId); data.set("role", role);
+    if (member) data.set("expected_full_name", member.full_name || "");
     data.set("expected_role", selected?.role || "member");
     data.set("officer", selected && role === "committee" && officer ? "on" : "");
     data.set("has_listing", listingEnabled ? "on" : "");
@@ -84,6 +85,7 @@ function PeopleForm({ member, listing, accounts, actorId, membershipEnabled, req
           setSelectedId(event.target.value); setRole(account?.role || "committee"); setOfficer(account?.officer || false);
         }}><option value="">No account / vacant position</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.full_name || account.email}</option>)}</select></label>}
         {member && selected && <>
+          <label className="wide">Full name<input name="full_name" defaultValue={member.full_name || ""} minLength={2} maxLength={180} autoComplete="off" required/></label>
           <label className={role === "committee" ? "" : "wide"}>Website role<select aria-label="Website role" value={role} disabled={selected.id === actorId} onChange={event => { setRole(event.target.value as AppRole); if (event.target.value !== "committee") setOfficer(false); }}>
             <option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option>
           </select></label>
