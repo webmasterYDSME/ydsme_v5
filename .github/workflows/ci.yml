@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -20,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
+      tree: ${{ steps.reuse.outputs.tree }}
+      reused: ${{ steps.reuse.outputs.reused }}
+      verified_run: ${{ steps.reuse.outputs.verified_run }}
       integration: ${{ steps.scope.outputs.integration }}
       migrations: ${{ steps.scope.outputs.migrations }}
     steps:
@@ -36,6 +40,12 @@ jobs:
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           EVENT_NAME: ${{ github.event_name }}
         run: node scripts/ci-scope.mjs "$BASE_SHA" "$HEAD_SHA" "$EVENT_NAME"
+      - name: Find successful verification of identical source
+        id: reuse
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INTEGRATION: ${{ steps.scope.outputs.integration }}
+        run: node scripts/ci-reuse.mjs
 
   promotion-path:
     name: Validate promotion path
@@ -82,24 +92,36 @@ jobs:
         run: node scripts/check-migration-safety.mjs "$BASE_SHA" "$HEAD_SHA"
 
   verify:
+    needs: changes
     name: Verify source and production build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Check out repository
+      - name: Reuse verified source
+        if: needs.changes.outputs.reused == 'true'
+        run: echo "Identical source already passed CI run $VERIFIED_RUN."
+        env:
+          VERIFIED_RUN: ${{ needs.changes.outputs.verified_run }}
+      - if: needs.changes.outputs.reused != 'true'
+        name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - name: Use Node.js 22
+      - if: needs.changes.outputs.reused != 'true'
+        name: Use Node.js 22
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.13.0
           cache: npm
-      - name: Install locked dependencies
+      - if: needs.changes.outputs.reused != 'true'
+        name: Install locked dependencies
         run: npm ci
-      - name: Lint source
+      - if: needs.changes.outputs.reused != 'true'
+        name: Lint source
         run: npm run lint
-      - name: Run unit and source-contract tests
+      - if: needs.changes.outputs.reused != 'true'
+        name: Run unit and source-contract tests
         run: npm run test:unit
-      - name: Build and type-check the production application
+      - if: needs.changes.outputs.reused != 'true'
+        name: Build and type-check the production application
         run: npm run build
 
   database-and-browser:
@@ -113,6 +135,7 @@ jobs:
       !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.integration == 'true' &&
+      needs.changes.outputs.reused != 'true' &&
       needs.promotion-path.result == 'success' &&
       needs.verify.result == 'success' &&
       (needs.migration-safety.result == 'success' || needs.migration-safety.result == 'skipped')
@@ -152,3 +175,47 @@ jobs:
       - name: Stop isolated local Supabase
         if: always()
         run: node scripts/stop-local-supabase.mjs
+
+  complete:
+    name: CI complete
+    needs: [changes, promotion-path, migration-safety, verify, database-and-browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Require every selected check to pass
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          PROMOTION: ${{ needs.promotion-path.result }}
+          MIGRATIONS: ${{ needs.migration-safety.result }}
+          MIGRATIONS_REQUIRED: ${{ needs.changes.outputs.migrations }}
+          VERIFY: ${{ needs.verify.result }}
+          INTEGRATION: ${{ needs.database-and-browser.result }}
+          INTEGRATION_REQUIRED: ${{ needs.changes.outputs.integration }}
+          REUSED: ${{ needs.changes.outputs.reused }}
+        run: |
+          [[ "$CHANGES" == success && "$PROMOTION" == success && "$VERIFY" == success ]] || exit 1
+          if [[ "$MIGRATIONS_REQUIRED" == true ]]; then
+            [[ "$MIGRATIONS" == success ]] || exit 1
+          else
+            [[ "$MIGRATIONS" == skipped ]] || exit 1
+          fi
+          if [[ "$INTEGRATION_REQUIRED" == true && "$REUSED" != true ]]; then
+            [[ "$INTEGRATION" == success ]] || exit 1
+          else
+            [[ "$INTEGRATION" == skipped ]] || exit 1
+          fi
+      - name: Record fresh verification
+        if: needs.changes.outputs.reused != 'true'
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+        run: echo "$TREE" > verified-tree.txt
+      - name: Publish verification marker
+        if: needs.changes.outputs.reused != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-verified-v1-${{ needs.changes.outputs.tree }}-${{ needs.changes.outputs.integration == 'true' && 'full' || 'source' }}
+          path: verified-tree.txt
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true

@@ -36,7 +36,7 @@ test("runs staged verification, migration and deployment automation", async () =
   assert.equal(packageJson.scripts["test:database"], "node tests/run-database-integration.mjs");
   assert.equal(packageJson.scripts["test:browser"], "node tests/run-browser-smoke.mjs");
   assert.match(packageJson.scripts["admin:bootstrap"], /bootstrap-administrator\.mjs/);
-  assert.equal(vercel.buildCommand, "npm run verify");
+  assert.equal(vercel.buildCommand, "npm run build");
   assert.deepEqual(vercel.git.deploymentEnabled, {
     "**": false,
   });

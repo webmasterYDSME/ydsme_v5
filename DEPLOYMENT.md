@@ -71,9 +71,36 @@ processing. The existing Under Review wording is retained for future use.
 
 ## Release automation setup
 
+### Verify once, then promote
+
+CI records the exact Git source tree after all selected checks pass. The preview
+push, production PR and production push can reuse that successful verification
+when their entire checked-out tree matches, including the PR merge result.
+Branch names or matching commit messages are never sufficient.
+
+- Only successful runs of this repository's CI workflow qualify; fork runs,
+  failed runs, expired markers and insufficient test coverage do not.
+- Markers expire after seven days. Reuse does not renew them. Missing evidence
+  or a GitHub API problem runs fresh checks. Use GitHub’s “Re-run all jobs”
+  action to force fresh checks for an existing run.
+- Migration safety still runs against each promotion's change range. The final
+  `CI complete` check rejects failed or unexpectedly skipped required jobs.
+- Preview and production still build separately in Vercel using their own
+  environment configuration. Vercel runs `npm run build`; lint and unit tests
+  have already run in CI.
+- Review the deployed preview before merging to main, then verify the production
+  domain after deployment. Database migrations and Edge Functions still deploy
+  before the application; this optimisation does not copy data between projects.
+
+The first rollout has no reusable markers and runs the full checks. A change to
+any file, including CI configuration or the dependency lockfile, changes the tree
+and requires fresh verification. The marker lookup uses GitHub's read-only
+[artifact metadata API](https://docs.github.com/en/rest/actions/artifacts);
+it does not download or execute earlier build artifacts.
+
 ### CI scope for presentation changes
 
-Every change still runs promotion validation, lint, unit/source-contract tests,
+Every new source tree runs promotion validation, lint, unit/source-contract tests,
 and the production build/type check. Changes confined to CSS/SCSS, static public
 assets, Markdown, and the static `app/under-review/page.tsx` skip the isolated
 Supabase/browser job. Other application pages may contain data access, so they
@@ -138,7 +165,7 @@ Before applying `202608180021_event_management_lifecycle.sql` to a hosted projec
 1. Review the PR diff, especially `supabase/migrations/`, authorization checks, public projections, and rollback behavior.
 2. Create a feature branch from `preview`, then open a pull request back to `preview`.
 3. Run `npm run verify` locally. If Supabase is running on `http://127.0.0.1:55321`, also run `JOURNEY_TEST_PASSWORD=<local-test-password> npm run test:database` and `npm run test:browser`.
-4. GitHub CI starts a fresh, seedless local Supabase stack, applies every migration, runs the database contracts, builds the application, and runs Chromium smoke tests. It never receives hosted Supabase credentials.
+4. For a new tree requiring integration checks, GitHub CI starts a fresh, seedless local Supabase stack, applies every migration, runs the database contracts, builds the application, and runs Chromium smoke tests. Identical previously verified trees reuse the successful result. It never receives hosted Supabase credentials.
 5. If the release contains a migration, record the exact production migration and rollback plan in the PR. High-risk destructive changes require a separately authorized manual rollout and cannot use the automatic release path.
 6. Merge the feature PR only after all GitHub checks pass. A successful `preview` push CI run automatically applies pending preview migrations, deploys Preview Edge Functions and triggers the preview deploy hook.
 7. Wait for the Vercel preview deployment to report success, then smoke-test the stable preview deployment.
