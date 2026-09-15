@@ -15,6 +15,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Select checks for changed files
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      integration: ${{ steps.scope.outputs.integration }}
+      migrations: ${{ steps.scope.outputs.migrations }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.13.0
+      - name: Classify the complete change
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/ci-scope.mjs "$BASE_SHA" "$HEAD_SHA" "$EVENT_NAME"
+
   promotion-path:
     name: Validate promotion path
     runs-on: ubuntu-latest
@@ -40,6 +62,8 @@ jobs:
 
   migration-safety:
     name: Validate migration safety
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -81,9 +105,17 @@ jobs:
   database-and-browser:
     name: Verify database and browser journeys
     needs:
+      - changes
       - promotion-path
       - migration-safety
       - verify
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.integration == 'true' &&
+      needs.promotion-path.result == 'success' &&
+      needs.verify.result == 'success' &&
+      (needs.migration-safety.result == 'success' || needs.migration-safety.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
