@@ -12,6 +12,7 @@ export function EditorDialog({
   title,
   description,
   dirty = false,
+  busy = false,
   onAfterClose,
   children,
 }: {
@@ -21,6 +22,7 @@ export function EditorDialog({
   title: string;
   description?: string;
   dirty?: boolean;
+  busy?: boolean;
   onAfterClose?: () => void;
   children: ReactNode | ((controls: DialogControls) => ReactNode);
 }) {
@@ -31,9 +33,10 @@ export function EditorDialog({
   const [open, setOpen] = useState(false);
 
   const requestClose = useCallback(() => {
+    if (busy) return;
     if (dirty && !window.confirm("Close this editor and discard the unsaved changes?")) return;
     setOpen(false);
-  }, [dirty]);
+  }, [dirty, busy]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -69,7 +72,7 @@ export function EditorDialog({
       <div className="editor-dialog-shell">
         <header className="editor-dialog-header">
           <div><span>{eyebrow}</span><h2 id={titleId}>{title}</h2>{description ? <p id={descriptionId}>{description}</p> : null}</div>
-          <button type="button" onClick={requestClose} aria-label={`Close ${title}`}><X/></button>
+          <button type="button" disabled={busy} onClick={requestClose} aria-label={`Close ${title}`}><X/></button>
         </header>
         <div className="editor-dialog-content">{typeof children === "function" ? children({ requestClose }) : children}</div>
       </div>

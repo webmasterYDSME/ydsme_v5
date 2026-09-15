@@ -32,7 +32,7 @@ export default async function SignIn({ searchParams }: Props) {
     <main className="auth-page">
       <section className="auth-art">
         <Link href="/" className="auth-brand">
-          <Image src="/ydsme-logo.png" alt="York Model Engineers" width={104} height={104} />
+          <Image src="/ydsme-logo-detailed-gold-lions.png" alt="York Model Engineers" width={104} height={104} />
           <span>York Model Engineers</span>
         </Link>
         <div>
@@ -46,7 +46,7 @@ export default async function SignIn({ searchParams }: Props) {
       <section className="auth-panel">
         <div>
           <Link href="/" className="auth-brand auth-brand-mobile">
-            <Image src="/ydsme-logo.png" alt="" width={72} height={72} />
+            <Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={72} height={72} />
             <span>York Model Engineers</span>
           </Link>
           <p className="eyebrow dark">{isMagicLinkSent ? "Sign-in link requested" : isPasswordResetSent ? "Password reset requested" : "Member login"}</p>
