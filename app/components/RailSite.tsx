@@ -1,10 +1,13 @@
 "use client";
 
+import "./train.css";
+
 import {ReactNode, useEffect, useRef, useState} from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, Globe2, MapPin, Menu, X } from "lucide-react";
+import { CoalTenderArtwork, LocomotiveArtwork, WagonWheelArtwork } from "./TrainArtwork";
 import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
 const headerNav = [["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
@@ -124,9 +127,34 @@ export function InteractiveSteamTrain({ announcements }: { announcements: Array<
 
   return <div className={announcement ? "train-consist has-announcement" : "train-consist"} onMouseEnter={()=>setRotationPaused(true)} onMouseLeave={()=>setRotationPaused(false)} onFocus={()=>setRotationPaused(true)} onBlur={()=>setRotationPaused(false)}>
     {announcements.length ? <div className="sr-only" role="region" aria-label="Public announcements">{announcements.map(item=><p key={item.id}><strong>{item.title}.</strong> {item.body}</p>)}</div> : null}
-    {announcement ? <Link className="train-banner" href="/news" aria-label="Read all news and announcements"><div className="train-banner-copy" key={announcement.id}><div className="train-banner-heading"><strong>{announcement.title}</strong><span className="train-banner-label">Public announcement</span></div><p>{announcement.body}</p></div><div className="train-banner-wheels" aria-hidden="true"><i/><i/></div></Link> : null}
-    {announcement ? <span className="train-coupler" aria-hidden="true"/> : null}
-    <button className={playing ? "train-marker is-sounding" : "train-marker"} type="button" onClick={soundDoubleHorn} disabled={playing} aria-label="Sound the steam train double horn"><span className="loco-smoke" aria-hidden="true"><i/><i/><i/></span><span className="mini-loco" aria-hidden="true"><span className="loco-chimney"/><span className="loco-boiler"/><span className="loco-cab"/><b className="loco-wheel wheel-one"/><b className="loco-wheel wheel-two"/><b className="loco-wheel wheel-three"/></span></button>
+    {announcement ? <Link className="train-banner" href="/news" aria-label={`Read all news and announcements: ${announcement.title}`}>
+      <div className="train-banner-copy" key={announcement.id}>
+        <div className="train-banner-heading"><span className="train-banner-label">The York dispatch</span><ArrowUpRight aria-hidden="true" size={14}/></div>
+        <strong>{announcement.title}</strong><p>{announcement.body}</p>
+      </div>
+      <div className="train-banner-chassis" aria-hidden="true"><span>YDSME · NEWS &amp; NOTICES</span></div>
+      <div className="train-banner-wheels" aria-hidden="true"><WagonWheelArtwork/><WagonWheelArtwork/></div>
+    </Link> : null}
+    {announcement ? <span className="train-coupler wagon-coupler" aria-hidden="true">
+      <svg viewBox="0 0 22 8" preserveAspectRatio="none">
+        <path d="M0 4H22" stroke="#17231f" strokeWidth="8" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+        <path d="M0 4H22" stroke="#ded2b4" strokeWidth="4" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+      </svg>
+      <i/><i/>
+    </span> : null}
+    <CoalTenderArtwork/>
+    <span className="train-coupler tender-coupler" aria-hidden="true">
+      <svg viewBox="0 0 30 8" preserveAspectRatio="none">
+        <path d="M0 4H30" stroke="#17231f" strokeWidth="8" strokeLinecap="round"/>
+        <path d="M0 4H30" stroke="#ded2b4" strokeWidth="4" strokeLinecap="round"/>
+        <circle cx="0" cy="4" r="3" fill="#d2a15b" stroke="#17231f"/>
+        <circle cx="30" cy="4" r="3" fill="#d2a15b" stroke="#17231f"/>
+      </svg>
+    </span>
+    <button className={playing ? "train-marker is-sounding" : "train-marker"} type="button" onClick={soundDoubleHorn} disabled={playing} aria-label="Sound the steam train double horn" title="Give us a whistle">
+      <span className="loco-smoke" aria-hidden="true"><i/><i/><i/></span>
+      <LocomotiveArtwork/>
+    </button>
   </div>;
 }
 
