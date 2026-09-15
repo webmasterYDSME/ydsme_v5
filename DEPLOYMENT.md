@@ -71,6 +71,22 @@ processing. The existing Under Review wording is retained for future use.
 
 ## Release automation setup
 
+### CI scope for presentation changes
+
+Every change still runs promotion validation, lint, unit/source-contract tests,
+and the production build/type check. Changes confined to CSS/SCSS, static public
+assets, Markdown, and the static `app/under-review/page.tsx` skip the isolated
+Supabase/browser job. Other application pages may contain data access, so they
+remain on the full path. Keep the holding page presentation-only; extend the
+reviewed allowlist deliberately when extracting other static page components.
+
+Migration safety runs for migration files and CI/tooling/test/dependency changes.
+Backend, unknown, and CI configuration changes run the full integration checks.
+PRs compare from their merge base; pushes compare the entire pushed range.
+Deleted/renamed paths are included. Missing comparison history runs all checks.
+The hosted release sequence remains unchanged: it checks pending migrations
+before deploying, even after a presentation-only CI run.
+
 Create two Vercel deploy hooks: one linked to `preview`, and one linked to `main`. Store their complete URLs as repository secrets; the URLs are credentials and must never appear in source or logs. Do not enable Vercel's automatic Git branch deployments because they would race the database migration.
 
 Configure these GitHub repository secrets before merging the release workflow:
