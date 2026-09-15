@@ -22,7 +22,6 @@ import {
   MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG,
   MEMBER_DASHBOARD_EVENTS_CACHE_TAG,
   MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG,
-  PUBLIC_COMMITTEE_CACHE_TAG,
   PUBLIC_DONATIONS_CACHE_TAG,
   PUBLIC_EVENTS_CACHE_TAG,
   PUBLIC_SITE_CONFIG_CACHE_TAG,
@@ -49,7 +48,7 @@ const eventSchema = z.object({
 
 const workshopSchema = z.object({
   id: z.string().uuid().optional(), title: text(2, 180), descriptions: text(2, 5000), notes: z.string().trim().max(5000),
-  date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8), host_name: text(2, 180), venue: text(2, 240),
+  date: z.iso.date(), start_time: eventTime, end_time: eventTime, host_name: text(2, 180), venue: text(2, 240),
   virtual_link: optionalUrl, maximum_participants: z.coerce.number().int().min(1).max(500),
   lifecycle_status: z.enum(["draft", "published", "cancelled"]),
 });
@@ -178,10 +177,10 @@ export async function restoreEvent(formData: FormData) {
 export async function saveWorkshop(formData: FormData) {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = workshopSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/workshops?error=Please+check+all+workshop+fields.");
+  if (!parsed.success) return { error: "Please check all workshop fields." };
   const { id, ...values } = parsed.data;
   const admin = createAdminClient();
-  if (values.end_time <= values.start_time) redirect("/admin/workshops?error=The+end+time+must+be+after+the+start+time.");
+  if (values.end_time <= values.start_time) return { error: "The end time must be after the start time." };
   const lifecycle_status = values.lifecycle_status;
   delete (values as Partial<typeof values>).lifecycle_status;
   const updated_at = new Date().toISOString();
@@ -189,17 +188,17 @@ export async function saveWorkshop(formData: FormData) {
     ? admin.from("workshops").update({ ...values, lifecycle_status, updated_at }).eq("id", id).select("id").single()
     : admin.from("workshops").insert({ ...values, lifecycle_status, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
-  if (error) redirect("/admin/workshops?error=The+workshop+could+not+be+saved.");
+  if (error) return { error: "The workshop could not be saved. Please try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "workshop.updated" : "workshop.created", entityType: "workshop", entityId: saved.id, after: { title: values.title, date: values.date, lifecycle_status } });
   updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard"); revalidatePath("/admin/workshops");
-  redirect("/admin/workshops?notice=workshop-saved");
+  return { url: `/admin/workshops?status=${lifecycle_status}&notice=workshop-saved` };
 }
 
 export async function saveAnnouncement(formData: FormData) {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = announcementSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/announcements?error=Please+check+the+announcement+title+and+message.");
+  if (!parsed.success) return { error: "Please check the announcement title and description." };
   const { id, ...values } = parsed.data;
   const admin = createAdminClient();
   const { data: before } = id
@@ -217,7 +216,7 @@ export async function saveAnnouncement(formData: FormData) {
     ? admin.from("announcements").update(savedValues).eq("id", id).select("id").single()
     : admin.from("announcements").insert({ ...savedValues, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
-  if (error) redirect("/admin/announcements?error=The+announcement+could+not+be+saved.");
+  if (error || !saved) return { error: "The announcement could not be saved. Your details are still here; please try again." };
   await writeAudit({
     actorUserId: user.id,
     actorRole: role,
@@ -232,7 +231,7 @@ export async function saveAnnouncement(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
-  redirect(`/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved`);
+  return { url: `/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved` };
 }
 
 export async function archiveAnnouncement(formData: FormData) {
@@ -445,16 +444,18 @@ export async function uploadDocument(formData: FormData) {
   const quarantinePath = String(formData.get("quarantine_path") || "");
   const category = z.enum(["minute", "publication", "insurance-policy", "club-rule", "calendar", "boiler-guide", "others"]).safeParse(formData.get("category"));
   const name = text(2, 180).safeParse(formData.get("name"));
-  if (!quarantinePath || !category.success || !name.success) redirect("/dashboard/resources?error=Upload+a+PDF+and+enter+a+name.");
+  if (!quarantinePath || !category.success || !name.success) return { error: "Choose a PDF and enter a document name of at least two characters." };
   const admin = createAdminClient();
   let upload: Awaited<ReturnType<typeof finalizeQuarantinedUpload>>;
   try { upload = await finalizeQuarantinedUpload("document", quarantinePath, user.id); }
-  catch { redirect("/dashboard/resources?error=The+PDF+failed+security+validation."); }
+  catch { return { error: "The PDF failed security validation. Please choose a valid PDF again.", reselectFile: true }; }
   const { data, error } = await admin.from("documents").insert({ name: name.data, descriptions: String(formData.get("descriptions") || "").slice(0, 5000), category: category.data, file_url: upload.canonicalPath, created_by: user.id, lifecycle_status: "published" }).select("id").single();
-  if (error) { await admin.storage.from("documents").remove([upload.path]); redirect("/dashboard/resources?error=The+document+record+could+not+be+saved."); }
+  if (error) { await admin.storage.from("documents").remove([upload.path]); return { error: "The document could not be saved. Please choose the PDF again and retry.", reselectFile: true }; }
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.created", entityType: "document", entityId: data.id, summary: name.data, after: { category: category.data, path: upload.canonicalPath } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  const section = category.data === "minute" ? "minutes" : category.data === "publication" ? "publications" : "resources";
+  return { url: `/dashboard/${section}?status=published` };
 }
 
 export async function deleteDocument(formData: FormData) {
@@ -478,39 +479,41 @@ export async function restoreDocument(formData: FormData) {
   revalidatePath("/dashboard", "layout");
 }
 
-export async function updateDocumentMetadata(formData: FormData) {
+export async function updateDocumentMetadata(formData: FormData): Promise<{ error?: string; success?: boolean; reselectFile?: boolean }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = z.object({ id: z.string().uuid(), name: text(2, 180), descriptions: z.string().trim().max(5000) }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/dashboard/resources?error=Please+check+the+document+metadata.");
+  if (!parsed.success) return { error: "Please check the document name and description." };
   const { data: before } = await createAdminClient().from("documents").select("name,descriptions").eq("id", parsed.data.id).maybeSingle();
   const { data, error } = await createAdminClient().from("documents").update({ name: parsed.data.name, descriptions: parsed.data.descriptions, updated_at: new Date().toISOString() }).eq("id", parsed.data.id).select("id").maybeSingle();
-  if (error || !data) redirect("/dashboard/resources?error=The+document+could+not+be+updated.");
+  if (error || !data) return { error: "The document could not be updated. Please try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.metadata-updated", entityType: "document", entityId: data.id, before, after: { name: parsed.data.name, descriptions: parsed.data.descriptions } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  return { success: true };
 }
 
-export async function replaceDocumentVersion(formData: FormData) {
+export async function replaceDocumentVersion(formData: FormData): Promise<{ error?: string; success?: boolean; reselectFile?: boolean }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const id = z.string().uuid().parse(formData.get("id"));
   const quarantinePath = String(formData.get("quarantine_path") || "");
-  if (!quarantinePath) redirect("/dashboard/resources?error=Upload+a+replacement+PDF.");
+  if (!quarantinePath) return { error: "Choose a replacement PDF before saving." };
   const admin = createAdminClient();
   const { data: before } = await admin.from("documents").select("file_url,version,name").eq("id", id).maybeSingle();
-  if (!before) redirect("/dashboard/resources?error=Document+not+found.");
+  if (!before) return { error: "This document could not be found. Refresh the page and try again." };
   let upload: Awaited<ReturnType<typeof finalizeQuarantinedUpload>>;
   try { upload = await finalizeQuarantinedUpload("document", quarantinePath, user.id); }
-  catch { redirect("/dashboard/resources?error=The+replacement+PDF+failed+security+validation."); }
+  catch { return { error: "The replacement PDF failed security validation. Please choose a valid PDF again.", reselectFile: true }; }
   const { data, error } = await admin.from("documents").update({ file_url: upload.canonicalPath, version: before.version + 1, updated_at: new Date().toISOString() }).eq("id", id).eq("version", before.version).select("id").maybeSingle();
   if (error || !data) {
     await admin.storage.from("documents").remove([upload.path]);
-    redirect("/dashboard/resources?error=The+document+changed+while+you+were+editing+it.");
+    return { error: "The document changed while you were editing it. Please choose the PDF again and retry.", reselectFile: true };
   }
   const oldPath = before.file_url.startsWith("documents/") ? before.file_url.slice("documents/".length) : before.file_url;
   if (oldPath && !oldPath.includes("..")) await admin.storage.from("documents").remove([oldPath]);
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "document.version-replaced", entityType: "document", entityId: id, summary: before.name, before: { version: before.version, path: before.file_url }, after: { version: before.version + 1, path: upload.canonicalPath } });
   updateTag(MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG);
   revalidatePath("/dashboard", "layout");
+  return { success: true };
 }
 
 export async function purgeDocument(formData: FormData) {
@@ -532,53 +535,9 @@ export async function purgeDocument(formData: FormData) {
   revalidatePath("/dashboard", "layout");
 }
 
-export async function saveCommittee(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
-  const parsed = z.object({ id: z.coerce.number().int().positive().optional(), name: z.string().trim().max(180), title: text(2, 180), email: z.string().email().max(254), file_url: z.string().trim().max(2048) }).safeParse({ ...Object.fromEntries(formData), id: formData.get("id") || undefined });
-  if (!parsed.success) redirect("/settings?tab=committee&error=Please+check+the+committee+details.");
-  const { id, ...values } = parsed.data;
-  const admin = createAdminClient();
-  const { data: before } = id ? await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle() : { data: null };
-  const quarantinePath = String(formData.get("quarantine_path") || "");
-  if (quarantinePath) {
-    try { values.file_url = (await finalizeQuarantinedUpload("committee-image", quarantinePath, user.id)).canonicalPath; }
-    catch { redirect("/settings?tab=committee&error=The+portrait+failed+security+validation."); }
-  } else {
-    values.file_url = id ? before?.file_url ?? "" : "";
-  }
-  const query = id ? admin.from("committees").update(values).eq("id", id).select("id").single() : admin.from("committees").insert({ ...values, created_by: user.id }).select("id").single();
-  const { data: saved, error } = await query;
-  if (error || !saved) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+saved.");
-  if (quarantinePath) {
-    const oldPath = storageObjectPath(before?.file_url, "images");
-    if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
-  }
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "committee-record.updated" : "committee-record.created", entityType: "committee-record", entityId: saved.id, before, after: values });
-  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
-  revalidatePath("/committees"); revalidatePath("/settings");
-}
-
-export async function deleteCommittee(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
-  const id = z.coerce.number().int().positive().parse(formData.get("id"));
-  const admin = createAdminClient();
-  const { data: before } = await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle();
-  if (!before) redirect("/settings?tab=committee&error=The+committee+record+was+not+found.");
-  const path = storageObjectPath(before.file_url, "images");
-  if (path) {
-    const { error: storageError } = await admin.storage.from("images").remove([path]);
-    if (storageError) redirect("/settings?tab=committee&error=The+committee+portrait+could+not+be+removed.");
-  }
-  const { data, error } = await admin.from("committees").delete().eq("id", id).select("id").maybeSingle();
-  if (error || !data) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+deleted.");
-  if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "committee-record.deleted", entityType: "committee-record", entityId: id, before });
-  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
-  revalidatePath("/committees"); revalidatePath("/settings");
-}
-
 export async function updateProfile(formData: FormData) {
   await requireUser();
-  const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(30), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
+  const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(10), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) redirect("/account?error=Please+check+your+profile+details.");
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_own_member_profile", {
@@ -591,37 +550,18 @@ export async function updateProfile(formData: FormData) {
   redirect("/account?notice=profile-updated");
 }
 
-export async function updateMemberRole(formData: FormData) {
-  const { user, role: actorRole } = await requireRole(["administrator"]);
-  const userId = idString.parse(formData.get("user_id"));
-  if (userId === user.id) redirect("/admin/members?error=You+cannot+change+your+own+role.");
-  const role = z.enum(["member", "committee", "administrator"]).parse(formData.get("role"));
-  const admin = createAdminClient();
-  const [{ data: before }, { data: target }] = await Promise.all([
-    admin.from("user_roles").select("role").eq("user_id", userId).single(),
-    admin.from("users").select("membership_status").eq("id", userId).maybeSingle(),
-  ]);
-  if (target?.membership_status !== "active") redirect("/admin/members?error=Restore+the+member+before+changing+their+role.");
-  if (before?.role === "administrator" && role !== "administrator") {
-    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+changing+this+role.");
-  }
-  const { error } = await admin.from("user_roles").update({ role }).eq("user_id", userId);
-  if (error) redirect("/admin/members?error=The+role+could+not+be+updated.");
-  await writeAudit({ actorUserId: user.id, actorRole, action: "member.role-changed", entityType: "member", entityId: userId, before: { role: before?.role }, after: { role } });
-  revalidatePath("/admin/members");
-}
-
 export async function inviteMember(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
   const email = z.string().trim().email().max(254).safeParse(formData.get("email"));
   const fullName = text(2, 180).safeParse(formData.get("full_name"));
-  if (!email.success || !fullName.success) redirect("/admin/members?error=Enter+a+valid+name+and+email.");
-  if (!await consumeRateLimit("member-invitation", 30, 60 * 60, user.id)) redirect("/admin/members?error=Invitation+limit+reached.+Please+try+again+later.");
+  if (!email.success || !fullName.success) return { error: "Enter a valid name and email address." };
+  if (!await consumeRateLimit("member-invitation", 30, 60 * 60, user.id)) return { error: "Invitation limit reached. Please try again later." };
   const origin = getTrustedAppOrigin();
   const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email.data, { data: { full_name: fullName.data }, redirectTo: `${origin}/auth/invite?next=/reset-password` });
-  if (error) redirect("/admin/members?error=The+invitation+could+not+be+sent.");
+  if (error) return { error: "The invitation could not be sent. Check the email address and try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.invited", entityType: "member-invitation", entityId: email.data.toLowerCase(), summary: fullName.data });
-  redirect("/admin/members?notice=invitation-sent");
+  revalidatePath("/admin/members");
+  return { success: true };
 }
 
 async function requireMemberStatusManager() {

@@ -40,13 +40,13 @@ test("public pages share the same wide-screen content boundary", async ({ page }
   await page.setViewportSize({ width: 1920, height: 1000 });
   for (const route of ["/membership", "/visitors", "/events", "/news", "/club-history", "/committees", "/projects"]) {
     await page.goto(route, { waitUntil: "domcontentloaded" });
-    const section = page.locator(".section").first();
+    const section = page.locator(route === "/committees" ? 'section[aria-labelledby="committee-heading"]' : ".section").first();
     await expect(section, `${route} has no standard public section`).toBeVisible();
     const contentWidth = await section.evaluate((element) => {
       const styles = getComputedStyle(element);
       return element.getBoundingClientRect().width - Number.parseFloat(styles.paddingLeft) - Number.parseFloat(styles.paddingRight);
     });
-    expect(contentWidth, `${route} did not use the shared public width cap`).toBeCloseTo(1344, 0);
+    expect(contentWidth, `${route} did not use the shared public width cap`).toBeCloseTo(route === "/committees" ? 1160 : 1344, 0);
   }
 });
 

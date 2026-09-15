@@ -2,7 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { shouldNoIndex } from '../lib/search-indexing.ts';
 import { eventStructuredData, searchDescription } from '../lib/event-seo.ts';
-import { publicPageMetadata, safeJsonLd } from '../lib/seo.ts';
+import { publicPageMetadata, safeJsonLd, SITE_URL } from '../lib/seo.ts';
+
+test('SEO uses the live canonical domain without a redirect', () => {
+  assert.equal(SITE_URL, 'https://yorkmodelengineers.co.uk');
+});
 
 const event = { id: 7, name: 'Public railway day', descriptions: 'Join us.\n\nEnjoy the railway.', start_date: '2027-07-10', end_date: '2027-07-11', start_time: '10:00:00', end_time: '16:00:00', booking_enabled: true, is_ticket_required: true, available_places: 8 };
 

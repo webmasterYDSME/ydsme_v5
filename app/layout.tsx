@@ -11,7 +11,7 @@ const display = Cormorant_Garamond({ variable: "--font-display", subsets: ["lati
 const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["400","500","600","700"], preload: false });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.yorkmodelengineers.co.uk"),
+  metadataBase: new URL("https://yorkmodelengineers.co.uk"),
   title: { default: "York Model Engineers | Miniature Railways & Live Steam in York", template: "%s | York Model Engineers" },
   description: "Miniature railways, model engineering and live steam in five woodland acres at Dringhouses, York.",
   applicationName: "York Model Engineers",

@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import { requireCapability, requireRole, requireUser } from "@/lib/auth";
+import { requireCapability, requireUser } from "@/lib/auth";
 import {
   PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
   PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
@@ -55,7 +55,7 @@ const normalizeIdentityName = (value: string) => value.trim().replace(/\s+/g, " 
 const postgrestLikeLiteral = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 const applicationSchema = z.object({
   plan_id: z.string().uuid().optional(),
-  title: z.string().trim().max(30).default(""),
+  title: z.string().trim().max(10).default(""),
   full_name: z.string().trim().min(2).max(180),
   contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
   contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
@@ -465,7 +465,7 @@ export async function createOfficerManagedMembership(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
     plan_id: z.string().uuid().optional(),
-    title: z.string().trim().max(30).default(""),
+    title: z.string().trim().max(10).default(""),
     full_name: z.string().trim().min(2).max(180),
     date_of_birth: z.iso.date(),
     contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
@@ -1169,7 +1169,7 @@ export async function correctMemberEligibility(formData: FormData) {
 
 export async function saveMembershipPaymentSettings(formData: FormData) {
   if (!membershipAdministrationEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const { user } = await requireRole(["administrator"]);
+  const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
     treasurer_name: z.string().trim().min(2).max(120),
     treasurer_email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
@@ -1182,7 +1182,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     cheque_delivery_instructions: z.string().trim().min(5).max(500),
     cash_instructions: z.string().trim().min(5).max(500),
   }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/settings?tab=membership&error=Check+the+Treasurer+and+payment+details.");
+  if (!parsed.success) redirect("/admin/memberships?section=payment-settings&error=Check+the+Treasurer+and+payment+details.");
   const { error } = await createServiceClient().rpc("replace_membership_payment_settings", {
     p_actor_id: user.id,
     p_treasurer_name: parsed.data.treasurer_name,
@@ -1196,11 +1196,11 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cheque_delivery_instructions: parsed.data.cheque_delivery_instructions,
     p_cash_instructions: parsed.data.cash_instructions,
   });
-  if (error) redirect("/settings?tab=membership&error=Membership+payment+settings+could+not+be+saved.");
+  if (error) redirect("/admin/memberships?section=payment-settings&error=Membership+payment+settings+could+not+be+saved.");
   updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
-  revalidatePath("/settings");
-  redirect("/settings?tab=membership&notice=membership-payment-settings-saved");
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?section=payment-settings&notice=membership-payment-settings-saved");
 }
 
 export async function updateMembershipPlan(formData: FormData) {
@@ -1339,25 +1339,4 @@ export async function stageMemberMojoCutover() {
   if (error) redirect("/admin/memberships?error=cutover-failed");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=cutover-staged");
-}
-
-export async function setMembershipOfficer(formData: FormData) {
-  if (!membershipAdministrationEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const { user, role } = await requireRole(["administrator"]);
-  const targetUserId = idSchema.parse(formData.get("user_id"));
-  const enabled = formData.get("enabled") === "true";
-  const admin = createServiceClient();
-  const { data: target } = await admin.from("user_roles")
-    .select("role").eq("user_id", targetUserId).maybeSingle();
-  if (target?.role !== "committee") redirect("/admin/memberships?error=officer-unavailable");
-  const { error } = enabled
-    ? await admin.from("user_capabilities").upsert({ user_id: targetUserId, capability: "memberships.manage", granted_by: user.id })
-    : await admin.from("user_capabilities").delete().eq("user_id", targetUserId).eq("capability", "memberships.manage");
-  if (error) redirect("/admin/memberships?error=officer-update-failed");
-  await writeAudit({
-    actorUserId: user.id, actorRole: role, action: enabled ? "membership.officer-granted" : "membership.officer-revoked",
-    entityType: "member", entityId: targetUserId, after: { capability: "memberships.manage", enabled },
-  });
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=officer-updated");
 }
