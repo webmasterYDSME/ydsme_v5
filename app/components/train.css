@@ -1,0 +1,107 @@
+/* A single travelling consist keeps the engine, tender and news cargo coupled. */
+.train-consist {
+  --train-width: 306px;
+  --coupling-height: 26px;
+  --wheel-period: 1.2s;
+  position: absolute;
+  left: calc(-1 * var(--train-width) - 24px);
+  bottom: 2px;
+  width: var(--train-width);
+  height: 134px;
+  display: flex;
+  align-items: flex-end;
+  z-index: 2;
+  animation: railway-travel 28s linear infinite;
+  will-change: transform;
+  filter: drop-shadow(0 4px 4px #0006);
+}
+.train-consist.has-announcement { --train-width: 670px; animation-duration: 38s; }
+.train-marker { position: relative; flex: 0 0 200px; width: 200px; height: 112px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.train-marker:disabled { cursor: default; }
+.train-marker:focus-visible, .train-banner:focus-visible { outline: 2px solid #f7dfa7; outline-offset: 5px; border-radius: 4px; }
+.locomotive-art { display: block; width: 100%; height: 100%; overflow: visible; }
+.coal-tender { flex: 0 0 100px; width: 100px; height: 112px; overflow: visible; }
+/* Every wheel uses the same artwork, centre of rotation and uninterrupted cycle. */
+.railway-wheel { transform-box: fill-box; transform-origin: center; animation: railway-wheel-turn var(--wheel-period) linear infinite; }
+.locomotive-rod { animation: railway-rod var(--wheel-period) linear infinite; }
+.train-coupler { position: relative; flex: 0 0 10px; height: 8px; margin-bottom: calc(var(--coupling-height) - 4px); }
+/* All buffer beams share one height above the rail, with straight bolted drawbars. */
+.train-coupler svg { position: absolute; left: -4px; width: 22px; height: 8px; overflow: visible; }
+.wagon-coupler i { position: absolute; left: -7px; top: 1px; width: 6px; height: 6px; border: 1px solid #17231f; border-radius: 50%; background: #d2a15b; }
+.wagon-coupler i:last-child { left: 15px; }
+.tender-coupler { flex-basis: 6px; }
+.tender-coupler svg { left: -8px; width: 30px; }
+.train-banner {
+  position: relative;
+  flex: 0 0 354px;
+  min-width: 0;
+  height: 112px;
+  margin-bottom: 21px;
+  padding: 8px 19px 18px;
+  border: 3px solid #76513a;
+  border-top: 5px solid #b08b5e;
+  border-radius: 5px 5px 1px 1px;
+  background: #eee4cc;
+  color: #213e30;
+  box-shadow: inset 0 0 0 1px #d4bb8b, inset 8px 0 #aa7e50, inset -8px 0 #aa7e50;
+  text-decoration: none;
+}
+.train-banner-copy { animation: railway-copy-in .4s ease-out; }
+.train-banner-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; color: #80502e; }
+.train-banner-label { font-size: 8px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+.train-banner-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 25px/1.05 var(--font-display); }
+.train-banner-copy p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 5px 0 0; color: #435044; font-size: 11px; line-height: 1.4; }
+.train-banner-chassis { position: absolute; bottom: calc(var(--coupling-height) - 33px); left: -5px; right: -5px; height: 18px; border: 1px solid #c39265; background: #713d2e; text-align: center; }
+.train-banner-chassis span { color: #f3d8a6; font-size: 7px; font-weight: 700; letter-spacing: .18em; vertical-align: top; line-height: 16px; }
+.train-banner-wheels { position: absolute; left: 36px; right: 36px; bottom: -22px; display: flex; justify-content: space-between; }
+.train-banner-wheels > svg { width: 24px; height: 24px; overflow: visible; }
+.loco-smoke i { position: absolute; left: 143px; top: 8px; width: 17px; height: 17px; border-radius: 50%; background: #eee9d9; filter: blur(2px); opacity: 0; animation: railway-puff 2.7s ease-out infinite; pointer-events: none; }
+.loco-smoke i:nth-child(2) { animation-delay: .9s; }
+.loco-smoke i:nth-child(3) { animation-delay: 1.8s; }
+.train-marker.is-sounding .loco-smoke i { animation-duration: .7s; }
+.train-consist:hover, .train-consist:focus-within,
+.train-consist:hover *, .train-consist:focus-within * { animation-play-state: paused; }
+.train-marker.is-sounding .loco-smoke i { animation-play-state: running; }
+@keyframes railway-travel { to { transform: translate3d(calc(100vw + var(--train-width) + 48px),0,0); } }
+@keyframes railway-wheel-turn { to { transform: rotate(360deg); } }
+@keyframes railway-rod { 0%,100% { transform: translate(0,0); } 25% { transform: translate(2px,-2px); } 50% { transform: translate(0,-4px); } 75% { transform: translate(-2px,-2px); } }
+@keyframes railway-puff { 0% { transform: translate(0,0) scale(.4); opacity: 0; } 20% { opacity: .65; } 100% { transform: translate(-65px,-55px) scale(2.8); opacity: 0; } }
+@keyframes railway-copy-in { from { opacity: 0; } to { opacity: 1; } }
+@media (max-width: 560px) {
+  .train-consist { --train-width: 228px; --coupling-height: 19.24px; height: 120px; }
+  .train-consist.has-announcement { --train-width: 512px; animation-duration: 32s; }
+  .train-marker { flex-basis: 148px; width: 148px; height: 82.88px; }
+  .coal-tender { flex-basis: 74px; width: 74px; height: 82.88px; }
+  .wagon-coupler svg { width: 20px; }
+  .wagon-coupler i:last-child { left: 13px; }
+  .tender-coupler svg { left: -6px; width: 26px; }
+  .train-banner { flex-basis: 274px; height: 106px; }
+  .train-banner-copy strong { font-size: 22px; }
+  .loco-smoke i { left: 105px; top: 5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .train-consist, .train-consist * { animation: none !important; }
+  .train-consist { left: 20px; transform: none; }
+  .train-consist.has-announcement { width: min(670px, calc(100vw - 40px)); }
+  .train-banner { flex: 1 1 auto; }
+  .loco-smoke { display: none; }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 700px) {
+  /* Park the engine beside its news cargo so both controls remain in view. */
+  .train-consist.has-announcement { --coupling-height: 13px; height: 170px; }
+  .train-consist.has-announcement .train-marker { flex-basis: 100px; width: 100px; height: 56px; }
+  .train-consist.has-announcement .coal-tender { display: none; }
+  .train-consist.has-announcement > .train-coupler:last-of-type { display: none; }
+  .train-consist.has-announcement .train-banner { height: 140px; }
+  .train-consist.has-announcement .train-banner-copy p { -webkit-line-clamp: 4; }
+  .wagon-coupler svg { width: 20px; }
+  .wagon-coupler i:last-child { left: 13px; }
+}
+/* Reserve the train's lane below the stacked hero actions on small screens. */
+@media (max-width: 560px) {
+  .hero:has(.train-consist) { height: auto; min-height: 100svh; padding-block: 190px 190px; }
+  .hero:has(.train-consist) .hero-copy { position: relative; top: auto; left: auto; right: auto; transform: none; margin-inline: var(--public-page-inline, 7vw); }
+}
+/* Bring keyboard-operated controls into view even between passes. */
+.train-consist:has(:focus-visible) { left: 20px; transform: none !important; }
+.train-consist:has(.train-marker:focus-visible) { left: auto; right: 20px; }
