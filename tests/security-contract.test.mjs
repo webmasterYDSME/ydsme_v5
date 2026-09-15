@@ -855,8 +855,9 @@ test("enables the complete membership platform with one flag and otherwise falls
     assert.match(guardedRoute, /if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   }
   assert.match(switchAccount, /membershipBillingEnabled/);
-  assert.match(settings, /\.\.\.\(membershipEnabled \? \[\{ href: "\/settings\?tab=membership"/);
-  assert.match(settings, /membershipEnabled && tab === "membership" && membershipPayment/);
+  assert.match(settings, /query.tab === "membership"/);
+  assert.match(settings, /section: "payment-settings"/);
+  assert.match(settings, /requireCapability\("settings.manage"\)/);
   assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!membershipAdministrationEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
 });

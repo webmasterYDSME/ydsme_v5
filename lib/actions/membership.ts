@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
-import { requireCapability, requireRole, requireUser } from "@/lib/auth";
+import { requireCapability, requireUser } from "@/lib/auth";
 import {
   PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
   PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
@@ -1169,7 +1169,7 @@ export async function correctMemberEligibility(formData: FormData) {
 
 export async function saveMembershipPaymentSettings(formData: FormData) {
   if (!membershipAdministrationEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const { user } = await requireRole(["administrator"]);
+  const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
     treasurer_name: z.string().trim().min(2).max(120),
     treasurer_email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
@@ -1182,7 +1182,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     cheque_delivery_instructions: z.string().trim().min(5).max(500),
     cash_instructions: z.string().trim().min(5).max(500),
   }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/settings?tab=membership&error=Check+the+Treasurer+and+payment+details.");
+  if (!parsed.success) redirect("/admin/memberships?section=payment-settings&error=Check+the+Treasurer+and+payment+details.");
   const { error } = await createServiceClient().rpc("replace_membership_payment_settings", {
     p_actor_id: user.id,
     p_treasurer_name: parsed.data.treasurer_name,
@@ -1196,11 +1196,11 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cheque_delivery_instructions: parsed.data.cheque_delivery_instructions,
     p_cash_instructions: parsed.data.cash_instructions,
   });
-  if (error) redirect("/settings?tab=membership&error=Membership+payment+settings+could+not+be+saved.");
+  if (error) redirect("/admin/memberships?section=payment-settings&error=Membership+payment+settings+could+not+be+saved.");
   updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
-  revalidatePath("/settings");
-  redirect("/settings?tab=membership&notice=membership-payment-settings-saved");
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?section=payment-settings&notice=membership-payment-settings-saved");
 }
 
 export async function updateMembershipPlan(formData: FormData) {
