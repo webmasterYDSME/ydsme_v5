@@ -590,7 +590,8 @@ test("uses trusted origins and accepts only safe external URLs", async () => {
     read("lib/actions/content.ts"),
   ]);
   assert.match(origin, /NEXT_PUBLIC_SITE_URL/);
-  assert.match(origin, /url\.protocol !== "https:"/);
+  assert.match(origin, /resolveSiteOrigin\(value\)/);
+  assert.match(await read("lib/site-origin.mjs"), /url\.protocol !== "https:"/);
   assert.doesNotMatch(authActions, /headers\(\).*origin/s);
   assert.doesNotMatch(donationActions, /headers\(\).*origin/s);
   assert.match(callback, /getTrustedAppOrigin/);

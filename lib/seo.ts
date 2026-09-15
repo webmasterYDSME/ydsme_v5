@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { SITE_URL } from "./site-origin.mjs";
 
-export const SITE_URL = "https://www.yorkmodelengineers.co.uk";
+export { SITE_URL };
 export const SITE_NAME = "York Model Engineers";
 export const DEFAULT_OG_IMAGE = "/og.png";
 

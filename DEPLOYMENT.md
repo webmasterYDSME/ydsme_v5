@@ -25,6 +25,15 @@ verification before switching custom domains or retiring the former hosting.
 Existing GitHub Actions secret values cannot be read back from the old repository;
 retrieve them from their original secure storage or issue replacement credentials.
 
+## Canonical site origin
+
+Set production `NEXT_PUBLIC_SITE_URL` to `https://yorkmodelengineers.co.uk`,
+matching Vercel's redirect destination. The legacy `www` value is normalized to
+that origin for trusted application links and request checks. Incoming request
+origins still require an exact match; arbitrary hosts are not trusted.
+Keep local configuration on `http://localhost:3010` and preview configuration
+on its own HTTPS origin. SEO uses the non-`www` production domain.
+
 ## Under Review / maintenance page
 
 `MAINTENANCE_MODE` is an optional server-only environment flag. Set it to
