@@ -1,0 +1,117 @@
+.roster {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 72px 40px 100px;
+}
+.intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 38px;
+}
+.intro h1 {
+  margin: 0;
+  font: 500 clamp(36px, 4vw, 54px)/1.05 var(--font-display);
+  letter-spacing: -.025em;
+}
+.intro h1 em { color: var(--rust); }
+.intro > p {
+  max-width: 340px;
+  margin: 0 0 4px;
+  color: #626a62;
+  font-size: 14px;
+  line-height: 1.75;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
+  align-items: stretch;
+}
+.grid > div { min-width: 0; }
+.card {
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid #d9d5c9;
+  border-radius: 5px;
+  background: #fffdf7;
+  box-shadow: 0 8px 24px rgba(24, 42, 31, .04);
+}
+.portrait {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: #e5e8df;
+  border-bottom: 1px solid #d9d5c9;
+}
+.portrait img {
+  object-fit: cover;
+  object-position: center 35%;
+}
+.placeholder {
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at 50% 40%, #f1f2e9, #dfe5d9);
+}
+.placeholder > svg { width: 88px; height: 88px; color: #81917f; }
+.details { padding: 23px 24px 25px; }
+.role {
+  margin: 0 0 9px;
+  color: var(--rust);
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+.details h2 {
+  margin: 0;
+  color: var(--ink);
+  font: 500 clamp(28px, 2.7vw, 35px)/1.12 var(--font-display);
+  overflow-wrap: anywhere;
+}
+.contact {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #e6e2d7;
+  color: #516352;
+  font-size: 12px;
+  line-height: 1.6;
+  text-decoration: none;
+}
+.contact svg { flex: none; }
+.contact span { min-width: 0; overflow-wrap: anywhere; }
+.contact:hover { color: var(--rust); text-decoration: underline; text-underline-offset: 4px; }
+.contact:focus-visible { outline: 2px solid var(--rust); outline-offset: 5px; }
+.vacant { background: #eef1e8; }
+.vacancyBadge {
+  position: absolute;
+  bottom: 18px;
+  left: 18px;
+  padding: 7px 11px;
+  border-radius: 3px;
+  background: var(--forest);
+  color: white;
+  font-size: 11px;
+  font-weight: 650;
+}
+.empty { padding: 40px 24px; background: #e9e9de; text-align: center; color: #59665b; }
+@media(max-width:960px) {
+  .roster { padding: 56px 28px 72px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+  .intro { align-items: flex-start; }
+  .intro > p { max-width: 280px; }
+}
+@media(max-width:600px) {
+  .roster { padding: 40px 22px 56px; }
+  .intro { display: block; margin-bottom: 28px; }
+  .intro > p { max-width: none; margin-top: 20px; }
+  .grid { grid-template-columns: minmax(0, 380px); justify-content: center; }
+  .details { padding: 20px; }
+}

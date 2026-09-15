@@ -1,7 +1,9 @@
+import { MemberAccessDialog } from "@/app/components/MemberAccessDialog";
+import { InviteMemberDialog } from "@/app/components/InviteMemberDialog";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, MailCheck, Megaphone, RotateCcw, Search, Trash2, UsersRound, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
 import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -9,25 +11,22 @@ import {
   archiveAnnouncement,
   deleteOldArchivedAnnouncements,
   deleteEvent,
-  deleteMember,
   deleteWorkshop,
-  inviteMember,
   purgeMember,
   restoreEvent,
   restoreAnnouncement,
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  saveAnnouncement,
-  saveWorkshop,
-  suspendMember,
-  updateMemberRole,
 } from "@/lib/actions/content";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { AnnouncementFields } from "@/app/components/AnnouncementFields";
+import { WorkshopEditorDialog, type WorkshopEditorRecord } from "@/app/components/WorkshopEditorDialog";
+import { AnnouncementEditorDialog } from "@/app/components/AnnouncementEditorDialog";
 import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
+import { PeopleEditorDialog, type CommitteeListing } from "@/app/components/PeopleEditorDialog";
+import type { AppRole } from "@/lib/auth";
 import { PortalTabs } from "@/app/components/PortalTabs";
 import { eventImage } from "@/lib/data";
 import { membershipAdministrationEnabled } from "@/lib/features";
@@ -41,21 +40,8 @@ const WORKSHOP_PAGE_SIZE = 5;
 type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
 type EventRow = EventEditorRecord;
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
-type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
+type WorkshopRow = WorkshopEditorRecord;
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function AnnouncementForm({ announcement }: { announcement?: AnnouncementRow }) {
-  return <form action={saveAnnouncement} className="editor-form">
-    {announcement ? <input type="hidden" name="id" value={announcement.id}/> : null}
-    <AnnouncementFields initialTitle={announcement?.title} initialDescription={announcement?.body}/>
-    <label>Status<select name="lifecycle_status" defaultValue={announcement?.lifecycle_status === "archived" ? "draft" : announcement?.lifecycle_status || "published"}><option value="published">Published</option><option value="draft">Draft</option></select><small>Published announcements are immediately visible to everyone.</small></label>
-    <PendingSubmitButton className="button dark" pendingLabel={announcement ? "Saving changes…" : "Posting announcement…"}>{announcement ? "Save changes" : "Post announcement"}</PendingSubmitButton>
-  </form>;
-}
-
-function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
-  return <form action={saveWorkshop} className="editor-form">{workshop ? <input type="hidden" name="id" value={workshop.id}/> : null}<label className="wide">Workshop title<input name="title" defaultValue={workshop?.title} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={workshop?.descriptions} rows={4} required/></label><label>Date<input type="date" name="date" defaultValue={workshop?.date} required/></label><label>Status<select name="lifecycle_status" defaultValue={workshop?.lifecycle_status === "archived" ? "draft" : workshop?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label><label>Host<input name="host_name" defaultValue={workshop?.host_name} required/></label><label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label><label>Venue<input name="venue" defaultValue={workshop?.venue} required/></label><label>Maximum places<input type="number" min="1" max="500" name="maximum_participants" defaultValue={workshop?.maximum_participants || 20} required/></label><label className="wide">Virtual link<input type="url" name="virtual_link" defaultValue={workshop?.virtual_link}/></label><label className="wide">Notes<textarea name="notes" defaultValue={workshop?.notes} rows={3}/></label><PendingSubmitButton className="button dark" pendingLabel={workshop ? "Saving changes…" : "Creating workshop…"}>{workshop ? "Save changes" : "Create workshop"}</PendingSubmitButton></form>;
-}
 
 function statusNotice(value?: string) {
   const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "old-announcements-deleted": "Announcements archived more than one year ago were permanently deleted.", "event-saved": "Event saved.", "event-draft-saved": "Draft saved.", "event-published": "Event published.", "event-archived": "Event moved to the archive.", "event-restored": "Event restored as a draft.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
@@ -93,21 +79,19 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(announcementStatuses.map((value, index) => [value, announcementCountResults[index].count ?? 0])) as Record<(typeof announcementStatuses)[number], number>;
     const pageCount = Math.max(1, Math.ceil((announcementResult.count ?? 0) / ANNOUNCEMENT_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/announcements?status=${status}&page=${pageCount}`);
-    const announcementTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/announcements?status=${status}&page=${page}`;
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div><AnnouncementEditorDialog triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!announcementTotal}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details>
       <nav className="status-filter" aria-label="Filter announcements by status">
         <Link prefetch={false} href="/admin/announcements?status=published" aria-current={status === "published" ? "page" : undefined}>Published <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
         <Link prefetch={false} href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{statusCounts.archived}</span></Link>
       </nav>
       {status === "archived" && session.role === "administrator" ? <aside className="archive-cleanup" aria-label="Archived announcement cleanup"><div><strong>Archive retention</strong><p>{oldArchiveCountResult.count ? `${oldArchiveCountResult.count} announcement${oldArchiveCountResult.count === 1 ? " is" : "s are"} older than one year and can be permanently deleted.` : "There are no archived announcements older than one year."}</p></div><form action={deleteOldArchivedAnnouncements}><PendingSubmitButton className="danger-button" pendingLabel="Deleting…" disabled={!oldArchiveCountResult.count} confirmMessage={`Permanently delete ${oldArchiveCountResult.count ?? 0} archived announcement${oldArchiveCountResult.count === 1 ? "" : "s"} older than one year? This cannot be undone.`}><Trash2/>Delete old archives</PendingSubmitButton></form></aside> : null}
-      <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
+      <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><AnnouncementEditorDialog announcement={announcement}/><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
       {!visibleAnnouncements.length ? <div className="empty-state"><Megaphone/><h2>No {status} announcements</h2><p>{status === "archived" ? "Archived announcements will appear here." : `Create or move an announcement into ${status} status to see it here.`}</p></div> : null}
       <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={announcementResult.count ?? 0} itemLabel="announcements" href={pageHref} ariaLabel="Announcement pages"/>
     </div>;
@@ -189,7 +173,6 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(workshopStatuses.map((value, index) => [value, workshopCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
     const pageCount = Math.max(1, Math.ceil((workshopResult.count ?? 0) / WORKSHOP_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/workshops?status=${status}&page=${pageCount}`);
-    const workshopTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const visibleWorkshopIds = visibleWorkshops.map((workshop) => workshop.id);
     const reservationResult = visibleWorkshopIds.length
       ? await admin.from("participants")
@@ -212,10 +195,9 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><span className="count-badge"><Wrench/>{statusCounts.published} upcoming</span></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><WorkshopEditorDialog triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!workshopTotal}><summary><Plus/>Create a workshop</summary><WorkshopForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter workshops by status">
         <Link prefetch={false} href="/admin/workshops?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/workshops?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
@@ -236,7 +218,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
           <div className="workshop-capacity"><div><span><UsersRound/>{roster.length}/{workshop.maximum_participants} places reserved</span><strong>{placesRemaining ? `${placesRemaining} remaining` : "Workshop full"}</strong></div><progress aria-label={`${roster.length} of ${workshop.maximum_participants} workshop places reserved`} max={workshop.maximum_participants} value={roster.length}/></div>
           <div className="workshop-roster-tools"><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = reservation.participant_id ? members.get(reservation.participant_id) : undefined; return <div key={reservation.id}><span><strong>{member?.full_name || "Former member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link prefetch={false} className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = reservation.participant_id ? members.get(reservation.participant_id) : undefined; return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Former member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span>{reservation.participant_id ? <form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form> : null}</div>; })}</div></details> : null}</div>
         </div>
-        <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
+        <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><WorkshopEditorDialog workshop={workshop}/><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
       </article>;
       })}</div>
       {!visibleWorkshops.length ? <div className="empty-state"><Wrench/><h2>No {status === "published" ? "upcoming" : status} workshops</h2><p>{emptyCopy[status]}</p></div> : null}
@@ -280,62 +262,67 @@ export default async function AdminSection({ params, searchParams }: { params: P
     redirect(`/admin/members?${canonical}`);
   }
   const ids = (users ?? []).map(member => member.id);
-  const [rolesResult, committeeResult, membershipHoldResult, canonicalMemberResult] = ids.length
+  const [rolesResult, committeeResult, membershipHoldResult, canonicalMemberResult, officerResult] = ids.length
     ? await Promise.all([
       admin.from("user_roles").select("user_id,role").in("user_id", ids),
-      admin.from("committees").select("user_id").in("user_id", ids),
+      canonical.from("committees").select("id,name,title,email,file_url,user_id,is_public,position,updated_at").in("user_id", ids).order("position").order("id"),
       admin.from("membership_records").select("auth_user_id").in("auth_user_id", ids).eq("legal_hold", true),
       membershipEnabled
         ? canonical.from("members").select("id,auth_user_id,effective_state").in("auth_user_id", ids)
         : Promise.resolve({ data: [], error: null }),
+      canonical.from("user_capabilities").select("user_id").in("user_id", ids).eq("capability", "memberships.manage"),
     ])
-    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
-  if (rolesResult.error || committeeResult.error || membershipHoldResult.error || canonicalMemberResult.error) throw new Error("Unable to load member retention dependencies.");
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  if (officerResult.error || rolesResult.error || committeeResult.error || membershipHoldResult.error || canonicalMemberResult.error) throw new Error("Unable to load member retention dependencies.");
   const roles = rolesResult.data;
   const roleMap = new Map((roles ?? []).map(item => [item.user_id, item.role]));
   const committeeUserIds = new Set((committeeResult.data ?? []).flatMap(item => item.user_id ? [item.user_id] : []));
   const membershipHoldUserIds = new Set((membershipHoldResult.data ?? []).flatMap(item => item.auth_user_id ? [item.auth_user_id] : []));
+  const officerIds = new Set((officerResult.data ?? []).map(item => item.user_id));
+  const listings = (committeeResult.data ?? []) as CommitteeListing[];
   const canonicalMemberMap = new Map((canonicalMemberResult.data ?? []).flatMap(item => item.auth_user_id ? [[item.auth_user_id, item]] : []));
   const pageHref = (value: number) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(value) })}`;
-  const memberTabHref = (value: string) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status: value })}`;
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Committee register</p><h1>Members</h1><p>Review member contact details and website access. Membership officers can suspend or archive ordinary member accounts; administrators control invitations, roles and restoration.</p></div><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
-    {administrator ? <details className="manager-panel"><summary><UserPlus/>Invite a member</summary><form action={inviteMember} className="editor-form"><label>Full name<input name="full_name" required/></label><label>Email address<input type="email" name="email" required/></label><PendingSubmitButton className="button dark" pendingLabel="Sending invitation…">Send secure invitation</PendingSubmitButton></form></details> : null}
-    <PortalTabs label="Member status" tabs={[
-      { href: memberTabHref("active"), label: "Active", count: activeResult.count ?? 0, current: status === "active" },
-      ...(membershipEnabled ? [
-        { href: memberTabHref("honorary"), label: "Honorary", count: honoraryUserIds.length, current: status === "honorary" },
-        { href: memberTabHref("lapsed"), label: "Lapsed", count: lapsedResult.count ?? 0, current: status === "lapsed" },
-      ] : []),
-      { href: memberTabHref("suspended"), label: "Suspended", count: suspendedResult.count ?? 0, current: status === "suspended" },
-      { href: memberTabHref("archived"), label: "Archived", count: archivedResult.count ?? 0, current: status === "archived" },
-    ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div>{administrator || (membershipEnabled && session.membershipOfficer) ? <div className="bulk-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator ? <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link> : null}</div> : null}</div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
-    <div className="member-table">
-      <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Accounts and access</p><h1>{administrator ? "People" : "Members"}</h1></div><div className="people-heading-actions"><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span>{administrator && <InviteMemberDialog/>}</div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
+    {administrator && <PortalTabs label="People" tabs={[{ href: "/admin/members", label: "Members", current: true }, { href: "/admin/people?tab=committee", label: "Committee", current: false }]}/>}
+    <form className="portal-filter-panel people-filter-panel" method="get">
+      <div className="people-filter-fields">
+        <label className="portal-filter-search">Find a member<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label>
+        <label>Status<select name="status" defaultValue={status}>
+          <option value="active">Active ({activeResult.count ?? 0})</option>
+          {membershipEnabled && <><option value="honorary">Honorary ({honoraryUserIds.length})</option><option value="lapsed">Lapsed ({lapsedResult.count ?? 0})</option></>}
+          <option value="suspended">Suspended ({suspendedResult.count ?? 0})</option><option value="archived">Archived ({archivedResult.count ?? 0})</option>
+        </select></label>
+        <button className="button dark" type="submit">Search members</button>
+        {search && <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear</Link>}
+      </div>
+      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator && <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link>}</div>}
+    </form>
+    <div className={`member-table people-member-table ${status === "active" || status === "honorary" ? "people-active-table" : ""}`}>
+      <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Website access</span>{status !== "active" && status !== "honorary" && <span>Actions</span>}</div>
       {(users ?? []).map(member => {
         const memberRole = roleMap.get(member.id) || "member";
         const canChangeThisStatus = canManageMemberStatus && (administrator || memberRole === "member");
         const canonicalMember = canonicalMemberMap.get(member.id);
         return <div className={`member-row is-${member.membership_status}`} key={member.id}>
           <div className="member-identity">
-            <div className="member-identity-heading"><strong>{member.full_name || "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{status === "honorary" ? "honorary" : member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold (deletion blocked)" : ""}</span></div>
-            <small>{member.title || "Member"}</small>
+            <div className="member-identity-heading"><strong>{member.full_name ? [member.title?.trim(), member.full_name].filter(Boolean).join(" ") : "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{status === "honorary" ? "honorary" : member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold (deletion blocked)" : ""}</span></div>
             {canonicalMember && session.membershipOfficer ? <Link href={`/admin/memberships?member=${canonicalMember.id}`}>Membership and payment history</Link> : null}
             {member.retention_purge_claimed_at ? <small>Automatic deletion in progress</small> : member.retention_until ? <small>{member.membership_status === "archived" ? (new Date(member.retention_until) < new Date() ? "Automatic deletion is due" : "Automatic deletion after") : "Details kept until"} {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}
             {member.retention_purge_attempts > 0 && member.retention_purge_last_attempt_at ? <small>Automatic deletion attempts: {member.retention_purge_attempts} · last {new Date(member.retention_purge_last_attempt_at).toLocaleDateString("en-GB")}</small> : null}
             {member.membership_status === "archived" && (memberRole !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}
           </div>
           <div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div>
-          {administrator ? <form className="member-role-form" action={updateMemberRole}>
-            <input type="hidden" name="user_id" value={member.id}/>
-            <label><span className="member-cell-label">Website access level</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={memberRole} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label>
-            <PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton>
-          </form> : <div className="member-role-form member-role-readonly"><span className="member-cell-label">Website access level</span><strong>{memberRole === "administrator" ? "Administrator" : memberRole === "committee" ? "Committee" : "Member"}</strong></div>}
-          <div className="member-actions">
-            <span className="member-cell-label">Sign-in access</span>
-            {member.membership_status === "active" ? canChangeThisStatus ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : <p>Read-only access.</p> : member.membership_status === "lapsed" ? <p>Renewal is required before website access is restored.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is in progress; restoration is temporarily unavailable.</p> : administrator ? <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form> : <p>Only an administrator can restore access.</p>}
-            {administrator && member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>This record is under a legal hold and cannot be deleted.</p> : (memberRole !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}
+          <div className="member-role-form member-role-readonly"><span className="member-cell-label">Website access level</span><strong>{memberRole === "administrator" ? "Administrator" : memberRole === "committee" ? "Committee" : "Member"}</strong>
+            {memberRole === "committee" && officerIds.has(member.id) && <small>Membership Officer</small>}
+            {administrator && member.membership_status === "active" && <PeopleEditorDialog member={{ id: member.id, full_name: member.full_name, email: member.email, role: memberRole as AppRole, officer: officerIds.has(member.id) }} listing={listings.find(item => item.user_id === member.id)} actorId={session.user.id} membershipEnabled={membershipEnabled} manageAccess/>}
+            {!administrator && canChangeThisStatus && member.membership_status === "active" && member.id !== session.user.id && <MemberAccessDialog userId={member.id} name={member.full_name || member.email}/>}
+            {administrator && listings.filter(item => item.user_id === member.id).length > 1 && <Link href="/admin/people?tab=committee">All committee positions</Link>}
           </div>
+          {member.membership_status !== "active" && <div className="member-actions">
+            <span className="member-cell-label">Sign-in access</span>
+            {member.membership_status === "lapsed" ? <p>Renewal is required before website access is restored.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is in progress; restoration is temporarily unavailable.</p> : administrator ? <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form> : <p>Only an administrator can restore access.</p>}
+            {administrator && member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>This record is under a legal hold and cannot be deleted.</p> : (memberRole !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}
+          </div>}
         </div>;
       })}
     </div>

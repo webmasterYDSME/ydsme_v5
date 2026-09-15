@@ -56,7 +56,7 @@ const contentLinks: PortalLink[] = [
 ];
 
 const administratorLinks: PortalLink[] = [
-  { href: "/settings", label: "Committee and site", icon: Settings },
+  { href: "/settings", label: "Site settings", icon: Settings },
   { href: "/admin/audit", label: "Important changes", icon: History },
 ];
 
@@ -112,11 +112,10 @@ function PortalNavigationForPath({
       icon: Landmark,
       links: [
         ...(membershipOfficer && membershipEnabled ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
-        { href: "/admin/members", label: "Member register", icon: UsersRound },
+        { href: "/admin/members", label: administrator ? "People" : "Member register", icon: UsersRound, activePaths: ["/admin/people"] },
         ...((membershipOfficer || administrator) ? [{ href: "/admin/donations", label: "Donations", icon: HandCoins }] : []),
       ],
     }] : []),
-    ...(administrator ? [{ id: "administration", label: "Administration", icon: Settings, links: administratorLinks }] : []),
   ];
   const activeGroupId = groups.find((group) => group.links.some((link) => linkIsCurrent(pathname, link)))?.id;
   const [open, setOpen] = useState(false);
@@ -234,6 +233,11 @@ function PortalNavigationForPath({
                 })}
               </div>
             </section>;
+          })}
+          {administrator && administratorLinks.map((link) => {
+            const current = linkIsCurrent(pathname, link);
+            const Icon = link.icon;
+            return <Link key={link.href} href={link.href} prefetch={false} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon aria-hidden="true"/><span>{link.label}</span></Link>;
           })}
         </nav>
         <div className="portal-account">

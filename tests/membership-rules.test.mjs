@@ -124,7 +124,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(applicationPage, /"payment-unavailable"[\s\S]*Application safely saved/);
   assert.match(officerPage, /Online payments need attention/);
   assert.match(officerPage, /Online payments are not fully set up/);
-  assert.match(officerPage, /Online payments\{checkoutProblemCount \? <span/);
+  assert.match(officerPage, /Online payments need attention \(\{checkoutProblemCount\}\)/);
   assert.match(officerPage, /title=\{checkoutProblemCount \? "Online payments need attention" : "Online payments are ready"\}/);
   assert.match(officerPage, /Online payments are ready/);
   assert.match(officerPage, /membership\.application-payment-attention-officer/);
@@ -251,6 +251,6 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(applicationWizard, /value="bank_transfer"/);
   assert.match(applicationWizard, /value="cheque"/);
   assert.match(guardianPage, /I confirm my consent/);
-  assert.match(settingsPage, /Membership payments/);
+  assert.match(settingsPage, /section: "payment-settings"/);
   assert.doesNotMatch(applicationWizard, /bank_account_number/);
 });

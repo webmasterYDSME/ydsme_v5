@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type DialogControls = { requestClose: () => void };
@@ -8,6 +9,7 @@ type DialogControls = { requestClose: () => void };
 export function EditorDialog({
   trigger,
   triggerClassName,
+  className,
   eyebrow,
   title,
   description,
@@ -18,6 +20,7 @@ export function EditorDialog({
 }: {
   trigger: ReactNode;
   triggerClassName?: string;
+  className?: string;
   eyebrow: string;
   title: string;
   description?: string;
@@ -31,6 +34,7 @@ export function EditorDialog({
   const titleId = useId();
   const descriptionId = useId();
   const [open, setOpen] = useState(false);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
 
   const requestClose = useCallback(() => {
     if (busy) return;
@@ -43,7 +47,7 @@ export function EditorDialog({
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, portalHost]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -53,13 +57,13 @@ export function EditorDialog({
     };
     dialog.addEventListener("click", closeFromBackdrop);
     return () => dialog.removeEventListener("click", closeFromBackdrop);
-  }, [requestClose]);
+  }, [requestClose, portalHost]);
 
   return <>
-    <button ref={triggerRef} type="button" className={triggerClassName} onClick={() => setOpen(true)}>{trigger}</button>
-    <dialog
+    <button ref={triggerRef} type="button" className={triggerClassName} onClick={() => { setPortalHost(document.body); setOpen(true); }}>{trigger}</button>
+    {portalHost && createPortal(<dialog
       ref={dialogRef}
-      className="editor-dialog"
+      className={["editor-dialog", className].filter(Boolean).join(" ")}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onCancel={(event) => { event.preventDefault(); requestClose(); }}
@@ -76,6 +80,6 @@ export function EditorDialog({
         </header>
         <div className="editor-dialog-content">{typeof children === "function" ? children({ requestClose }) : children}</div>
       </div>
-    </dialog>
+    </dialog>, portalHost)}
   </>;
 }

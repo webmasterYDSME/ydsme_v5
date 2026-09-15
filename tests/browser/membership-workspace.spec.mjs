@@ -1,0 +1,66 @@
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { expect, test } from "@playwright/test";
+import { readLocalSupabaseEnvironment } from "../local-supabase.mjs";
+
+test("membership workspace keeps tasks focused and preserves deep links", async ({ page }) => {
+  test.skip(process.env.JOURNEY_MEMBERSHIP_WORKSPACE !== "true", "Requires local Supabase.");
+  const local = readLocalSupabaseEnvironment("Membership workspace");
+  const admin = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const suffix = randomUUID();
+  const email = `workspace-${suffix}@example.test`;
+  const password = `Workspace-${suffix}!`;
+  const { data, error } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { full_name: "Workspace test" } });
+  expect(error).toBeNull();
+  const id = data.user.id;
+  try {
+    expect((await admin.from("user_roles").upsert({user_id:id,role:"administrator"},{onConflict:"user_id"})).error).toBeNull();
+    await page.goto("/signin?method=password&next=%2Fadmin%2Fmemberships");
+    const signIn = page.locator(".auth-flip-back form");
+    await signIn.locator('[name="email"]').fill(email);
+    await signIn.locator('[name="password"]').fill(password);
+    await signIn.getByRole("button", { name:/Sign in securely/ }).click();
+    await page.waitForURL("**/admin/memberships");
+    const tabs = page.getByRole("navigation", {name:"Membership workspace"});
+    await expect(tabs.getByRole("link")).toHaveCount(5);
+    await expect(page.locator("#applications")).toBeVisible();
+    await expect(page.locator("#plans")).toHaveCount(0);
+    await expect(page.locator("#add-member")).toHaveCount(0);
+    await tabs.getByRole("link", {name:"Member register",exact:true}).click();
+    await expect(page.getByRole("textbox",{name:"Find a membership"})).toBeVisible();
+    await expect(page.locator("#applications")).toHaveCount(0);
+    await page.getByRole("link",{name:"Add membership",exact:true}).click();
+    await expect(page.locator("#add-member")).toBeVisible();
+    await expect(page.locator("#renewals")).toHaveCount(0);
+    await tabs.getByRole("link",{name:"Payments",exact:true}).click();
+    await expect(page.locator("#renewals")).toBeVisible();
+    await tabs.getByRole("link",{name:"Types & fees",exact:true}).click();
+    await expect(page.locator("#plans")).toBeVisible();
+    await expect(page.locator("#renewals")).toHaveCount(0);
+    await tabs.getByRole("link",{name:"Reports",exact:true}).click();
+    await expect(page.getByRole("button",{name:"Prepare records download"})).toBeVisible();
+    await page.getByRole("link",{name:"MemberMojo import & review"}).click();
+    await expect(page.locator("#membermojo-import")).toBeVisible();
+    await page.goto("/admin/memberships?section=renewals#renewals");
+    await expect(page.locator("#renewals")).toHaveAttribute("open", "");
+    await page.goto("/settings?tab=membership");
+    await expect(page).toHaveURL(/section=payment-settings/);
+    await expect(page.getByRole("heading", {name:"Treasurer and offline payments"})).toBeVisible();
+    expect((await admin.from("user_roles").update({role:"committee"}).eq("user_id",id)).error).toBeNull();
+    expect((await admin.from("user_capabilities").insert({user_id:id,capability:"memberships.manage"})).error).toBeNull();
+    await page.goto("/admin/memberships?section=payment-settings");
+    await expect(page.getByRole("button", {name:"Save a new payment-settings version"})).toBeVisible();
+    await page.goto("/settings?tab=site");
+    await expect(page).toHaveURL(/dashboard\?notice=not-authorised/);
+    expect((await admin.from("user_capabilities").delete().eq("user_id",id)).error).toBeNull();
+    await page.goto("/admin/memberships?section=payment-settings");
+    await expect(page).toHaveURL(/dashboard\?notice=not-authorised/);
+    expect((await admin.from("user_roles").update({role:"administrator"}).eq("user_id",id)).error).toBeNull();
+    await page.setViewportSize({width:390,height:844});
+    await page.goto("/admin/memberships");
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await expect(page.getByRole("link",{name:"Add membership",exact:true})).toBeVisible();
+  } finally {
+    await admin.auth.admin.deleteUser(id);
+  }
+});
