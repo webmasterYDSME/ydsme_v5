@@ -199,7 +199,7 @@ export async function saveWorkshop(formData: FormData) {
 export async function saveAnnouncement(formData: FormData) {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = announcementSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/announcements?error=Please+check+the+announcement+title+and+message.");
+  if (!parsed.success) return { error: "Please check the announcement title and description." };
   const { id, ...values } = parsed.data;
   const admin = createAdminClient();
   const { data: before } = id
@@ -217,7 +217,7 @@ export async function saveAnnouncement(formData: FormData) {
     ? admin.from("announcements").update(savedValues).eq("id", id).select("id").single()
     : admin.from("announcements").insert({ ...savedValues, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
-  if (error) redirect("/admin/announcements?error=The+announcement+could+not+be+saved.");
+  if (error || !saved) return { error: "The announcement could not be saved. Your details are still here; please try again." };
   await writeAudit({
     actorUserId: user.id,
     actorRole: role,
@@ -232,7 +232,7 @@ export async function saveAnnouncement(formData: FormData) {
   revalidatePath("/");
   revalidatePath("/news");
   revalidatePath("/admin/announcements");
-  redirect(`/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved`);
+  return { url: `/admin/announcements?status=${values.lifecycle_status}&notice=announcement-saved` };
 }
 
 export async function archiveAnnouncement(formData: FormData) {

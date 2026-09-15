@@ -18,14 +18,13 @@ import {
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  saveAnnouncement,
   saveWorkshop,
   suspendMember,
   updateMemberRole,
 } from "@/lib/actions/content";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { AnnouncementFields } from "@/app/components/AnnouncementFields";
+import { AnnouncementEditorDialog } from "@/app/components/AnnouncementEditorDialog";
 import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
@@ -43,15 +42,6 @@ type EventRow = EventEditorRecord;
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
 type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function AnnouncementForm({ announcement }: { announcement?: AnnouncementRow }) {
-  return <form action={saveAnnouncement} className="editor-form">
-    {announcement ? <input type="hidden" name="id" value={announcement.id}/> : null}
-    <AnnouncementFields initialTitle={announcement?.title} initialDescription={announcement?.body}/>
-    <label>Status<select name="lifecycle_status" defaultValue={announcement?.lifecycle_status === "archived" ? "draft" : announcement?.lifecycle_status || "published"}><option value="published">Published</option><option value="draft">Draft</option></select><small>Published announcements are immediately visible to everyone.</small></label>
-    <PendingSubmitButton className="button dark" pendingLabel={announcement ? "Saving changes…" : "Posting announcement…"}>{announcement ? "Save changes" : "Post announcement"}</PendingSubmitButton>
-  </form>;
-}
 
 function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
   return <form action={saveWorkshop} className="editor-form">{workshop ? <input type="hidden" name="id" value={workshop.id}/> : null}<label className="wide">Workshop title<input name="title" defaultValue={workshop?.title} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={workshop?.descriptions} rows={4} required/></label><label>Date<input type="date" name="date" defaultValue={workshop?.date} required/></label><label>Status<select name="lifecycle_status" defaultValue={workshop?.lifecycle_status === "archived" ? "draft" : workshop?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label><label>Host<input name="host_name" defaultValue={workshop?.host_name} required/></label><label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label><label>Venue<input name="venue" defaultValue={workshop?.venue} required/></label><label>Maximum places<input type="number" min="1" max="500" name="maximum_participants" defaultValue={workshop?.maximum_participants || 20} required/></label><label className="wide">Virtual link<input type="url" name="virtual_link" defaultValue={workshop?.virtual_link}/></label><label className="wide">Notes<textarea name="notes" defaultValue={workshop?.notes} rows={3}/></label><PendingSubmitButton className="button dark" pendingLabel={workshop ? "Saving changes…" : "Creating workshop…"}>{workshop ? "Save changes" : "Create workshop"}</PendingSubmitButton></form>;
@@ -93,21 +83,19 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(announcementStatuses.map((value, index) => [value, announcementCountResults[index].count ?? 0])) as Record<(typeof announcementStatuses)[number], number>;
     const pageCount = Math.max(1, Math.ceil((announcementResult.count ?? 0) / ANNOUNCEMENT_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/announcements?status=${status}&page=${pageCount}`);
-    const announcementTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const pageHref = (page: number) => `/admin/announcements?status=${status}&page=${page}`;
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Public noticeboard</p><h1>Announcements</h1><p>Post updates for everyone visiting the public website. Only committee members and administrators can manage these messages.</p></div><AnnouncementEditorDialog triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!announcementTotal}><summary><Plus/>Post an announcement</summary><AnnouncementForm/></details>
       <nav className="status-filter" aria-label="Filter announcements by status">
         <Link prefetch={false} href="/admin/announcements?status=published" aria-current={status === "published" ? "page" : undefined}>Published <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/announcements?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
         <Link prefetch={false} href="/admin/announcements?status=archived" aria-current={status === "archived" ? "page" : undefined}>Archived <span>{statusCounts.archived}</span></Link>
       </nav>
       {status === "archived" && session.role === "administrator" ? <aside className="archive-cleanup" aria-label="Archived announcement cleanup"><div><strong>Archive retention</strong><p>{oldArchiveCountResult.count ? `${oldArchiveCountResult.count} announcement${oldArchiveCountResult.count === 1 ? " is" : "s are"} older than one year and can be permanently deleted.` : "There are no archived announcements older than one year."}</p></div><form action={deleteOldArchivedAnnouncements}><PendingSubmitButton className="danger-button" pendingLabel="Deleting…" disabled={!oldArchiveCountResult.count} confirmMessage={`Permanently delete ${oldArchiveCountResult.count ?? 0} archived announcement${oldArchiveCountResult.count === 1 ? "" : "s"} older than one year? This cannot be undone.`}><Trash2/>Delete old archives</PendingSubmitButton></form></aside> : null}
-      <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><AnnouncementForm announcement={announcement}/></div></details><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
+      <div className="admin-list">{visibleAnnouncements.map(announcement => <article key={announcement.id}><div className="admin-list-icon"><Megaphone/></div><div><span>{announcement.lifecycle_status}{announcement.published_at ? ` · ${format(new Date(announcement.published_at), "d MMMM yyyy")}` : ""}</span><h2>{announcement.title}</h2><p>{announcement.body}</p></div><div className="admin-list-actions">{announcement.lifecycle_status === "archived" ? <form action={restoreAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><AnnouncementEditorDialog announcement={announcement}/><form action={archiveAnnouncement}><input type="hidden" name="id" value={announcement.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div></article>)}</div>
       {!visibleAnnouncements.length ? <div className="empty-state"><Megaphone/><h2>No {status} announcements</h2><p>{status === "archived" ? "Archived announcements will appear here." : `Create or move an announcement into ${status} status to see it here.`}</p></div> : null}
       <PortalPagination currentPage={currentPage} totalPages={pageCount} totalItems={announcementResult.count ?? 0} itemLabel="announcements" href={pageHref} ariaLabel="Announcement pages"/>
     </div>;

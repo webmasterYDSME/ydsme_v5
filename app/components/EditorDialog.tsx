@@ -8,6 +8,7 @@ type DialogControls = { requestClose: () => void };
 export function EditorDialog({
   trigger,
   triggerClassName,
+  className,
   eyebrow,
   title,
   description,
@@ -18,6 +19,7 @@ export function EditorDialog({
 }: {
   trigger: ReactNode;
   triggerClassName?: string;
+  className?: string;
   eyebrow: string;
   title: string;
   description?: string;
@@ -59,7 +61,7 @@ export function EditorDialog({
     <button ref={triggerRef} type="button" className={triggerClassName} onClick={() => setOpen(true)}>{trigger}</button>
     <dialog
       ref={dialogRef}
-      className="editor-dialog"
+      className={["editor-dialog", className].filter(Boolean).join(" ")}
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       onCancel={(event) => { event.preventDefault(); requestClose(); }}
