@@ -7,7 +7,6 @@ import {
 } from "@/lib/actions/content";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { PortalTabs } from "@/app/components/PortalTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -27,15 +26,14 @@ export default async function Settings({
   if (query.tab === "donations" || query.notice === "donations-saved") redirect("/admin/donations?view=appeals");
   if (query.tab === "committee") redirect("/admin/people?tab=committee");
   const admin = createAdminClient();
-  const tab = "site";
   const [configResult, socialResult, affiliateResult] = await Promise.all([
     admin
       .from("configs")
       .select("id,short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address")
       .limit(1)
       .single(),
-    tab === "site" ? admin.from("site_social_links").select("name,url,position").order("position") : Promise.resolve({ data: [], error: null }),
-    tab === "site" ? admin.from("site_affiliates").select("name,url,logo_path,position").order("position") : Promise.resolve({ data: [], error: null }),
+    admin.from("site_social_links").select("name,url,position").order("position"),
+    admin.from("site_affiliates").select("name,url,logo_path,position").order("position"),
   ]);
   if (configResult.error || socialResult.error || affiliateResult.error || !configResult.data) {
     throw new Error("Unable to load Society settings.");
@@ -54,21 +52,14 @@ export default async function Settings({
         <div>
           <p className="eyebrow dark">Administrator only</p>
           <h1>Site settings</h1>
-          <p>Maintain Society information and public links.</p>
         </div>
         <span className="count-badge"><SettingsIcon/>Site administration</span>
       </header>
 
       {query.error ? <p className="form-message error">{query.error}</p> : null}
-      {query.notice ? <p className="form-message success">{"Society settings saved."}</p> : null}
+      {query.notice ? <p className="form-message success">Society settings saved.</p> : null}
 
-      <PortalTabs label="Site settings" tabs={[
-        { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
-      ]}/>
-
-
-
-      {tab === "site" ? <section className="settings-tab-panel">
+      <section className="settings-tab-panel">
         <header className="settings-panel-heading"><div><span>Public Society record</span><h2>Society information &amp; links</h2><p>Details saved here are used across the public website and legal information.</p></div><SettingsIcon/></header>
         <form action={saveSiteConfig} className="editor-form">
           <input type="hidden" name="id" value={config.id} />
@@ -104,9 +95,7 @@ export default async function Settings({
           <EditableLinkLists initialSocials={socials} initialAffiliates={affiliates} />
           <PendingSubmitButton className="button dark">Save Society settings</PendingSubmitButton>
         </form>
-      </section> : null}
-
-
+      </section>
     </div>
   );
 }
