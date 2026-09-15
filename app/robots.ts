@@ -6,16 +6,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: [
-        "/account",
-        "/admin",
-        "/administrator",
-        "/auth",
-        "/dashboard",
-        "/reset-password",
-        "/settings",
-        "/signin",
-      ],
+      // Allow crawling so search engines can see the noindex response headers.
+      disallow: ["/api/"],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
     host: SITE_URL,

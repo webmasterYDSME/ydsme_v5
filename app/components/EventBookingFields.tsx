@@ -7,25 +7,27 @@ type BookingMode = "none" | "website";
 export function EventBookingFields({
   initialMode = "none",
   initialCapacity = 100,
+  onModeChange,
 }: {
   initialMode?: BookingMode;
   initialCapacity?: number;
+  onModeChange?: (mode: BookingMode) => void;
 }) {
   const [mode, setMode] = useState<BookingMode>(initialMode);
   const capacityId = useId();
 
   return <>
     <label>
-      Booking mode
+      Do visitors need to book?
       <select
         name="booking_mode"
         value={mode}
-        onChange={(event) => setMode(event.currentTarget.value as BookingMode)}
+        onChange={(event) => { const next = event.currentTarget.value as BookingMode; setMode(next); onModeChange?.(next); }}
         aria-controls={capacityId}
         aria-expanded={mode === "website"}
       >
-        <option value="none">No booking needed</option>
-        <option value="website">Website booking</option>
+        <option value="none">No</option>
+        <option value="website">Yes, through this website</option>
       </select>
       <small>Website booking uses the Society’s own visitor booking system.</small>
     </label>
