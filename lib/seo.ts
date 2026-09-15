@@ -18,11 +18,13 @@ export function publicPageMetadata({
   description,
   path,
   keywords = [],
+  image,
 }: {
   title: string;
   description: string;
   path: string;
   keywords?: string[];
+  image?: { url: string; alt: string };
 }): Metadata {
   return {
     title: path === "/" ? { absolute: `${title} | ${SITE_NAME}` } : title,
@@ -36,7 +38,7 @@ export function publicPageMetadata({
       title: `${title} | ${SITE_NAME}`,
       description,
       url: path,
-      images: [
+      images: image ? [image] : [
         {
           url: DEFAULT_OG_IMAGE,
           width: 1200,
@@ -49,7 +51,7 @@ export function publicPageMetadata({
       card: "summary_large_image",
       title: `${title} | ${SITE_NAME}`,
       description,
-      images: [DEFAULT_OG_IMAGE],
+      images: [image?.url || DEFAULT_OG_IMAGE],
     },
   };
 }
@@ -73,10 +75,13 @@ export const organisationJsonLd = {
   email: "secretary@yorkmodelengineers.co.uk",
   address: {
     "@type": "PostalAddress",
+    streetAddress: "Rear of The Pastures, North Lane, Dringhouses",
     addressLocality: "York",
     postalCode: "YO24 2JE",
     addressCountry: "GB",
   },
+  geo: { "@type": "GeoCoordinates", latitude: 53.94183, longitude: -1.11166 },
+  hasMap: "https://www.google.com/maps/dir/?api=1&destination=53.94183%2C-1.11166",
   sameAs: ["https://www.facebook.com/YorkModelEngineers"],
   isAccessibleForFree: true,
 };

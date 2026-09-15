@@ -406,7 +406,7 @@ test("keeps the supplied logo and local member login", async () => {
     read("app/components/SignInCard.tsx"),
     read("lib/actions/auth.ts"),
   ]);
-  assert.match(shell, /\/ydsme-logo\.png/);
+  assert.match(shell, /\/ydsme-logo-detailed-gold-lions\.png/);
   assert.match(shell, /isAuthenticated\?"\/dashboard":"\/signin"/);
   assert.match(shell, /isAuthenticated\?"Member area":"Member login"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);

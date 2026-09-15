@@ -14,7 +14,7 @@ import {
   memberEventImage,
   type EventRecord,
 } from "@/lib/data";
-import { publicPageMetadata, safeJsonLd, SITE_URL } from "@/lib/seo";
+import { publicPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
@@ -25,7 +25,6 @@ export const metadata = publicPageMetadata({
 });
 
 const eventTime = (value: string) => value.slice(0, 5);
-const bookingUrl = (event: EventRecord) => event.booking_enabled ? `/events/${event.id}/book` : null;
 const bookingStatus = (event: EventRecord) => {
   if (event.booking_enabled) return event.available_places > 0 ? `Free booking · ${event.available_places} places left` : "Fully booked";
   return event.is_ticket_required ? "Booking required" : "Free entry · No booking needed";
@@ -51,40 +50,9 @@ export default async function Events() {
   const events = upcomingEvents(publicEvents);
   const featured = events[0];
   const more = events.slice(1, 5);
-  const eventJsonLd = {
-    "@context": "https://schema.org",
-    "@graph": events.map((event) => ({
-      "@type": "Event",
-      "@id": `${SITE_URL}/events#event-${event.id}`,
-      name: event.name,
-      description: event.descriptions,
-      startDate: `${event.start_date}T${eventTime(event.start_time)}`,
-      endDate: `${event.end_date}T${eventTime(event.end_time)}`,
-      eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
-      eventStatus: "https://schema.org/EventScheduled",
-      isAccessibleForFree: event.booking_enabled ? true : !event.is_ticket_required,
-      image: new URL(artworkUrl(event), SITE_URL).href,
-      location: {
-        "@type": "Place",
-        name: "York Model Engineers",
-        address: {
-          "@type": "PostalAddress",
-          addressLocality: "York",
-          postalCode: "YO24 2JE",
-          addressCountry: "GB",
-        },
-      },
-      organizer: {
-        "@type": "Organization",
-        name: "York Model Engineers",
-        url: SITE_URL,
-      },
-      ...(bookingUrl(event) ? { url: `${SITE_URL}${bookingUrl(event)}` } : { url: `${SITE_URL}/events` }),
-    })),
-  };
+
 
   return <PageShell>
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(eventJsonLd) }} />
     {featured ? <div className="events-opening">
       <section className="section events-feature" id={`event-${featured.id}`} aria-labelledby="featured-event-title">
         <div className="events-feature-heading"><p className="eyebrow">The public running board</p><span>Next public event</span></div>
@@ -92,7 +60,7 @@ export default async function Events() {
           <EventArtwork src={artworkUrl(featured)} name={featured.name} featured/>
           <div className="events-feature-copy">
             <span className="public-event-audience">Open to everyone</span>
-            <h1 id="featured-event-title">{featured.name}</h1>
+            <h1 id="featured-event-title"><Link href={`/events/${featured.id}`}>{featured.name}</Link></h1>
             <dl className="public-event-facts">
               <div><dt><CalendarDays size={20}/><span className="sr-only">Date</span></dt><dd>{eventDate(featured)}</dd></div>
               <div><dt><Clock3 size={20}/><span className="sr-only">Time</span></dt><dd>{eventTime(featured.start_time)}–{eventTime(featured.end_time)}<small>UK local time</small></dd></div>
@@ -117,7 +85,7 @@ export default async function Events() {
       <header><div><p className="eyebrow dark">More dates for your diary</p><h2 id="more-events-title" tabIndex={-1}>Coming <em>up next</em></h2></div><span>{more.length} more public {more.length === 1 ? "event" : "events"}</span></header>
       <div className="public-event-cards">{more.map(event => <article className="public-event-card" id={`event-${event.id}`} key={event.id}>
         <EventArtwork src={artworkUrl(event)} name={event.name}/>
-        <div><div className="public-event-meta"><p className="public-event-date">{eventDate(event)} · {eventTime(event.start_time)}–{eventTime(event.end_time)}</p><span className="public-event-audience">Open to everyone</span></div><h3>{event.name}</h3><p className="public-event-status">{bookingStatus(event)}</p>
+        <div><div className="public-event-meta"><p className="public-event-date">{eventDate(event)} · {eventTime(event.start_time)}–{eventTime(event.end_time)}</p><span className="public-event-audience">Open to everyone</span></div><h3><Link href={`/events/${event.id}`}>{event.name}</Link></h3><p className="public-event-status">{bookingStatus(event)}</p>
           <EventRowActions name={event.name} description={event.descriptions}>
             {event.booking_enabled && <EventAction event={event}/>}
           </EventRowActions>

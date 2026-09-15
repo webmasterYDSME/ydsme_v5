@@ -16,7 +16,6 @@ export const metadata: Metadata = {
   description: "Miniature railways, model engineering and live steam in five woodland acres at Dringhouses, York.",
   applicationName: "York Model Engineers",
   category: "Model engineering and miniature railways",
-  alternates: { canonical: "/" },
   robots: {
     index: true,
     follow: true,
