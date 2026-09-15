@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-const origin = 'https://www.yorkmodelengineers.co.uk';
+const origin = 'https://yorkmodelengineers.co.uk';
 
 test('public metadata and workflow indexing headers are correct', async ({ page, request }) => {
   for (const path of ['/', '/events', '/visitors', '/membership']) {
