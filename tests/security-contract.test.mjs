@@ -42,19 +42,18 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(migration, /public_teaser_enabled = true/);
   assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
   assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
-  assert.match(eventEditor, /EventAudienceFields/);
+  assert.match(eventEditor, /audience === "member_only"/);
   assert.match(audienceFields, /audience === "member_only"[\s\S]*name="public_teaser_enabled"/);
   assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
 
 test("keeps event management current and uses only the website booking system", async () => {
-  const [migration, admin, bookingFields, actions, publicEvents, eventsCarousel] = await Promise.all([
+  const [migration, admin, bookingFields, actions, publicEvents] = await Promise.all([
     read("supabase/migrations/202608180021_event_management_lifecycle.sql"),
     read("app/admin/[section]/page.tsx"),
     read("app/components/EventBookingFields.tsx"),
     read("lib/actions/content.ts"),
     read("app/events/page.tsx"),
-    read("app/events/EventsCarousel.tsx"),
   ]);
   assert.match(migration, /end_date < current_date/);
   assert.match(migration, /create trigger archive_past_event_on_write/);
@@ -65,19 +64,15 @@ test("keeps event management current and uses only the website booking system", 
   assert.match(migration, /cleanup-quarantine-uploads[\s\S]*net\.http_post/);
   assert.match(admin, /EVENT_PAGE_SIZE = 12/);
   assert.match(admin, /status=archived/);
-  assert.match(bookingFields, /No booking needed/);
+  assert.match(bookingFields, /Do visitors need to book\?/);
   assert.match(bookingFields, /mode === "website"[\s\S]*booking_capacity/);
   assert.doesNotMatch(bookingFields, /external/i);
   assert.doesNotMatch(publicEvents, /featuredExternalUrl|safeHttpUrl/);
   assert.match(actions, /booking_mode: z\.enum\(\["none", "website"\]\)/);
-  assert.match(publicEvents, /events\.find\(\(event\) => event\.booking_enabled && event\.available_places > 0\)/);
-  assert.match(publicEvents, /advanceBooking/);
-  assert.match(publicEvents, /featured\.available_places > 0[\s\S]*View event details/);
-  assert.match(publicEvents, /<EventsCarousel events=\{more\}/);
-  assert.match(eventsCarousel, /const EVENTS_PER_VIEW = 3/);
-  assert.match(eventsCarousel, /Previous three events/);
-  assert.match(eventsCarousel, /Next three events/);
-  assert.match(eventsCarousel, /id=\{`event-\$\{event\.id\}`\}/);
+  assert.match(publicEvents, /upcomingEvents\(publicEvents\)/);
+  assert.match(publicEvents, /event.available_places > 0 \? "Book free places" : "View booking details"/);
+  assert.match(publicEvents, /more.map\(event =>/);
+  assert.match(publicEvents, /id=\{`event-\$\{event.id\}`\}/);
   assert.match(await read("app/events/[id]/book/page.tsx"), /href=\{`\/events#event-\$\{event\.id\}`\}/);
 });
 
@@ -242,12 +237,13 @@ test("reviews and standardizes event images before secure upload", async () => {
   assert.match(field, /Keep important details inside this area/);
   assert.match(field, /navigator\.clipboard\.writeText\(aiPrompt\)/);
   assert.match(field, /Leave comfortable space around the subject/);
-  assert.match(field, /preventUnconfirmedImage/);
+  assert.match(field, /prepare: confirmImage/);
+  assert.match(field, /Add an event image before saving/);
   assert.match(styles, /event-image-card-media[^}]*aspect-ratio:23\/16/);
   assert.match(styles, /event-image-card-preview\.is-mobile \.event-image-card-media\{aspect-ratio:8\/5\}/);
 });
 
-test("edits events in an accessible two-section modal", async () => {
+test("edits events in an accessible two-step modal", async () => {
   const [dialog, editor, admin, styles] = await Promise.all([
     read("app/components/EditorDialog.tsx"),
     read("app/components/EventEditorDialog.tsx"),
@@ -260,11 +256,11 @@ test("edits events in an accessible two-section modal", async () => {
   assert.match(dialog, /discard the unsaved changes/);
   assert.match(dialog, /triggerRef\.current\?\.focus\(\)/);
   assert.match(editor, /Event details/);
-  assert.match(editor, /Artwork & preview/);
-  assert.match(editor, /action=\{saveEvent\}/);
+  assert.match(editor, /Event image \(required\)/);
+  assert.match(editor, /await saveEvent\(data\)/);
   assert.match(editor, /noValidate/);
   assert.match(editor, /form\.checkValidity\(\)/);
-  assert.match(editor, /imageReviewState === "pending"/);
+  assert.match(editor, /imageRef.current\?\.prepare\(\)/);
   assert.match(admin, /intent="create"/);
   assert.doesNotMatch(admin, /<EventForm/);
   assert.match(styles, /\.editor-dialog::backdrop/);
@@ -359,7 +355,7 @@ test("reports denied navigation clearly and keeps account controls labelled", as
   assert.match(account, /htmlFor="new-login-email"/);
   assert.match(account, /htmlFor="new-membership-contact-email"/);
   assert.match(eventEditor, /useId/);
-  assert.match(eventEditor, /aria-labelledby=\{detailsTitleId\}/);
+  assert.match(eventEditor, /id=\{errorId\}/);
   assert.doesNotMatch(eventEditor, /id="event-editor-details-title"|id="event-editor-artwork-title"/);
 });
 
@@ -410,7 +406,7 @@ test("keeps the supplied logo and local member login", async () => {
     read("app/components/SignInCard.tsx"),
     read("lib/actions/auth.ts"),
   ]);
-  assert.match(shell, /\/ydsme-logo\.png/);
+  assert.match(shell, /\/ydsme-logo-detailed-gold-lions\.png/);
   assert.match(shell, /isAuthenticated\?"\/dashboard":"\/signin"/);
   assert.match(shell, /isAuthenticated\?"Member area":"Member login"/);
   assert.doesNotMatch(shell, /yorkmodelengineers\.co\.uk\/signin/);

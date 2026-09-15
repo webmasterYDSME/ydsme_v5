@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 import { HOLDING_PAGE_PATH, shouldShowHoldingPage } from "@/lib/deployment-visibility.mjs";
 
+import { shouldNoIndex } from "@/lib/search-indexing";
+
 const isDevelopment = process.env.NODE_ENV === "development";
 const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):55321(?:\/|$)/.test(
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
@@ -45,7 +47,11 @@ export async function proxy(request: NextRequest) {
     return secureResponse(response, policy);
   }
 
-  return secureResponse(await updateSession(request, requestHeaders), policy);
+  const response = await updateSession(request, requestHeaders);
+  if (shouldNoIndex(request.nextUrl.pathname, process.env.VERCEL_ENV)) {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+  }
+  return secureResponse(response, policy);
 }
 
 export const config = {

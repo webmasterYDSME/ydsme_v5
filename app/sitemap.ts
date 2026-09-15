@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getPublicFeaturedProjectSitemapEntries } from "@/lib/public-projects";
+import { getPublicEvents } from "@/lib/data";
+import { upcomingEvents } from "@/lib/public-event-schedule";
 import { SITE_URL } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +24,7 @@ const routes: Array<{
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const projects = await getPublicFeaturedProjectSitemapEntries();
+  const [projects, events] = await Promise.all([getPublicFeaturedProjectSitemapEntries(), getPublicEvents()]);
   const staticRoutes: MetadataRoute.Sitemap = routes.map(({ path, changeFrequency, priority }) => ({
     url: `${SITE_URL}${path}`,
     changeFrequency,
@@ -34,5 +36,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: "monthly",
     priority: 0.7,
   }));
-  return [...staticRoutes, ...projectRoutes];
+  const eventRoutes: MetadataRoute.Sitemap = upcomingEvents(events).map(event => ({
+    url: `${SITE_URL}/events/${event.id}`,
+    changeFrequency: "daily",
+    priority: 0.8,
+  }));
+  return [...staticRoutes, ...projectRoutes, ...eventRoutes];
 }
