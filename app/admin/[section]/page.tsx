@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, MailCheck, Megaphone, Pencil, Plus, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, MailCheck, Megaphone, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
 import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -18,12 +18,12 @@ import {
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  saveWorkshop,
   suspendMember,
   updateMemberRole,
 } from "@/lib/actions/content";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { WorkshopEditorDialog, type WorkshopEditorRecord } from "@/app/components/WorkshopEditorDialog";
 import { AnnouncementEditorDialog } from "@/app/components/AnnouncementEditorDialog";
 import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
@@ -40,12 +40,8 @@ const WORKSHOP_PAGE_SIZE = 5;
 type LifecycleStatus = "published" | "draft" | "cancelled" | "archived";
 type EventRow = EventEditorRecord;
 type AnnouncementRow = { id:number; title:string; body:string; lifecycle_status:string; published_at:string|null; updated_at:string };
-type WorkshopRow = { id:string; title:string; descriptions:string; notes:string; date:string; start_time:string; end_time:string; host_name:string; venue:string; virtual_link:string; maximum_participants:number; lifecycle_status:LifecycleStatus; updated_at:string };
+type WorkshopRow = WorkshopEditorRecord;
 type Query = { error?: string; notice?: string; q?: string; status?: string; page?: string };
-
-function WorkshopForm({ workshop }: { workshop?: WorkshopRow }) {
-  return <form action={saveWorkshop} className="editor-form">{workshop ? <input type="hidden" name="id" value={workshop.id}/> : null}<label className="wide">Workshop title<input name="title" defaultValue={workshop?.title} required/></label><label className="wide">Description<textarea name="descriptions" defaultValue={workshop?.descriptions} rows={4} required/></label><label>Date<input type="date" name="date" defaultValue={workshop?.date} required/></label><label>Status<select name="lifecycle_status" defaultValue={workshop?.lifecycle_status === "archived" ? "draft" : workshop?.lifecycle_status || "published"}><option value="draft">Draft</option><option value="published">Published</option><option value="cancelled">Cancelled</option></select></label><label>Host<input name="host_name" defaultValue={workshop?.host_name} required/></label><label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label><label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label><label>Venue<input name="venue" defaultValue={workshop?.venue} required/></label><label>Maximum places<input type="number" min="1" max="500" name="maximum_participants" defaultValue={workshop?.maximum_participants || 20} required/></label><label className="wide">Virtual link<input type="url" name="virtual_link" defaultValue={workshop?.virtual_link}/></label><label className="wide">Notes<textarea name="notes" defaultValue={workshop?.notes} rows={3}/></label><PendingSubmitButton className="button dark" pendingLabel={workshop ? "Saving changes…" : "Creating workshop…"}>{workshop ? "Save changes" : "Create workshop"}</PendingSubmitButton></form>;
-}
 
 function statusNotice(value?: string) {
   const messages: Record<string, string> = { "announcement-saved": "Announcement saved.", "announcement-restored": "Announcement restored as a draft.", "old-announcements-deleted": "Announcements archived more than one year ago were permanently deleted.", "event-saved": "Event saved.", "event-draft-saved": "Draft saved.", "event-published": "Event published.", "event-archived": "Event moved to the archive.", "event-restored": "Event restored as a draft.", "workshop-saved": "Workshop saved.", "reservation-cancelled": "Workshop reservation cancelled.", "reservation-email-sent": "Workshop email sent.", "invitation-sent": "Invitation sent.", "member-archived": "Member archived and portal access blocked.", "member-restored": "Member access restored.", "member-suspended": "Member access suspended.", "member-purged": "Archived member permanently deleted." };
@@ -177,7 +173,6 @@ export default async function AdminSection({ params, searchParams }: { params: P
     const statusCounts = Object.fromEntries(workshopStatuses.map((value, index) => [value, workshopCountResults[index].count ?? 0])) as Record<LifecycleStatus, number>;
     const pageCount = Math.max(1, Math.ceil((workshopResult.count ?? 0) / WORKSHOP_PAGE_SIZE));
     if (currentPage > pageCount) redirect(`/admin/workshops?status=${status}&page=${pageCount}`);
-    const workshopTotal = Object.values(statusCounts).reduce((total, value) => total + value, 0);
     const visibleWorkshopIds = visibleWorkshops.map((workshop) => workshop.id);
     const reservationResult = visibleWorkshopIds.length
       ? await admin.from("participants")
@@ -200,10 +195,9 @@ export default async function AdminSection({ params, searchParams }: { params: P
     };
 
     return <div className="portal-content">
-      <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><span className="count-badge"><Wrench/>{statusCounts.published} upcoming</span></header>
+      <header className="portal-heading"><div><p className="eyebrow dark">Skills & sessions</p><h1>Workshops</h1><p>Schedule sessions, control capacity and manage member rosters.</p></div><WorkshopEditorDialog triggerClassName="button dark event-create-trigger"/></header>
       {query.error ? <p className="form-message error">{query.error}</p> : null}
       {notice ? <p className="form-message success">{notice}</p> : null}
-      <details className="manager-panel" open={!workshopTotal}><summary><Plus/>Create a workshop</summary><WorkshopForm/></details>
       <nav className="status-filter event-status-filter" aria-label="Filter workshops by status">
         <Link prefetch={false} href="/admin/workshops?status=published" aria-current={status === "published" ? "page" : undefined}>Upcoming <span>{statusCounts.published}</span></Link>
         <Link prefetch={false} href="/admin/workshops?status=draft" aria-current={status === "draft" ? "page" : undefined}>Drafts <span>{statusCounts.draft}</span></Link>
@@ -224,7 +218,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
           <div className="workshop-capacity"><div><span><UsersRound/>{roster.length}/{workshop.maximum_participants} places reserved</span><strong>{placesRemaining ? `${placesRemaining} remaining` : "Workshop full"}</strong></div><progress aria-label={`${roster.length} of ${workshop.maximum_participants} workshop places reserved`} max={workshop.maximum_participants} value={roster.length}/></div>
           <div className="workshop-roster-tools"><details><summary><UsersRound/>Roster ({roster.length})</summary><div className="roster-list">{roster.map(reservation => { const member = reservation.participant_id ? members.get(reservation.participant_id) : undefined; return <div key={reservation.id}><span><strong>{member?.full_name || "Former member"}</strong><small>{member?.email} {member?.contact_number ? `· ${member.contact_number}` : ""}</small></span><form action={cancelWorkshopReservation}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Cancelling…">Cancel place</PendingSubmitButton></form></div>; })}{!roster.length ? <p>No reservations.</p> : null}</div><Link prefetch={false} className="button secondary" href={`/admin/workshops/export?workshop=${workshop.id}`}><Download/>Export roster</Link></details>{deliveryIssues.length ? <details><summary><MailCheck/>Email delivery issues ({deliveryIssues.length})</summary><div className="roster-list">{deliveryIssues.map(reservation => { const member = reservation.participant_id ? members.get(reservation.participant_id) : undefined; return <div key={`email-${reservation.id}`}><span><strong>{member?.full_name || "Former member"}</strong><small>{reservation.reservation_status} · {reservation.notification_email_attempts} attempt{reservation.notification_email_attempts === 1 ? "" : "s"}</small></span>{reservation.participant_id ? <form action={retryWorkshopReservationEmail}><input type="hidden" name="id" value={reservation.id}/><PendingSubmitButton pendingLabel="Sending…">Retry email</PendingSubmitButton></form> : null}</div>; })}</div></details> : null}</div>
         </div>
-        <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><details><summary><Pencil/>Edit</summary><div className="popover-editor"><WorkshopForm workshop={workshop}/></div></details><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
+        <div className="admin-list-actions">{workshop.lifecycle_status === "archived" ? <form action={restoreWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Restoring…"><RotateCcw/>Restore as draft</PendingSubmitButton></form> : <><WorkshopEditorDialog workshop={workshop}/><form action={deleteWorkshop}><input type="hidden" name="id" value={workshop.id}/><PendingSubmitButton pendingLabel="Archiving…"><Archive/>Archive</PendingSubmitButton></form></>}</div>
       </article>;
       })}</div>
       {!visibleWorkshops.length ? <div className="empty-state"><Wrench/><h2>No {status === "published" ? "upcoming" : status} workshops</h2><p>{emptyCopy[status]}</p></div> : null}

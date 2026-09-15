@@ -662,3 +662,13 @@ select:not([multiple])[size="1"]:dir(rtl){background-position:left 14px center!i
   .announcement-editor-form .event-editor-footer>div>.button{flex:1 1 145px;min-width:0;white-space:normal;line-height:1.35;text-align:center;padding:12px}
   .announcement-editor-form .event-editor-footer>.button{order:2;width:100%!important}
 }
+
+.workshop-editor-dialog{width:min(900px,calc(100vw - 36px))}
+@media(max-width:720px){.workshop-editor-dialog{width:100vw}}
+.workshop-editor-form .event-editor-details-grid>h3{margin:8px 0 0;font:500 28px/1.15 var(--font-display);color:var(--forest)}
+@media(max-width:520px){
+  .workshop-editor-form .event-editor-footer{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  .workshop-editor-form .event-editor-footer>div{display:flex;flex-wrap:wrap;width:100%;gap:8px}
+  .workshop-editor-form .event-editor-footer>div>.button{flex:1 1 145px;min-width:0;white-space:normal;line-height:1.35;text-align:center;padding:12px}
+  .workshop-editor-form .event-editor-footer>.button{order:2;width:100%!important}
+}

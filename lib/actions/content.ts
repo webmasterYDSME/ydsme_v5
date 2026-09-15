@@ -49,7 +49,7 @@ const eventSchema = z.object({
 
 const workshopSchema = z.object({
   id: z.string().uuid().optional(), title: text(2, 180), descriptions: text(2, 5000), notes: z.string().trim().max(5000),
-  date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8), host_name: text(2, 180), venue: text(2, 240),
+  date: z.iso.date(), start_time: eventTime, end_time: eventTime, host_name: text(2, 180), venue: text(2, 240),
   virtual_link: optionalUrl, maximum_participants: z.coerce.number().int().min(1).max(500),
   lifecycle_status: z.enum(["draft", "published", "cancelled"]),
 });
@@ -178,10 +178,10 @@ export async function restoreEvent(formData: FormData) {
 export async function saveWorkshop(formData: FormData) {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = workshopSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/workshops?error=Please+check+all+workshop+fields.");
+  if (!parsed.success) return { error: "Please check all workshop fields." };
   const { id, ...values } = parsed.data;
   const admin = createAdminClient();
-  if (values.end_time <= values.start_time) redirect("/admin/workshops?error=The+end+time+must+be+after+the+start+time.");
+  if (values.end_time <= values.start_time) return { error: "The end time must be after the start time." };
   const lifecycle_status = values.lifecycle_status;
   delete (values as Partial<typeof values>).lifecycle_status;
   const updated_at = new Date().toISOString();
@@ -189,11 +189,11 @@ export async function saveWorkshop(formData: FormData) {
     ? admin.from("workshops").update({ ...values, lifecycle_status, updated_at }).eq("id", id).select("id").single()
     : admin.from("workshops").insert({ ...values, lifecycle_status, created_by: user.id }).select("id").single();
   const { data: saved, error } = await query;
-  if (error) redirect("/admin/workshops?error=The+workshop+could+not+be+saved.");
+  if (error) return { error: "The workshop could not be saved. Please try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "workshop.updated" : "workshop.created", entityType: "workshop", entityId: saved.id, after: { title: values.title, date: values.date, lifecycle_status } });
   updateTag(MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG);
   revalidatePath("/dashboard"); revalidatePath("/admin/workshops");
-  redirect("/admin/workshops?notice=workshop-saved");
+  return { url: `/admin/workshops?status=${lifecycle_status}&notice=workshop-saved` };
 }
 
 export async function saveAnnouncement(formData: FormData) {
