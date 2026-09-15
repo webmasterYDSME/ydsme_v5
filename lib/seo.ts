@@ -65,7 +65,7 @@ export const organisationJsonLd = {
   name: "York City & District Society of Model Engineers",
   alternateName: "York Model Engineers",
   url: SITE_URL,
-  logo: `${SITE_URL}/ydsme-logo.png`,
+  logo: `${SITE_URL}/ydsme-logo-detailed-gold-lions.png`,
   image: `${SITE_URL}${DEFAULT_OG_IMAGE}`,
   description:
     "A volunteer model engineering society operating miniature railways and live-steam events in Dringhouses, York.",

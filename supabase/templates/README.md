@@ -25,4 +25,4 @@ These templates are designed for Supabase Auth and use its supported Go-template
 
 The primary buttons deliberately use `{{ .ConfirmationURL }}`. This preserves the application's current PKCE callback flow in `app/auth/callback/route.ts`. Do not replace these links with a custom `TokenHash` URL unless the application also gains a matching server-side verification endpoint.
 
-The logo source is `{{ .SiteURL }}/ydsme-logo.png`. It has useful alt text and the email remains understandable when remote images are blocked.
+The logo source is `{{ .SiteURL }}/ydsme-logo-detailed-gold-lions.png`. It has useful alt text and the email remains understandable when remote images are blocked.

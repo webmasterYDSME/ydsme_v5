@@ -347,7 +347,7 @@ Use a natural miniature railway scene, realistic model engineering proportions, 
     <details className="event-image-ai-help">
       <summary>Need help creating an image?</summary>
       <p>Download the club logo and attach it to your image generator, then copy this prompt. The prompt includes your event title and asks for the official logo in the artwork. Check the title, logo and crop before uploading the result.</p>
-      <a className="button outline" href="/ydsme-logo.png" download="york-model-engineers-logo.png">Download club logo</a>
+      <a className="button outline" href="/ydsme-logo-detailed-gold-lions.png" download="york-model-engineers-logo.png">Download club logo</a>
       <textarea readOnly value={aiPrompt} rows={7} aria-label="AI image generator prompt"/>
       <button type="button" onClick={() => void copyPrompt()}>{copied ? <Check/> : <Copy/>}{copied ? "Prompt copied" : "Copy AI prompt"}</button>
     </details>

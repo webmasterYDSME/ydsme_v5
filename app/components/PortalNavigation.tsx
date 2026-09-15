@@ -199,7 +199,7 @@ function PortalNavigationForPath({
     <aside className={open ? "portal-sidebar is-open" : "portal-sidebar"}>
       <div className="portal-sidebar-top">
         <Link href="/" className="portal-brand" prefetch={false} onClick={closeMenu}>
-          <Image src="/ydsme-logo.png" alt="York Model Engineers" width={72} height={72}/>
+          <Image src="/ydsme-logo-detailed-gold-lions.png" alt="York Model Engineers" width={72} height={72}/>
           <span>York Model<br/><b>Engineers</b></span>
         </Link>
         <button ref={menuButton} className="portal-menu-button" type="button" aria-controls="portal-navigation" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
