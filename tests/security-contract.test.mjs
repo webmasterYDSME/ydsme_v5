@@ -42,7 +42,7 @@ test("exposes only explicitly selected member event teasers through a limited pu
   assert.match(migration, /public_teaser_enabled = true/);
   assert.match(migration, /grant select on public\.public_member_event_teasers to anon, authenticated/);
   assert.doesNotMatch(migration, /\bhost\b|reservation_link|booking_capacity/);
-  assert.match(eventEditor, /EventAudienceFields/);
+  assert.match(eventEditor, /audience === "member_only"/);
   assert.match(audienceFields, /audience === "member_only"[\s\S]*name="public_teaser_enabled"/);
   assert.match(actions, /public_teaser_enabled: parsedValues\.event_type === "member_only" && parsedValues\.public_teaser_enabled/);
 });
@@ -65,7 +65,7 @@ test("keeps event management current and uses only the website booking system", 
   assert.match(migration, /cleanup-quarantine-uploads[\s\S]*net\.http_post/);
   assert.match(admin, /EVENT_PAGE_SIZE = 12/);
   assert.match(admin, /status=archived/);
-  assert.match(bookingFields, /No booking needed/);
+  assert.match(bookingFields, /Do visitors need to book\?/);
   assert.match(bookingFields, /mode === "website"[\s\S]*booking_capacity/);
   assert.doesNotMatch(bookingFields, /external/i);
   assert.doesNotMatch(publicEvents, /featuredExternalUrl|safeHttpUrl/);
@@ -242,12 +242,13 @@ test("reviews and standardizes event images before secure upload", async () => {
   assert.match(field, /Keep important details inside this area/);
   assert.match(field, /navigator\.clipboard\.writeText\(aiPrompt\)/);
   assert.match(field, /Leave comfortable space around the subject/);
-  assert.match(field, /preventUnconfirmedImage/);
+  assert.match(field, /prepare: confirmImage/);
+  assert.match(field, /Add an event image before saving/);
   assert.match(styles, /event-image-card-media[^}]*aspect-ratio:23\/16/);
   assert.match(styles, /event-image-card-preview\.is-mobile \.event-image-card-media\{aspect-ratio:8\/5\}/);
 });
 
-test("edits events in an accessible two-section modal", async () => {
+test("edits events in an accessible two-step modal", async () => {
   const [dialog, editor, admin, styles] = await Promise.all([
     read("app/components/EditorDialog.tsx"),
     read("app/components/EventEditorDialog.tsx"),
@@ -260,11 +261,11 @@ test("edits events in an accessible two-section modal", async () => {
   assert.match(dialog, /discard the unsaved changes/);
   assert.match(dialog, /triggerRef\.current\?\.focus\(\)/);
   assert.match(editor, /Event details/);
-  assert.match(editor, /Artwork & preview/);
-  assert.match(editor, /action=\{saveEvent\}/);
+  assert.match(editor, /Event image \(required\)/);
+  assert.match(editor, /await saveEvent\(data\)/);
   assert.match(editor, /noValidate/);
   assert.match(editor, /form\.checkValidity\(\)/);
-  assert.match(editor, /imageReviewState === "pending"/);
+  assert.match(editor, /imageRef.current\?\.prepare\(\)/);
   assert.match(admin, /intent="create"/);
   assert.doesNotMatch(admin, /<EventForm/);
   assert.match(styles, /\.editor-dialog::backdrop/);
@@ -359,7 +360,7 @@ test("reports denied navigation clearly and keeps account controls labelled", as
   assert.match(account, /htmlFor="new-login-email"/);
   assert.match(account, /htmlFor="new-membership-contact-email"/);
   assert.match(eventEditor, /useId/);
-  assert.match(eventEditor, /aria-labelledby=\{detailsTitleId\}/);
+  assert.match(eventEditor, /id=\{errorId\}/);
   assert.doesNotMatch(eventEditor, /id="event-editor-details-title"|id="event-editor-artwork-title"/);
 });
 

@@ -33,9 +33,12 @@ const idString = z.string().min(1).max(100);
 const httpUrl = z.string().trim().max(2048).refine((value) => Boolean(safeHttpUrl(value)), "Use an HTTP or HTTPS URL.");
 const optionalUrl = z.union([z.literal(""), httpUrl]);
 
+const eventTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Enter a valid time.")
+  .transform(value => value.length === 5 ? `${value}:00` : value);
+
 const eventSchema = z.object({
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
-  start_date: z.iso.date(), end_date: z.iso.date(), start_time: text(4, 8), end_time: text(4, 8),
+  start_date: z.iso.date(), end_date: z.iso.date(), start_time: eventTime, end_time: eventTime,
   event_type: z.enum(["public", "member_only"]),
   file_url: z.string().max(2048).default(""), display_in_homepage: z.boolean(), public_teaser_enabled: z.boolean(),
   booking_mode: z.enum(["none", "website"]),
@@ -68,7 +71,7 @@ async function activeAdministratorCount() {
   return count ?? 0;
 }
 
-export async function saveEvent(formData: FormData) {
+export async function saveEvent(formData: FormData): Promise<{ error: string; field?: string } | { url: string }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = eventSchema.safeParse({
     id: formData.get("id") || undefined, name: formData.get("name"), descriptions: formData.get("descriptions"),
@@ -77,13 +80,14 @@ export async function saveEvent(formData: FormData) {
     display_in_homepage: bool(formData, "display_in_homepage"),
     public_teaser_enabled: bool(formData, "public_teaser_enabled"),
     booking_mode: formData.get("booking_mode") || "none",
-    lifecycle_status: formData.get("lifecycle_status") || "published",
+    lifecycle_status: formData.get("lifecycle_status") || "draft",
     booking_capacity: formData.get("booking_capacity") || undefined,
   });
-  if (!parsed.success) redirect("/admin/events?error=Please+check+all+event+fields.");
-  if (parsed.data.end_date < parsed.data.start_date) redirect("/admin/events?error=The+end+date+cannot+be+before+the+start+date.");
+  if (!parsed.success) return { error: parsed.error.issues[0].message, field: String(parsed.error.issues[0].path[0]) };
+  if (parsed.data.end_date < parsed.data.start_date) return { error: "The end date cannot be before the start date.", field: "end_date" };
+  if (parsed.data.end_date === parsed.data.start_date && parsed.data.end_time <= parsed.data.start_time) return { error: "The end time must be after the start time.", field: "end_time" };
   if (parsed.data.booking_mode === "website" && (parsed.data.event_type !== "public" || !parsed.data.booking_capacity)) {
-    redirect("/admin/events?error=Website+booking+needs+a+public+event+and+a+visitor+capacity.");
+    return { error: "Website booking needs a public event and a visitor capacity.", field: "booking_capacity" };
   }
   const { id, booking_capacity, ...parsedValues } = parsed.data;
   const values = {
@@ -98,11 +102,12 @@ export async function saveEvent(formData: FormData) {
   const admin = createAdminClient();
   const { data: before } = id ? await admin.from("events").select("name,event_type,lifecycle_status,booking_mode,file_url,public_teaser_enabled").eq("id", id).maybeSingle() : { data: null };
   const quarantinePath = String(formData.get("quarantine_path") || "");
+  if (!quarantinePath && !before?.file_url) return { error: "Add an event image before saving." };
   if (quarantinePath) {
     try {
       values.file_url = (await finalizeQuarantinedUpload("event-image", quarantinePath, user.id)).canonicalPath;
     } catch {
-      redirect("/admin/events?error=The+event+image+failed+security+validation.");
+      return { error: "The event image failed validation. Choose another image or try saving again." };
     }
   } else {
     values.file_url = id ? before?.file_url ?? "" : "";
@@ -111,7 +116,13 @@ export async function saveEvent(formData: FormData) {
     ? admin.from("events").update(values).eq("id", id).select("id,lifecycle_status").single()
     : admin.from("events").insert({ ...values, host: user.id }).select("id,lifecycle_status").single();
   const { data: saved, error } = await query;
-  if (error) redirect("/admin/events?error=The+event+could+not+be+saved.");
+  if (error) {
+    if (quarantinePath) {
+      const failedPath = storageObjectPath(values.file_url, "images");
+      if (failedPath) await admin.storage.from("images").remove([failedPath]);
+    }
+    return { error: "The event could not be saved. Your details are still here; please try again." };
+  }
   if (quarantinePath) {
     const oldPath = storageObjectPath(before?.file_url, "images");
     if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
@@ -120,7 +131,7 @@ export async function saveEvent(formData: FormData) {
   updateTag(MEMBER_DASHBOARD_EVENTS_CACHE_TAG);
   updateTag(PUBLIC_EVENTS_CACHE_TAG);
   revalidatePath("/"); revalidatePath("/events"); revalidatePath("/dashboard"); revalidatePath("/admin/events");
-  redirect(`/admin/events?status=${saved.lifecycle_status}&notice=event-saved`);
+  return { url: `/admin/events?status=${saved.lifecycle_status}&notice=${saved.lifecycle_status === "draft" ? "event-draft-saved" : saved.lifecycle_status === "published" ? "event-published" : "event-saved"}` };
 }
 
 export async function deleteEvent(formData: FormData) {

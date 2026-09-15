@@ -447,3 +447,62 @@ main .committee-intro h2 em,main .membership-lead h2 em,main .history-lead h2 em
 .library-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.library-card{min-height:330px;padding:28px;display:flex;flex-direction:column;align-items:flex-start;border:1px solid var(--line);background:#fffdf8;box-shadow:0 15px 34px rgba(16,24,20,.055);transition:transform .2s,border-color .2s,box-shadow .2s}.library-card:hover{border-color:#9d8b62;box-shadow:0 20px 42px rgba(16,24,20,.1);transform:translateY(-3px)}.library-card:focus-visible{outline:3px solid rgba(177,88,65,.4);outline-offset:3px}.library-card-icon{width:52px;height:52px;margin-bottom:auto;display:grid;place-items:center;border-radius:50%;background:#e8e4d8;color:var(--rust)}.library-card-icon svg{width:24px}.library-card>div{margin-top:40px}.library-card>div>span{color:#79817c;font-size:9px;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.library-card h2{margin:8px 0 12px;font:600 32px/1 var(--font-display)}.library-card p{margin:0;color:#5b6760;font-size:12px;line-height:1.65}.library-card>strong{margin-top:24px;color:var(--rust);font-size:10px;text-transform:uppercase;letter-spacing:.07em}
 @media(max-width:1024px){.portal-sidebar nav{grid-template-columns:1fr}.portal-nav-group-links.is-expanded{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-nav-group-links a{margin-left:0}.library-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.library-card{min-height:290px;padding:23px}}
 @media(max-width:720px){.portal-nav-group-links.is-expanded{grid-template-columns:1fr}.portal-nav-group-links a{margin-left:17px}.library-grid{grid-template-columns:1fr}.library-card{min-height:0}.library-card-icon{margin-bottom:0}.library-card>div{margin-top:28px}}
+
+/* Single-page event creation, with persistent save actions. */
+.event-editor-form.event-editor-simple{grid-template-rows:minmax(0,1fr) auto}
+.event-editor-fields{border:0;padding:0;margin:0;min-width:0}
+.event-editor-fields>h3{margin:0 0 20px;font:600 30px/1 var(--font-display)}
+.event-time-fields{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.event-extra-options{margin-top:22px;border-top:1px solid var(--line);padding-top:16px}
+.event-extra-options>summary,.event-image-editor>summary{cursor:pointer;font-weight:700;padding:8px 0}
+.event-extra-options>label{margin-top:14px}.event-extra-options>p{font-size:12px;line-height:1.5;color:#59645e}
+.event-editor-simple .event-editor-footer{flex-wrap:wrap}
+.event-editor-simple .event-editor-footer>.form-message{flex-basis:100%;margin:0}
+.event-editor-simple [aria-invalid="true"]{border-color:#a52f2f;outline:1px solid #a52f2f}
+.event-editor-simple .event-image-studio{display:flex;flex-direction:column}
+.event-editor-simple .event-image-editor{order:2}
+.event-editor-simple .event-image-actions{order:3}
+.event-editor-simple .event-image-card-preview{max-width:500px}
+@media(max-width:520px){
+  .event-editor-simple .event-editor-footer{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+  .event-editor-simple .event-editor-footer>div{display:flex;flex:none;flex-wrap:wrap;width:100%;gap:8px}
+  .event-editor-simple .event-editor-footer>div>.button{flex:1 1 130px;min-width:130px;white-space:nowrap}
+  .event-editor-simple .event-editor-footer>.button{order:2;width:100%!important}
+  .event-time-fields{gap:12px}
+}
+
+/* Two-step event editor: both panels remain mounted to preserve edits. */
+.event-editor-form.event-editor-stepped{grid-template-rows:minmax(0,1fr) auto}
+.event-step-help{font-size:13px;line-height:1.5;color:#59645e}
+@media(max-width:520px){.event-editor-stepped .event-editor-footer>div{gap:6px}.event-editor-stepped .event-editor-footer>div>.button{font-size:10px}}
+
+/* Keep empty grid space outside the checkbox click target. */
+.event-editor-details-grid>label.check{justify-self:start;align-self:center;width:fit-content;max-width:100%}
+
+.event-extra-options>label.check{width:fit-content;max-width:100%}
+.event-editor-fields label.check>input{flex-shrink:0}
+/* Extra booking guidance must not stretch the adjacent audience control. */
+.event-editor-details-grid>label:not(.check){align-self:start;align-content:start;min-width:0}
+
+/* Shared native dropdown treatment: 16px chevron, 14px edge inset,
+   and reserved text space. Overrides local background/padding shorthands. */
+select:not([multiple]):not([size]),
+select:not([multiple])[size="1"]{
+  appearance:none!important;
+  -webkit-appearance:none!important;
+  padding-inline-end:44px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23465049' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;
+  background-repeat:no-repeat!important;
+  background-position:right 14px center!important;
+  background-size:16px 16px!important;
+}
+select:not([multiple]):not([size]):dir(rtl),
+select:not([multiple])[size="1"]:dir(rtl){background-position:left 14px center!important}
+@media(forced-colors:active){
+  select:not([multiple]):not([size]),
+  select:not([multiple])[size="1"]{
+    appearance:auto!important;
+    -webkit-appearance:auto!important;
+    background-image:none!important;
+  }
+}

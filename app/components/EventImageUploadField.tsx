@@ -3,8 +3,8 @@
 /* Blob and canvas previews cannot be served through the Next.js image optimizer. */
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Crop, ImagePlus, RotateCcw } from "lucide-react";
+import { type Ref, useImperativeHandle, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Copy, ImagePlus, RotateCcw } from "lucide-react";
 import { createUploadIntent } from "@/lib/actions/uploads";
 import type { Database } from "@/lib/supabase/database";
 
@@ -16,7 +16,8 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/a
 type Dimensions = { width: number; height: number };
 type DragState = { pointerId: number; x: number; y: number; focalX: number; focalY: number };
 type MessageKind = "error" | "status" | "warning";
-export type EventImageReviewState = "idle" | "pending" | "ready";
+export type EventImageUploadHandle = { prepare: () => Promise<string> };
+type EventPreview = { name: string; description: string; date: string; endDate: string; startTime: string; endTime: string; audience: string; booking: string };
 
 const clamp = (value: number, minimum: number, maximum: number) => Math.min(maximum, Math.max(minimum, value));
 
@@ -57,12 +58,16 @@ export function EventImageUploadField({
   label,
   initialEventName = "",
   currentImage,
-  onReviewStateChange,
+  ref,
+  preview,
+  onSelectionChange,
 }: {
   label: string;
   initialEventName?: string;
   currentImage?: string;
-  onReviewStateChange?: (state: EventImageReviewState) => void;
+  ref?: Ref<EventImageUploadHandle>;
+  preview: EventPreview;
+  onSelectionChange?: () => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +88,7 @@ export function EventImageUploadField({
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<MessageKind>("status");
-  const [eventName, setEventName] = useState(initialEventName);
+  const eventName = preview.name || initialEventName;
   const [copied, setCopied] = useState(false);
 
   const layout = dimensions ? cropLayout(dimensions, zoom) : null;
@@ -96,25 +101,20 @@ export function EventImageUploadField({
     return messages;
   }, [dimensions]);
 
-  const aiPrompt = useMemo(() => `Create a natural, high-quality landscape image for “${eventName.trim() || "[event name]"}” at a miniature railway and model engineering society in York, England. Use a 3:2 aspect ratio at 1800 × 1200 pixels. Keep the main subject centred and all important details within the central 70% of the image. Leave comfortable space around the subject. The image will be centre-cropped for a website event card.`, [eventName]);
+  const aiPrompt = useMemo(() => `Create a polished photographic event banner for York City & District Society of Model Engineers in York, England. Landscape 3:2 composition, 1800 × 1200 pixels or larger.
 
-  useEffect(() => {
-    const form = rootRef.current?.closest("form");
-    const nameField = form?.querySelector<HTMLInputElement>('input[name="name"]');
-    if (!nameField) return;
-    const updateName = () => setEventName(nameField.value);
-    updateName();
-    nameField.addEventListener("input", updateName);
-    return () => nameField.removeEventListener("input", updateName);
-  }, []);
+Include this exact event title as clearly readable text within the image: “${eventName.trim() || "[event name]"}”. Use bold, simple typography with strong contrast against an uncluttered background. Keep the title prominent and check the spelling. Do not add invented dates, times, prices or other event details.
+
+Include the club’s official logo in every image, using the logo file I have attached as the reference. Preserve its design, wording, colours and proportions; do not redraw, reinterpret, distort or replace it with a generic railway logo. If no logo reference is attached, ask me to upload it before generating the image. Place the logo clearly beside or above the title, with comfortable space around it.
+
+Design for responsive website crops on desktop, tablet and mobile: keep the complete title, the complete logo and the main subject inside the central 50% of the frame width and central 60% of its height. Leave comfortable space around the subject, with generous uncluttered scenery on every side that can be cropped away. Do not put text or the logo in corners or near the edges. Make the title and logo readable even as a small mobile card.
+
+Use a natural miniature railway scene, realistic model engineering proportions, attractive natural light and a restrained colour palette. Balance the scene with the title and official logo without covering important details. Avoid close-up framing, collages, decorative borders, additional logos and watermarks.`, [eventName]);
+
 
   useEffect(() => () => {
     if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
   }, []);
-
-  useEffect(() => {
-    onReviewStateChange?.(!sourceUrl ? "idle" : path ? "ready" : "pending");
-  }, [sourceUrl, path, onReviewStateChange]);
 
   useEffect(() => {
     if (!sourceUrl || !dimensions || !imageRef.current) {
@@ -132,21 +132,7 @@ export function EventImageUploadField({
     return () => window.clearTimeout(timer);
   }, [sourceUrl, dimensions, zoom, focalX, focalY]);
 
-  useEffect(() => {
-    if (!sourceUrl || path) return;
-    const form = rootRef.current?.closest("form");
-    if (!form) return;
-    const preventUnconfirmedImage = (event: SubmitEvent) => {
-      event.preventDefault();
-      setMessageKind("warning");
-      setMessage("Confirm the reviewed image before saving the event, or choose another image to remove it.");
-      rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    };
-    form.addEventListener("submit", preventUnconfirmedImage);
-    return () => form.removeEventListener("submit", preventUnconfirmedImage);
-  }, [sourceUrl, path]);
-
-  function clearPreparedUpload(text = "Adjust the crop, then confirm the image.") {
+  function clearPreparedUpload(text = "The updated crop will be uploaded when you save.") {
     if (!path) return;
     setPath("");
     setMessageKind("warning");
@@ -154,6 +140,7 @@ export function EventImageUploadField({
   }
 
   function resetSelection() {
+    onSelectionChange?.();
     selectionRef.current += 1;
     if (sourceUrlRef.current) URL.revokeObjectURL(sourceUrlRef.current);
     sourceUrlRef.current = "";
@@ -173,6 +160,7 @@ export function EventImageUploadField({
 
   async function chooseFile(file?: File) {
     if (!file) return;
+    onSelectionChange?.();
     if (!ALLOWED_TYPES.has(file.type) || file.size > MAXIMUM_FILE_SIZE) {
       resetSelection();
       setMessageKind("error");
@@ -209,6 +197,7 @@ export function EventImageUploadField({
     }
     if (selectionRef.current !== selection) return;
     imageRef.current = image;
+    onSelectionChange?.();
     setDimensions({ width: image.naturalWidth, height: image.naturalHeight });
     setMessage("");
   }
@@ -246,7 +235,15 @@ export function EventImageUploadField({
 
   async function confirmImage() {
     const image = imageRef.current;
-    if (!image) return;
+    if (!sourceUrl) {
+      if (currentImage) return "";
+      setMessageKind("error");
+      setMessage("Add an event image before saving.");
+      rootRef.current?.closest("details")?.setAttribute("open", "");
+      inputRef.current?.focus();
+      throw new Error("Add an event image before saving.");
+    }
+    if (!image) throw new Error("Please wait for the image preview to finish loading.");
     setUploading(true);
     setPath("");
     setMessageKind("status");
@@ -267,17 +264,21 @@ export function EventImageUploadField({
       const { createClient } = await import("@supabase/supabase-js");
       const client = createClient<Database>(url, key, { auth: { persistSession: false } });
       const { error } = await client.storage.from(intent.bucket).uploadToSignedUrl(intent.path, intent.token, file, { contentType: file.type });
-      if (error) throw new Error("Upload failed. Please confirm the image again.");
+      if (error) throw new Error("Upload failed. Please try saving again.");
       setPath(intent.path);
       setMessageKind("status");
-      setMessage("Image ready. Save the event to finish.");
+      setMessage("Image uploaded. Saving the event…");
+      return intent.path;
     } catch (error) {
       setMessageKind("error");
       setMessage(error instanceof Error ? error.message : "The image could not be prepared.");
+      throw error;
     } finally {
       setUploading(false);
     }
   }
+
+  useImperativeHandle(ref, () => ({ prepare: confirmImage }));
 
   async function copyPrompt() {
     try {
@@ -298,11 +299,11 @@ export function EventImageUploadField({
       <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/avif" disabled={uploading} onChange={(event) => void chooseFile(event.target.files?.[0])}/>
     </label>
     <input type="hidden" name="quarantine_path" value={path}/>
-    <p className="event-image-guidance">Recommended: a landscape 3:2 image, ideally 1800 × 1200px. Keep people, trains, logos and other important details within the centre of the image. Maximum 8MB.</p>
+    <p className="event-image-guidance">Required: a landscape image, ideally 1800 × 1200px or larger. Keep the subject centred with space around it for different screen sizes. Maximum 8MB. Your image uploads when you save.</p>
 
     {sourceUrl && dimensions && layout ? <div className="event-image-studio">
-      <section className="event-image-editor" aria-labelledby="event-image-editor-title">
-        <div className="event-image-section-heading"><div><span>1 · Adjust</span><h3 id="event-image-editor-title">Crop and position</h3></div><button type="button" onClick={resetCrop}><RotateCcw/>Reset</button></div>
+      <details className="event-image-editor"><summary>Adjust crop</summary>
+        <div className="event-image-section-heading"><div><span>1 · Adjust</span><h3>Crop and position</h3></div><button type="button" onClick={resetCrop}><RotateCcw/>Reset</button></div>
         <p>Drag the image or use the controls. Keep important details inside the dashed safe area.</p>
         <div
           className="event-image-crop"
@@ -325,27 +326,28 @@ export function EventImageUploadField({
           <label>Horizontal position <input type="range" min="0" max="100" value={focalX} disabled={!layout.overflowX} onChange={(event) => { clearPreparedUpload(); setFocalX(Number(event.currentTarget.value)); }}/></label>
           <label>Vertical position <input type="range" min="0" max="100" value={focalY} disabled={!layout.overflowY} onChange={(event) => { clearPreparedUpload(); setFocalY(Number(event.currentTarget.value)); }}/></label>
         </div>
-      </section>
+      </details>
 
-      <section className="event-image-preview-panel" aria-labelledby="event-image-preview-title">
-        <div className="event-image-section-heading"><div><span>2 · Review</span><h3 id="event-image-preview-title">Card preview</h3></div><div className="event-image-preview-tabs" aria-label="Preview size"><button type="button" aria-pressed={previewMode === "desktop"} onClick={() => setPreviewMode("desktop")}>Desktop</button><button type="button" aria-pressed={previewMode === "mobile"} onClick={() => setPreviewMode("mobile")}>Mobile</button></div></div>
+      <section className="event-image-preview-panel" aria-label="Event card preview">
+        <div className="event-image-section-heading"><div><span>2 · Review</span><h3>Card preview</h3></div><div className="event-image-preview-tabs" aria-label="Preview size"><button type="button" aria-pressed={previewMode === "desktop"} onClick={() => setPreviewMode("desktop")}>Desktop</button><button type="button" aria-pressed={previewMode === "mobile"} onClick={() => setPreviewMode("mobile")}>Mobile</button></div></div>
         <p>This uses the same centre-crop behaviour as the public event card.</p>
         <article className={`event-image-card-preview is-${previewMode}`}>
           <div className="event-image-card-media">{previewUrl ? <img src={previewUrl} alt=""/> : null}</div>
-          <div className="event-image-card-copy"><span>Members only</span><small>Saturday · 15:00</small><h4>{eventName.trim() || "Your event name"}</h4><p>Your event description will appear here beneath the reviewed image.</p><b>Explore membership →</b></div>
+          <div className="event-image-card-copy"><span>{preview.audience === "public" ? "Public event" : "Members only"}</span><small>{preview.date || "Choose a date"}{preview.endDate && preview.endDate !== preview.date ? ` – ${preview.endDate}` : ""} · {preview.startTime || "Start time"}{preview.endTime ? `–${preview.endTime}` : ""}</small><h4>{eventName.trim() || "Your event name"}</h4><p>{preview.description || "Add your event description."}</p><b>{preview.audience === "member_only" ? "Explore membership →" : preview.booking === "website" ? "Book your visit →" : "No booking needed"}</b></div>
         </article>
         <p className="event-image-dimensions">Original: {dimensions.width} × {dimensions.height}px · Output: {OUTPUT_WIDTH} × {OUTPUT_HEIGHT}px WebP</p>
         {warnings.length ? <ul className="event-image-warnings">{warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : <p className="event-image-quality"><Check/>The image proportions and resolution are suitable.</p>}
       </section>
 
-      <div className="event-image-actions"><button type="button" className="button outline" disabled={uploading} onClick={resetSelection}>Choose another image</button><button type="button" className="button dark" disabled={uploading} onClick={() => void confirmImage()}><Crop/>{uploading ? "Preparing image…" : path ? "Image confirmed" : "Use this image"}</button></div>
+      <div className="event-image-actions"><button type="button" className="button outline" disabled={uploading} onClick={resetSelection}>Discard selected image</button></div>
     </div> : currentImage ? <div className="event-image-current"><div><span>Current image</span><small>Select a replacement to open the crop and preview tools.</small></div><img src={currentImage} alt="Current event artwork"/></div> : null}
 
     {message ? <p className={`event-image-message is-${messageKind}`} role={messageKind === "error" ? "alert" : "status"}>{message}</p> : null}
 
     <details className="event-image-ai-help">
       <summary>Need help creating an image?</summary>
-      <p>Copy this prompt into an image generator. Review the result carefully before uploading it.</p>
+      <p>Download the club logo and attach it to your image generator, then copy this prompt. The prompt includes your event title and asks for the official logo in the artwork. Check the title, logo and crop before uploading the result.</p>
+      <a className="button outline" href="/ydsme-logo.png" download="york-model-engineers-logo.png">Download club logo</a>
       <textarea readOnly value={aiPrompt} rows={7} aria-label="AI image generator prompt"/>
       <button type="button" onClick={() => void copyPrompt()}>{copied ? <Check/> : <Copy/>}{copied ? "Prompt copied" : "Copy AI prompt"}</button>
     </details>
