@@ -1,43 +1,17 @@
-import { Banknote, Pencil, Plus, Settings as SettingsIcon, Trash2, UsersRound } from "lucide-react";
+import { Banknote, Settings as SettingsIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 import { requireCapability } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  deleteCommittee,
-  saveCommittee,
   saveSiteConfig,
 } from "@/lib/actions/content";
 import { saveMembershipPaymentSettings } from "@/lib/actions/membership";
-import { SignedUploadField } from "@/app/components/SignedUploadField";
 import { EditableLinkLists } from "@/app/components/EditableLinkLists";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { PortalPagination } from "@/app/components/PortalPagination";
 import { PortalTabs } from "@/app/components/PortalTabs";
 import { membershipAdministrationEnabled } from "@/lib/features";
 
 export const dynamic = "force-dynamic";
-
-type Committee = {
-  id: number;
-  name: string;
-  title: string;
-  email: string;
-  file_url: string;
-};
-
-function CommitteeForm({ person }: { person?: Committee }) {
-  return (
-    <form action={saveCommittee} className="editor-form">
-      {person ? <input type="hidden" name="id" value={person.id} /> : null}
-      <label>Name (blank if vacant)<input name="name" defaultValue={person?.name} /></label>
-      <label>Position<input name="title" defaultValue={person?.title} required /></label>
-      <label>Email<input type="email" name="email" defaultValue={person?.email} required /></label>
-      <SignedUploadField kind="committee-image" label={person ? "Replace portrait (optional)" : "Portrait (optional)"} />
-      <input type="hidden" name="file_url" value={person?.file_url || ""} />
-      <PendingSubmitButton className="button dark">Save committee record</PendingSubmitButton>
-    </form>
-  );
-}
 
 export default async function Settings({
   searchParams,
@@ -46,20 +20,14 @@ export default async function Settings({
 }) {
   const [query] = await Promise.all([searchParams, requireCapability("settings.manage")]);
   if (query.tab === "donations" || query.notice === "donations-saved") redirect("/admin/donations?view=appeals");
+  if (query.tab === "committee") redirect("/admin/people?tab=committee");
   const admin = createAdminClient();
   const membershipEnabled = membershipAdministrationEnabled();
-  const availableTabs = ["committee", ...(membershipEnabled ? ["membership"] : []), "site"];
-  const requestedTab = availableTabs.includes(query.tab || "") ? query.tab! : "committee";
+  const availableTabs = [...(membershipEnabled ? ["membership"] : []), "site"];
+  const requestedTab = availableTabs.includes(query.tab || "") ? query.tab! : "site";
   const tab = query.notice === "membership-payment-settings-saved" && membershipEnabled ? "membership"
       : query.notice === "config-saved" ? "site" : requestedTab;
-  const committeePageSize = 8;
-  const requestedPage = Number.parseInt(query.page || "1", 10);
-  const currentPage = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-  const committeeQuery = tab === "committee"
-    ? admin.from("committees").select("id,name,title,email,file_url", { count: "exact" }).order("id").range((currentPage - 1) * committeePageSize, currentPage * committeePageSize - 1)
-    : admin.from("committees").select("id", { count: "exact", head: true });
-  const [committeeResult, configResult, socialResult, affiliateResult, membershipPaymentResult] = await Promise.all([
-    committeeQuery,
+  const [configResult, socialResult, affiliateResult, membershipPaymentResult] = await Promise.all([
     admin
       .from("configs")
       .select("id,short_name,full_name,registered_name,company_no,website,email,telephone,club_address,registered_address")
@@ -73,14 +41,10 @@ export default async function Settings({
         .eq("active", true).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
-  if (committeeResult.error || configResult.error || socialResult.error || affiliateResult.error || membershipPaymentResult.error || !configResult.data || (membershipEnabled && tab === "membership" && !membershipPaymentResult.data)) {
+  if (configResult.error || socialResult.error || affiliateResult.error || membershipPaymentResult.error || !configResult.data || (membershipEnabled && tab === "membership" && !membershipPaymentResult.data)) {
     throw new Error("Unable to load Society settings.");
   }
   const config = configResult.data;
-  const people = ((committeeResult.data ?? []) as unknown) as Committee[];
-  const committeeCount = committeeResult.count ?? 0;
-  const committeePages = Math.max(1, Math.ceil(committeeCount / committeePageSize));
-  if (tab === "committee" && currentPage > committeePages) redirect(`/settings?tab=committee&page=${committeePages}`);
   const clubAddress = config.club_address as Record<string, string>;
   const registeredAddress = config.registered_address as Record<string, string>;
   const socialData = (socialResult.data ?? []) as Array<{ name: string; url: string; position: number }>;
@@ -94,8 +58,8 @@ export default async function Settings({
       <header className="portal-heading">
         <div>
           <p className="eyebrow dark">Administrator only</p>
-          <h1>Committee &amp; site</h1>
-          <p>Maintain the Society record, public links and committee roster in focused workspaces.</p>
+          <h1>Site settings</h1>
+          <p>Maintain Society information, public links and payment settings.</p>
         </div>
         <span className="count-badge"><SettingsIcon/>Site administration</span>
       </header>
@@ -104,8 +68,7 @@ export default async function Settings({
       {query.notice ? <p className="form-message success">{query.notice === "membership-payment-settings-saved" ? "Membership payment instructions saved as a new version."
           : "Society settings saved."}</p> : null}
 
-      <PortalTabs label="Committee and site settings" tabs={[
-        { href: "/settings?tab=committee", label: "Committee roster", count: committeeCount, current: tab === "committee" },
+      <PortalTabs label="Site settings" tabs={[
         ...(membershipEnabled ? [{ href: "/settings?tab=membership", label: "Membership payments", current: tab === "membership" }] : []),
         { href: "/settings?tab=site", label: "Society & links", current: tab === "site" },
       ]}/>
@@ -182,37 +145,7 @@ export default async function Settings({
         </form>
       </section> : null}
 
-      {tab === "committee" ? <section className="committee-settings-panel">
-        <div className="settings-panel-heading committee-panel-heading"><div><span>Public officers</span><h2>Committee roster</h2><p>Maintain the people and vacant positions shown on the public committee page.</p></div><span className="count-badge"><UsersRound/>{committeeCount} positions</span></div>
-        <details className="manager-panel">
-          <summary><Plus />Add a committee position</summary>
-          <CommitteeForm />
-        </details>
 
-        <div className="admin-list committee-admin-list">
-        {people.map((person) => (
-          <article key={person.id}>
-            <div>
-              <span>{person.title}</span>
-              <h2>{person.name || "Position vacant"}</h2>
-              <p>{person.email}</p>
-            </div>
-            <div className="admin-list-actions">
-              <details>
-                <summary><Pencil />Edit</summary>
-                <div className="popover-editor"><CommitteeForm person={person} /></div>
-              </details>
-              <form action={deleteCommittee}>
-                <input type="hidden" name="id" value={person.id} />
-                <PendingSubmitButton pendingLabel="Deleting…"><Trash2 />Delete</PendingSubmitButton>
-              </form>
-            </div>
-          </article>
-        ))}
-        </div>
-        {!people.length ? <div className="empty-state"><UsersRound/><h2>No committee positions</h2><p>Add the first public Society position above.</p></div> : null}
-        <PortalPagination currentPage={currentPage} totalPages={committeePages} totalItems={committeeCount} itemLabel="positions" href={(page) => `/settings?tab=committee&page=${page}`} ariaLabel="Committee roster pages"/>
-      </section> : null}
     </div>
   );
 }

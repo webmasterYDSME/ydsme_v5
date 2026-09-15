@@ -26,7 +26,6 @@ import {
   resolveMembershipPaymentReview,
   resolveHonoraryPaymentConflict,
   revokeHonoraryMembership,
-  setMembershipOfficer,
   stageMemberMojoCutover,
   updateMembershipPlan,
 } from "@/lib/actions/membership";
@@ -103,7 +102,7 @@ export default async function MembershipAdministration({ searchParams }: { searc
   const admin = createServiceClient();
   const [
     applicationResult, memberResult, planResult, priceResult, honoraryResult,
-    failureResult, reviewResult, committeeResult, capabilityResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult,
+    failureResult, reviewResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult,
     checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult, renewalTransitionResult, renewalTermResult,
   ] = await Promise.all([
     admin.from("membership_applications")
@@ -115,8 +114,6 @@ export default async function MembershipAdministration({ searchParams }: { searc
     admin.from("honorary_memberships").select("id,member_id,status,effective_from,reason,revoked_effective_on").in("status", ["scheduled", "active"]).order("effective_from"),
     admin.from("membership_notifications").select("id,member_id,application_id,title,recipient_email,email_attempts,last_email_error,created_at").eq("email_status", "failed").order("created_at", { ascending: false }).limit(50),
     admin.from("membership_migration_reviews").select("id,review_kind,summary,status,membership_record_id").eq("status", "pending").order("created_at").limit(100),
-    admin.from("user_roles").select("user_id,role,users(full_name,email)").eq("role", "committee"),
-    admin.from("user_capabilities").select("user_id").eq("capability", "memberships.manage"),
     admin.from("membership_terms").select("id,member_id,membership_year,amount_due_pence,amount_paid_pence,status")
       .eq("status", "payment_review").order("updated_at"),
     admin.from("membership_notifications").select("id,member_id,title,body,created_at")
@@ -150,7 +147,7 @@ export default async function MembershipAdministration({ searchParams }: { searc
       .select("member_id,membership_year,status,amount_due_pence,amount_paid_pence,source")
       .gte("membership_year", new Date().getUTCFullYear()).lte("membership_year", new Date().getUTCFullYear() + 1),
   ]);
-  const results = [applicationResult, memberResult, planResult, priceResult, honoraryResult, failureResult, reviewResult, committeeResult, capabilityResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult, checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult, renewalTransitionResult, renewalTermResult];
+  const results = [applicationResult, memberResult, planResult, priceResult, honoraryResult, failureResult, reviewResult, paymentReviewResult, honoraryConflictResult, manualContactResult, pendingOfflineResult, checkoutProblemResult, checkoutAttemptResult, webhookFailureResult, providerCommandResult, deliveryProblemResult, studentRequestResult, renewalTransitionResult, renewalTermResult];
   if (results.some((result) => result.error)) throw new Error("Unable to load membership administration.");
   const { data: reportExports, error: reportError } = await admin.from("membership_report_exports")
     .select("id,status,storage_path,row_counts,financial_totals,created_at,completed_at,expires_at,last_error")
@@ -235,7 +232,6 @@ export default async function MembershipAdministration({ searchParams }: { searc
     };
   }));
   const planMap = new Map(plans.map((plan) => [plan.id, plan]));
-  const officerIds = new Set((capabilityResult.data ?? []).map((item) => item.user_id));
   const selectedMemberId = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(query.member || "") ? query.member! : null;
   const [historyTermsResult, historyHonoraryResult] = selectedMemberId
     ? await Promise.all([
@@ -345,11 +341,7 @@ export default async function MembershipAdministration({ searchParams }: { searc
       <form action={correctMemberEligibility} className="editor-form"><input type="hidden" name="member_id" value={selectedMemberId}/><h3>Correct the date of birth</h3><p className="form-help">Use this only when the saved date is wrong. The reason is kept in the member’s history.</p><label>Date of birth<input type="date" name="date_of_birth" defaultValue={memberMap.get(selectedMemberId)?.date_of_birth || ""} required/></label><label>Reason for the change<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save corrected date</PendingSubmitButton></form><div className="membership-queue-list">{(historyTermsResult.data ?? []).map((term) => <article key={term.id}><div><strong>{term.membership_year} · {memberStateName(term.status)}</strong><span>{term.amount_paid_pence === term.amount_due_pence ? money(term.amount_paid_pence) : `${money(term.amount_paid_pence)} paid of ${money(term.amount_due_pence)}`}</span><small>{term.starts_on} to {term.ends_on}</small></div><div>{(historyPaymentsResult.data ?? []).filter((payment) => payment.term_id === term.id).map((payment) => { const actor = Array.isArray(payment.administrative_actors) ? payment.administrative_actors[0] : payment.administrative_actors; return <div key={payment.id}><p>{paymentMethodName(payment.method)} · {payment.status.replaceAll("_", " ")} · {money(payment.amount_pence)}{payment.refunded_pence ? ` · ${money(payment.refunded_pence)} refunded` : ""}{payment.offline_reference ? ` · reference ${payment.offline_reference}` : ""}{actor ? ` · recorded by ${actor.display_name} (${actor.reference_code})` : ""}</p>{payment.method !== "stripe" && payment.status === "paid" ? <details><summary>Report a returned or reversed payment</summary><form action={reportOfflineMembershipPaymentFailure} className="stack-form"><input type="hidden" name="payment_id" value={payment.id}/><label>What happened?<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="danger-button" pendingLabel="Saving…">Send payment for checking</PendingSubmitButton></form></details> : null}</div>; })}</div></article>)}{(historyHonoraryResult.data ?? []).map((honorary) => <article key={honorary.id}><div><strong>Lifetime honorary · {honorary.status}</strong><span>Starts {honorary.effective_from}{honorary.revoked_effective_on ? ` · changes ${honorary.revoked_effective_on}` : ""}</span><small>{honorary.reason}{honorary.revocation_reason ? ` · ${honorary.revocation_reason}` : ""}</small></div></article>)}{!(historyTermsResult.data?.length || historyHonoraryResult.data?.length) ? <div className="membership-empty-state"><CreditCard/><strong>No history yet</strong><p>No membership or payment history has been recorded.</p></div> : null}</div>
     </MembershipAdminSection> : null}
 
-    {role === "administrator" ? <MembershipAdminSection id="officer-access" eyebrow="Team access" title="Membership management access" description="Choose which committee members can add members, approve applications and record payments." icon={<UserCheck/>} defaultOpen={sectionOpen("officer-access")}><div className="membership-queue-list">{(committeeResult.data ?? []).map((row) => {
-      const user = Array.isArray(row.users) ? row.users[0] : row.users;
-      const enabled = officerIds.has(row.user_id);
-      return <article key={row.user_id}><div><strong>{user?.full_name || user?.email || "Committee member"}</strong><span>{enabled ? "Can manage memberships" : "Cannot manage memberships"}</span></div><form action={setMembershipOfficer}><input type="hidden" name="user_id" value={row.user_id}/><input type="hidden" name="enabled" value={enabled ? "false" : "true"}/><PendingSubmitButton pendingLabel="Updating…">{enabled ? "Remove membership access" : "Give membership access"}</PendingSubmitButton></form></article>;
-    })}</div></MembershipAdminSection> : null}
+    {role === "administrator" && <p className="event-step-help">Roles and Membership Officer permissions are managed in <Link href="/admin/members">People</Link>.</p>}
 
     {deliveryProblemCount ? <MembershipAdminSection id="email-failures" className="membership-attention-section" eyebrow="Email needs attention" title="Emails that need checking" description="Correct an address, retry delivery, or contact the member another way when necessary." icon={<BellRing/>} defaultOpen={sectionOpen("email-failures")}><div className="membership-queue-list">{!emailConfigurationReady ? <article><div><strong>Membership emails are not fully set up</strong><p>Ask the website administrator to finish the email setup before launch.</p></div></article> : null}{(failureResult.data ?? []).map((failure) => <article key={failure.id}><div><strong>{failure.title}</strong><span>{failure.recipient_email} · {failure.email_attempts} attempts</span><small>The email could not be delivered.</small>{failure.last_email_error ? <details><summary>Technical details</summary><small>{failure.last_email_error}</small></details> : null}{failure.member_id ? <Link href={`/admin/memberships?member=${failure.member_id}&section=member-history#member-history`}>Correct this member’s contact details</Link> : null}</div><form action={retryMembershipNotification}><input type="hidden" name="notification_id" value={failure.id}/><PendingSubmitButton pendingLabel="Requesting retry…">Retry email</PendingSubmitButton></form></article>)}{(deliveryProblemResult.data ?? []).map((failure) => <article key={failure.id}><div><strong>{failure.event_type === "bounced" ? "Email address could not receive messages" : failure.event_type === "complained" ? "Recipient reported unwanted email" : "Email delivery was stopped"}</strong><p>{failure.event_type === "bounced" ? "The address could not receive this email." : failure.event_type === "complained" ? "The recipient marked a membership email as unwanted." : "The email service has stopped sending to this address."}</p><small>{new Date(failure.occurred_at).toLocaleString("en-GB")}</small></div></article>)}</div></MembershipAdminSection> : null}
 

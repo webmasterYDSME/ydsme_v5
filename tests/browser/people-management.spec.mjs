@@ -1,0 +1,130 @@
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { expect, test } from "@playwright/test";
+import { readLocalSupabaseEnvironment } from "../local-supabase.mjs";
+
+test("People consolidates account permissions and explicit committee publication", async ({ page }) => {
+  test.skip(process.env.JOURNEY_PEOPLE_TESTS !== "true", "Requires local Supabase.");
+  const local = readLocalSupabaseEnvironment("People management");
+  const admin = createClient(local.API_URL, local.SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const anon = createClient(local.API_URL, local.ANON_KEY, { auth: { persistSession: false } });
+  const suffix = randomUUID();
+  const name = `People test ${suffix.slice(0,8)}`;
+  const email = `people-admin-${suffix}@example.test`;
+  const password = `People-${suffix}!`;
+  const userIds = [];
+  const positions = [`Secretary ${suffix}`, `Vacant ${suffix}`];
+  try {
+    for (const [mail, fullName, role] of [[email, "People test administrator", "administrator"], [`people-member-${suffix}@example.test`, name, "member"]]) {
+      const { data, error } = await admin.auth.admin.createUser({ email: mail, password, email_confirm: true, user_metadata: { full_name: fullName } });
+      expect(error).toBeNull();
+      userIds.push(data.user.id);
+      expect((await admin.from("users").update({ membership_status: "active" }).eq("id", data.user.id)).error).toBeNull();
+      expect((await admin.from("user_roles").upsert({ user_id: data.user.id, role }, { onConflict: "user_id" })).error).toBeNull();
+    }
+    const [actorId, targetId] = userIds;
+    const input = { user_id: targetId, expected_role: "member", role: "committee", officer: true, has_listing: false };
+    expect((await anon.rpc("save_people_management", { p_actor_id: actorId, p_input: input })).error).not.toBeNull();
+    expect((await admin.rpc("save_people_management", { p_actor_id: targetId, p_input: input })).error.message).toContain("Administrator");
+    expect((await admin.rpc("save_people_management", { p_actor_id: actorId, p_input: { ...input, user_id: actorId, expected_role: "administrator" } })).error.message).toContain("own role");
+    // A failed listing update must leave the role and grant unchanged.
+    expect((await admin.rpc("save_people_management", { p_actor_id: actorId, p_input: { ...input, listing_id: 2147483647, listing_updated_at: new Date().toISOString() } })).error).not.toBeNull();
+    expect((await admin.from("user_roles").select("role").eq("user_id", targetId).single()).data.role).toBe("member");
+
+    await page.goto("/signin?method=password&next=%2Fadmin%2Fmembers");
+    const signIn = page.locator(".auth-flip-back form");
+    await signIn.locator('[name="email"]').fill(email);
+    await signIn.locator('[name="password"]').fill(password);
+    await signIn.getByRole("button", { name: /Sign in securely/ }).click();
+    await page.waitForURL("**/admin/members");
+    await page.goto(`/admin/members?q=${encodeURIComponent(name)}`);
+    const row = page.locator(".member-row").filter({ hasText: name });
+    await row.getByRole("button", { name: "Manage member", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("combobox", { name: "Website role" }).selectOption("committee");
+    await dialog.getByRole("checkbox", { name: /Grant Membership Officer/ }).check();
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(row).toContainText("Membership Officer");
+    expect((await admin.from("committees").select("id").eq("user_id", targetId)).data).toHaveLength(0);
+    await row.getByRole("button", { name: "Manage member" }).click();
+    await dialog.getByRole("checkbox", { name: /Include a committee position/ }).check();
+    await dialog.getByLabel("Position", { exact: true }).fill(positions[0]);
+    await expect(dialog.getByLabel("Public name (blank if vacant)", { exact: true })).toHaveValue(name);
+    await dialog.getByLabel("Public name (blank if vacant)", { exact: true }).fill(`${name} public`);
+    await dialog.getByLabel("Public contact email (optional)", { exact: true }).fill("secretary@example.test");
+    await dialog.getByLabel("Display order", { exact: true }).fill("20");
+    await expect(dialog.getByRole("checkbox", { name: /Show on the public/ })).not.toBeChecked();
+    page.once("dialog", confirmation => confirmation.dismiss());
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(dialog.locator(".editor-dialog-header>button")).toHaveCSS("width", "42px");
+    await page.screenshot({ path: "/tmp/ydsme-people-desktop.png" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(dialog.getByRole("button", { name: "Save changes" })).toBeInViewport();
+    expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.screenshot({ path: "/tmp/ydsme-people-mobile.png" });
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    const hidden = await admin.from("committees").select("*").eq("user_id", targetId).single();
+    expect(hidden.error).toBeNull();
+    expect(hidden.data.is_public).toBe(false);
+    expect((await anon.from("public_committee_roster").select("id").eq("id", hidden.data.id)).data).toHaveLength(0);
+    expect((await anon.from("committees").select("id,name,email").eq("id", hidden.data.id)).data).toHaveLength(0);
+
+    await page.goto("/admin/people?tab=committee");
+    const card = page.getByRole("article").filter({ hasText: positions[0] });
+    await card.getByRole("button", { name: "Manage", exact: true }).click();
+    await expect(dialog.getByLabel("Position", { exact: true })).toHaveValue(positions[0]);
+    await expect(dialog.getByRole("combobox", { name: "Linked account" })).toHaveValue(targetId);
+    await expect(dialog.getByRole("combobox", { name: "Website role" })).toHaveCount(0);
+    await expect(dialog.getByRole("checkbox")).toHaveCount(1);
+    await dialog.getByRole("checkbox", { name: /Show on the public/ }).check();
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(card).toContainText("Public");
+    expect((await anon.from("public_committee_roster").select("id").eq("id", hidden.data.id)).data).toHaveLength(1);
+
+    await page.getByRole("button", { name: "Add committee position", exact: true }).click();
+    await dialog.getByRole("combobox", { name: "Linked account" }).selectOption(targetId);
+    await expect(dialog.getByLabel("Public name (blank if vacant)", { exact: true })).toHaveValue(name);
+    await dialog.getByLabel("Public name (blank if vacant)", { exact: true }).fill("");
+    await expect(dialog.getByRole("checkbox")).toHaveCount(1);
+    await expect(dialog.getByRole("combobox", { name: "Website role" })).toHaveCount(0);
+    await dialog.getByRole("combobox", { name: "Linked account" }).selectOption("");
+    await dialog.getByLabel("Position", { exact: true }).fill(positions[1]);
+    await dialog.getByLabel("Display order", { exact: true }).fill("10");
+    await dialog.getByRole("checkbox", { name: /Show on the public/ }).check();
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole("heading", { name: positions[1], exact: true })).toBeVisible();
+    const vacancy = await admin.from("committees").select("*").eq("title", positions[1]).single();
+    expect(vacancy.data.name).toBe("");
+    expect(vacancy.data.user_id).toBeNull();
+
+    await page.goto(`/admin/members?q=${encodeURIComponent(name)}`);
+    await row.getByRole("button", { name: "Manage member", exact: true }).click();
+    await dialog.getByRole("combobox", { name: "Website role" }).selectOption("member");
+    await expect(dialog).toContainText("hide and unlink all committee listings");
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).not.toBeVisible();
+    await page.goto("/admin/people?tab=committee");
+    await expect(card).toContainText("Hidden");
+    expect((await admin.from("user_roles").select("role").eq("user_id", targetId).single()).data.role).toBe("member");
+    expect((await admin.from("user_capabilities").select("user_id").eq("user_id", targetId)).data).toHaveLength(0);
+    const removed = await admin.from("committees").select("is_public,user_id").eq("id", hidden.data.id).single();
+    expect(removed.data).toEqual({ is_public: false, user_id: null });
+    expect((await anon.from("public_committee_roster").select("id").eq("id", hidden.data.id)).data).toHaveLength(0);
+    expect((await admin.from("audit_logs").select("id").eq("actor_user_id", actorId).eq("action", "people.management-updated")).data.length).toBeGreaterThanOrEqual(5);
+    await page.goto("/settings?tab=committee");
+    await page.waitForURL("**/admin/people?tab=committee");
+    await page.goto("/settings");
+    await expect(page.getByRole("heading", { name: "Site settings", exact: true })).toBeVisible();
+    await expect(page.getByText("Committee roster", { exact: true })).toHaveCount(0);
+  } finally {
+    await admin.from("committees").delete().in("title", positions);
+    await admin.from("audit_logs").delete().in("actor_user_id", userIds);
+    for (const id of userIds.reverse()) await admin.auth.admin.deleteUser(id);
+  }
+});

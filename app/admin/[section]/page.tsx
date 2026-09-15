@@ -1,7 +1,9 @@
+import { MemberAccessDialog } from "@/app/components/MemberAccessDialog";
+import { InviteMemberDialog } from "@/app/components/InviteMemberDialog";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { format, parseISO } from "date-fns";
-import { Archive, CalendarDays, Download, MailCheck, Megaphone, RotateCcw, Search, Trash2, UserPlus, UsersRound, UserX, Wrench } from "lucide-react";
+import { Archive, CalendarDays, Download, MailCheck, Megaphone, RotateCcw, Search, Trash2, UsersRound, Wrench } from "lucide-react";
 import { hasCapability, requireUser } from "@/lib/auth";
 import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import {
@@ -9,17 +11,13 @@ import {
   archiveAnnouncement,
   deleteOldArchivedAnnouncements,
   deleteEvent,
-  deleteMember,
   deleteWorkshop,
-  inviteMember,
   purgeMember,
   restoreEvent,
   restoreAnnouncement,
   restoreMember,
   restoreWorkshop,
   retryWorkshopReservationEmail,
-  suspendMember,
-  updateMemberRole,
 } from "@/lib/actions/content";
 import { safeSearchTerm } from "@/lib/security-input";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
@@ -27,6 +25,8 @@ import { WorkshopEditorDialog, type WorkshopEditorRecord } from "@/app/component
 import { AnnouncementEditorDialog } from "@/app/components/AnnouncementEditorDialog";
 import { EventEditorDialog, type EventEditorRecord } from "@/app/components/EventEditorDialog";
 import { PortalPagination } from "@/app/components/PortalPagination";
+import { PeopleEditorDialog, type CommitteeListing } from "@/app/components/PeopleEditorDialog";
+import type { AppRole } from "@/lib/auth";
 import { PortalTabs } from "@/app/components/PortalTabs";
 import { eventImage } from "@/lib/data";
 import { membershipAdministrationEnabled } from "@/lib/features";
@@ -262,38 +262,43 @@ export default async function AdminSection({ params, searchParams }: { params: P
     redirect(`/admin/members?${canonical}`);
   }
   const ids = (users ?? []).map(member => member.id);
-  const [rolesResult, committeeResult, membershipHoldResult, canonicalMemberResult] = ids.length
+  const [rolesResult, committeeResult, membershipHoldResult, canonicalMemberResult, officerResult] = ids.length
     ? await Promise.all([
       admin.from("user_roles").select("user_id,role").in("user_id", ids),
-      admin.from("committees").select("user_id").in("user_id", ids),
+      canonical.from("committees").select("id,name,title,email,file_url,user_id,is_public,position,updated_at").in("user_id", ids).order("position").order("id"),
       admin.from("membership_records").select("auth_user_id").in("auth_user_id", ids).eq("legal_hold", true),
       membershipEnabled
         ? canonical.from("members").select("id,auth_user_id,effective_state").in("auth_user_id", ids)
         : Promise.resolve({ data: [], error: null }),
+      canonical.from("user_capabilities").select("user_id").in("user_id", ids).eq("capability", "memberships.manage"),
     ])
-    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
-  if (rolesResult.error || committeeResult.error || membershipHoldResult.error || canonicalMemberResult.error) throw new Error("Unable to load member retention dependencies.");
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+  if (officerResult.error || rolesResult.error || committeeResult.error || membershipHoldResult.error || canonicalMemberResult.error) throw new Error("Unable to load member retention dependencies.");
   const roles = rolesResult.data;
   const roleMap = new Map((roles ?? []).map(item => [item.user_id, item.role]));
   const committeeUserIds = new Set((committeeResult.data ?? []).flatMap(item => item.user_id ? [item.user_id] : []));
   const membershipHoldUserIds = new Set((membershipHoldResult.data ?? []).flatMap(item => item.auth_user_id ? [item.auth_user_id] : []));
+  const officerIds = new Set((officerResult.data ?? []).map(item => item.user_id));
+  const listings = (committeeResult.data ?? []) as CommitteeListing[];
   const canonicalMemberMap = new Map((canonicalMemberResult.data ?? []).flatMap(item => item.auth_user_id ? [[item.auth_user_id, item]] : []));
   const pageHref = (value: number) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status, page: String(value) })}`;
-  const memberTabHref = (value: string) => `/admin/members?${new URLSearchParams({ ...(search ? { q: search } : {}), status: value })}`;
-  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Committee register</p><h1>Members</h1><p>Review member contact details and website access. Membership officers can suspend or archive ordinary member accounts; administrators control invitations, roles and restoration.</p></div><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
-    {administrator ? <details className="manager-panel"><summary><UserPlus/>Invite a member</summary><form action={inviteMember} className="editor-form"><label>Full name<input name="full_name" required/></label><label>Email address<input type="email" name="email" required/></label><PendingSubmitButton className="button dark" pendingLabel="Sending invitation…">Send secure invitation</PendingSubmitButton></form></details> : null}
-    <PortalTabs label="Member status" tabs={[
-      { href: memberTabHref("active"), label: "Active", count: activeResult.count ?? 0, current: status === "active" },
-      ...(membershipEnabled ? [
-        { href: memberTabHref("honorary"), label: "Honorary", count: honoraryUserIds.length, current: status === "honorary" },
-        { href: memberTabHref("lapsed"), label: "Lapsed", count: lapsedResult.count ?? 0, current: status === "lapsed" },
-      ] : []),
-      { href: memberTabHref("suspended"), label: "Suspended", count: suspendedResult.count ?? 0, current: status === "suspended" },
-      { href: memberTabHref("archived"), label: "Archived", count: archivedResult.count ?? 0, current: status === "archived" },
-    ]}/>
-    <form className="portal-filter-panel" method="get"><input type="hidden" name="status" value={status}/><div className="portal-filter-heading"><div><h2>Find a member</h2><p>Search the selected status by name, email address or telephone number.</p></div>{administrator || (membershipEnabled && session.membershipOfficer) ? <div className="bulk-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator ? <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link> : null}</div> : null}</div><div className="portal-filter-grid"><label className="portal-filter-search">Member details<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label><button className="button dark" type="submit">Search members</button>{search ? <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear search</Link> : null}</div></form>
-    <div className="member-table">
-      <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Role</span><span>Actions</span></div>
+  return <div className="portal-content"><header className="portal-heading"><div><p className="eyebrow dark">Accounts and access</p><h1>{administrator ? "People" : "Members"}</h1></div><div className="people-heading-actions"><span className="count-badge"><UsersRound/>{count ?? 0} {status}</span>{administrator && <InviteMemberDialog/>}</div></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{notice ? <p className="form-message success">{notice}</p> : null}
+    {administrator && <PortalTabs label="People" tabs={[{ href: "/admin/members", label: "Members", current: true }, { href: "/admin/people?tab=committee", label: "Committee", current: false }]}/>}
+    <form className="portal-filter-panel people-filter-panel" method="get">
+      <div className="people-filter-fields">
+        <label className="portal-filter-search">Find a member<span><Search/><input name="q" defaultValue={search} placeholder="Name, email or phone" autoComplete="off"/></span></label>
+        <label>Status<select name="status" defaultValue={status}>
+          <option value="active">Active ({activeResult.count ?? 0})</option>
+          {membershipEnabled && <><option value="honorary">Honorary ({honoraryUserIds.length})</option><option value="lapsed">Lapsed ({lapsedResult.count ?? 0})</option></>}
+          <option value="suspended">Suspended ({suspendedResult.count ?? 0})</option><option value="archived">Archived ({archivedResult.count ?? 0})</option>
+        </select></label>
+        <button className="button dark" type="submit">Search members</button>
+        {search && <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear</Link>}
+      </div>
+      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator && <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link>}</div>}
+    </form>
+    <div className={`member-table people-member-table ${status === "active" || status === "honorary" ? "people-active-table" : ""}`}>
+      <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Website access</span>{status !== "active" && status !== "honorary" && <span>Actions</span>}</div>
       {(users ?? []).map(member => {
         const memberRole = roleMap.get(member.id) || "member";
         const canChangeThisStatus = canManageMemberStatus && (administrator || memberRole === "member");
@@ -308,16 +313,17 @@ export default async function AdminSection({ params, searchParams }: { params: P
             {member.membership_status === "archived" && (memberRole !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}
           </div>
           <div className="member-contact"><span className="member-cell-label">Contact details</span><a href={`mailto:${member.email}`}>{member.email}</a><small>{member.contact_number || "No telephone number"}</small></div>
-          {administrator ? <form className="member-role-form" action={updateMemberRole}>
-            <input type="hidden" name="user_id" value={member.id}/>
-            <label><span className="member-cell-label">Website access level</span><select aria-label={`Role for ${member.full_name || member.email}`} name="role" defaultValue={memberRole} disabled={member.membership_status !== "active"}><option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option></select></label>
-            <PendingSubmitButton className="member-save-role" disabled={member.membership_status !== "active"}>Save role</PendingSubmitButton>
-          </form> : <div className="member-role-form member-role-readonly"><span className="member-cell-label">Website access level</span><strong>{memberRole === "administrator" ? "Administrator" : memberRole === "committee" ? "Committee" : "Member"}</strong></div>}
-          <div className="member-actions">
-            <span className="member-cell-label">Sign-in access</span>
-            {member.membership_status === "active" ? canChangeThisStatus ? <div className="member-action-group"><form action={suspendMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button suspend-button" pendingLabel="Suspending…"><UserX/>Suspend access</PendingSubmitButton></form><form action={deleteMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button archive-button" pendingLabel="Archiving…"><Archive/>Archive member</PendingSubmitButton></form></div> : <p>Read-only access.</p> : member.membership_status === "lapsed" ? <p>Renewal is required before website access is restored.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is in progress; restoration is temporarily unavailable.</p> : administrator ? <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form> : <p>Only an administrator can restore access.</p>}
-            {administrator && member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>This record is under a legal hold and cannot be deleted.</p> : (memberRole !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}
+          <div className="member-role-form member-role-readonly"><span className="member-cell-label">Website access level</span><strong>{memberRole === "administrator" ? "Administrator" : memberRole === "committee" ? "Committee" : "Member"}</strong>
+            {memberRole === "committee" && officerIds.has(member.id) && <small>Membership Officer</small>}
+            {administrator && member.membership_status === "active" && <PeopleEditorDialog member={{ id: member.id, full_name: member.full_name, email: member.email, role: memberRole as AppRole, officer: officerIds.has(member.id) }} listing={listings.find(item => item.user_id === member.id)} actorId={session.user.id} membershipEnabled={membershipEnabled} manageAccess/>}
+            {!administrator && canChangeThisStatus && member.membership_status === "active" && member.id !== session.user.id && <MemberAccessDialog userId={member.id} name={member.full_name || member.email}/>}
+            {administrator && listings.filter(item => item.user_id === member.id).length > 1 && <Link href="/admin/people?tab=committee">All committee positions</Link>}
           </div>
+          {member.membership_status !== "active" && <div className="member-actions">
+            <span className="member-cell-label">Sign-in access</span>
+            {member.membership_status === "lapsed" ? <p>Renewal is required before website access is restored.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is in progress; restoration is temporarily unavailable.</p> : administrator ? <form action={restoreMember}><input type="hidden" name="user_id" value={member.id}/><PendingSubmitButton className="member-action-button restore-button" pendingLabel="Restoring…"><RotateCcw/>Restore member</PendingSubmitButton></form> : <p>Only an administrator can restore access.</p>}
+            {administrator && member.membership_status === "archived" ? <details><summary>Permanent deletion</summary>{member.legal_hold || membershipHoldUserIds.has(member.id) ? <p>This record is under a legal hold and cannot be deleted.</p> : (memberRole !== "member" || committeeUserIds.has(member.id)) ? <p>Restore the account, remove its privileged role and current committee listing, then archive it again.</p> : member.retention_purge_claimed_at ? <p>Automatic deletion is already in progress.</p> : <form action={purgeMember} className="stack-form"><input type="hidden" name="user_id" value={member.id}/><label>Current administrator password<input type="password" name="password" autoComplete="current-password" required/></label><label>Type DELETE {member.email}<input name="confirmation" required/></label><PendingSubmitButton className="danger-button" pendingLabel="Deleting…">Permanently delete</PendingSubmitButton></form>}</details> : null}
+          </div>}
         </div>;
       })}
     </div>

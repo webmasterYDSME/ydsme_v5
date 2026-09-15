@@ -6,7 +6,7 @@ import type { Database } from "@/lib/supabase/database";
 
 type Kind = "event-image" | "committee-image" | "document";
 
-export function SignedUploadField({ kind, label, required = false, onUploadStateChange }: { kind: Kind; label: string; required?: boolean; onUploadStateChange?: (state: { uploading: boolean; ready: boolean }) => void }) {
+export function SignedUploadField({ kind, label, hideLabel = false, required = false, onUploadStateChange }: { kind: Kind; label: string; hideLabel?: boolean; required?: boolean; onUploadStateChange?: (state: { uploading: boolean; ready: boolean }) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [path, setPath] = useState("");
   const [message, setMessage] = useState("");
@@ -53,5 +53,5 @@ export function SignedUploadField({ kind, label, required = false, onUploadState
     }
   }
 
-  return <label>{label}<input ref={inputRef} type="file" accept={accept} required={required} disabled={uploading} onChange={(event) => void upload(event.target.files?.[0])}/><input type="hidden" name="quarantine_path" value={path}/><small role="status">{message}</small></label>;
+  return <label>{!hideLabel && label}<input aria-label={hideLabel ? label : undefined} ref={inputRef} type="file" accept={accept} required={required} disabled={uploading} onChange={(event) => void upload(event.target.files?.[0])}/><input type="hidden" name="quarantine_path" value={path}/><small role="status">{message}</small></label>;
 }

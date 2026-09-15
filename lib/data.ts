@@ -232,21 +232,10 @@ export async function getBookableEvent(id: number) {
 }
 
 async function loadCommittees() {
-  const supabase = createPublicClient();
-  const projection = await supabase
-    .from("public_committee_roster")
-    .select("id,name,title,file_url,email")
-    .order("id", { ascending: true });
-  if (isMissingProjection(projection.error)) {
-    const legacy = await supabase
-      .from("committees")
-      .select("id,name,title,file_url,email")
-      .order("id", { ascending: true });
-    if (legacy.error) throw new Error("Unable to load the committee.");
-    return (legacy.data ?? []) as CommitteeRecord[];
-  }
-  if (projection.error) throw new Error("Unable to load the committee.");
-  return (projection.data ?? []) as CommitteeRecord[];
+  const { data, error } = await createPublicClient().from("public_committee_roster")
+    .select("id,name,title,file_url,email").order("position").order("id");
+  if (error) throw new Error("Unable to load the committee.");
+  return (data ?? []) as CommitteeRecord[];
 }
 
 const getCachedCommittees = unstable_cache(

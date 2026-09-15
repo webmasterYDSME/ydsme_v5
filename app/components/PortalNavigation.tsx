@@ -56,7 +56,7 @@ const contentLinks: PortalLink[] = [
 ];
 
 const administratorLinks: PortalLink[] = [
-  { href: "/settings", label: "Committee and site", icon: Settings },
+  { href: "/settings", label: "Site settings", icon: Settings },
   { href: "/admin/audit", label: "Important changes", icon: History },
 ];
 
@@ -112,7 +112,7 @@ function PortalNavigationForPath({
       icon: Landmark,
       links: [
         ...(membershipOfficer && membershipEnabled ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
-        { href: "/admin/members", label: "Member register", icon: UsersRound },
+        { href: "/admin/members", label: administrator ? "People" : "Member register", icon: UsersRound, activePaths: ["/admin/people"] },
         ...((membershipOfficer || administrator) ? [{ href: "/admin/donations", label: "Donations", icon: HandCoins }] : []),
       ],
     }] : []),

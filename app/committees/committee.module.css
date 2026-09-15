@@ -1,0 +1,24 @@
+.portrait img {
+  object-position: center 35%;
+}
+
+.portrait.placeholder {
+  display: grid;
+  place-items: center;
+  background: #e5e8df;
+}
+
+.placeholder > svg {
+  width: 104px;
+  height: 104px;
+  color: #6a7c6c;
+}
+
+.vacant:global(.person) {
+  padding: 25px;
+  display: block;
+}
+
+.vacant:global(.person) h3 {
+  font-size: 36px;
+}

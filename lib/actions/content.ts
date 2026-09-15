@@ -22,7 +22,6 @@ import {
   MEMBER_DASHBOARD_DOCUMENTS_CACHE_TAG,
   MEMBER_DASHBOARD_EVENTS_CACHE_TAG,
   MEMBER_DASHBOARD_WORKSHOPS_CACHE_TAG,
-  PUBLIC_COMMITTEE_CACHE_TAG,
   PUBLIC_DONATIONS_CACHE_TAG,
   PUBLIC_EVENTS_CACHE_TAG,
   PUBLIC_SITE_CONFIG_CACHE_TAG,
@@ -536,50 +535,6 @@ export async function purgeDocument(formData: FormData) {
   revalidatePath("/dashboard", "layout");
 }
 
-export async function saveCommittee(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
-  const parsed = z.object({ id: z.coerce.number().int().positive().optional(), name: z.string().trim().max(180), title: text(2, 180), email: z.string().email().max(254), file_url: z.string().trim().max(2048) }).safeParse({ ...Object.fromEntries(formData), id: formData.get("id") || undefined });
-  if (!parsed.success) redirect("/settings?tab=committee&error=Please+check+the+committee+details.");
-  const { id, ...values } = parsed.data;
-  const admin = createAdminClient();
-  const { data: before } = id ? await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle() : { data: null };
-  const quarantinePath = String(formData.get("quarantine_path") || "");
-  if (quarantinePath) {
-    try { values.file_url = (await finalizeQuarantinedUpload("committee-image", quarantinePath, user.id)).canonicalPath; }
-    catch { redirect("/settings?tab=committee&error=The+portrait+failed+security+validation."); }
-  } else {
-    values.file_url = id ? before?.file_url ?? "" : "";
-  }
-  const query = id ? admin.from("committees").update(values).eq("id", id).select("id").single() : admin.from("committees").insert({ ...values, created_by: user.id }).select("id").single();
-  const { data: saved, error } = await query;
-  if (error || !saved) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+saved.");
-  if (quarantinePath) {
-    const oldPath = storageObjectPath(before?.file_url, "images");
-    if (oldPath && oldPath !== storageObjectPath(values.file_url, "images")) await admin.storage.from("images").remove([oldPath]);
-  }
-  await writeAudit({ actorUserId: user.id, actorRole: role, action: id ? "committee-record.updated" : "committee-record.created", entityType: "committee-record", entityId: saved.id, before, after: values });
-  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
-  revalidatePath("/committees"); revalidatePath("/settings");
-}
-
-export async function deleteCommittee(formData: FormData) {
-  const { user, role } = await requireRole(["administrator"]);
-  const id = z.coerce.number().int().positive().parse(formData.get("id"));
-  const admin = createAdminClient();
-  const { data: before } = await admin.from("committees").select("name,title,email,file_url").eq("id", id).maybeSingle();
-  if (!before) redirect("/settings?tab=committee&error=The+committee+record+was+not+found.");
-  const path = storageObjectPath(before.file_url, "images");
-  if (path) {
-    const { error: storageError } = await admin.storage.from("images").remove([path]);
-    if (storageError) redirect("/settings?tab=committee&error=The+committee+portrait+could+not+be+removed.");
-  }
-  const { data, error } = await admin.from("committees").delete().eq("id", id).select("id").maybeSingle();
-  if (error || !data) redirect("/settings?tab=committee&error=The+committee+record+could+not+be+deleted.");
-  if (data) await writeAudit({ actorUserId: user.id, actorRole: role, action: "committee-record.deleted", entityType: "committee-record", entityId: id, before });
-  updateTag(PUBLIC_COMMITTEE_CACHE_TAG);
-  revalidatePath("/committees"); revalidatePath("/settings");
-}
-
 export async function updateProfile(formData: FormData) {
   await requireUser();
   const parsed = z.object({ full_name: text(2, 180), title: z.string().trim().max(30), contact_number: z.string().trim().max(40) }).safeParse(Object.fromEntries(formData));
@@ -595,37 +550,18 @@ export async function updateProfile(formData: FormData) {
   redirect("/account?notice=profile-updated");
 }
 
-export async function updateMemberRole(formData: FormData) {
-  const { user, role: actorRole } = await requireRole(["administrator"]);
-  const userId = idString.parse(formData.get("user_id"));
-  if (userId === user.id) redirect("/admin/members?error=You+cannot+change+your+own+role.");
-  const role = z.enum(["member", "committee", "administrator"]).parse(formData.get("role"));
-  const admin = createAdminClient();
-  const [{ data: before }, { data: target }] = await Promise.all([
-    admin.from("user_roles").select("role").eq("user_id", userId).single(),
-    admin.from("users").select("membership_status").eq("id", userId).maybeSingle(),
-  ]);
-  if (target?.membership_status !== "active") redirect("/admin/members?error=Restore+the+member+before+changing+their+role.");
-  if (before?.role === "administrator" && role !== "administrator") {
-    if (await activeAdministratorCount() <= 2) redirect("/admin/members?error=At+least+two+active+administrators+are+required.+Promote+another+member+before+changing+this+role.");
-  }
-  const { error } = await admin.from("user_roles").update({ role }).eq("user_id", userId);
-  if (error) redirect("/admin/members?error=The+role+could+not+be+updated.");
-  await writeAudit({ actorUserId: user.id, actorRole, action: "member.role-changed", entityType: "member", entityId: userId, before: { role: before?.role }, after: { role } });
-  revalidatePath("/admin/members");
-}
-
 export async function inviteMember(formData: FormData) {
   const { user, role } = await requireRole(["administrator"]);
   const email = z.string().trim().email().max(254).safeParse(formData.get("email"));
   const fullName = text(2, 180).safeParse(formData.get("full_name"));
-  if (!email.success || !fullName.success) redirect("/admin/members?error=Enter+a+valid+name+and+email.");
-  if (!await consumeRateLimit("member-invitation", 30, 60 * 60, user.id)) redirect("/admin/members?error=Invitation+limit+reached.+Please+try+again+later.");
+  if (!email.success || !fullName.success) return { error: "Enter a valid name and email address." };
+  if (!await consumeRateLimit("member-invitation", 30, 60 * 60, user.id)) return { error: "Invitation limit reached. Please try again later." };
   const origin = getTrustedAppOrigin();
   const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email.data, { data: { full_name: fullName.data }, redirectTo: `${origin}/auth/invite?next=/reset-password` });
-  if (error) redirect("/admin/members?error=The+invitation+could+not+be+sent.");
+  if (error) return { error: "The invitation could not be sent. Check the email address and try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "member.invited", entityType: "member-invitation", entityId: email.data.toLowerCase(), summary: fullName.data });
-  redirect("/admin/members?notice=invitation-sent");
+  revalidatePath("/admin/members");
+  return { success: true };
 }
 
 async function requireMemberStatusManager() {

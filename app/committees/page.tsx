@@ -1,4 +1,5 @@
-import { Mail } from "lucide-react";
+import styles from "./committee.module.css";
+import { Mail, UserRound } from "lucide-react";
 import Image from "next/image";
 import { InnerHero, Reveal } from "../components/RailSite";
 import { PageShell } from "../components/PageShell";
@@ -17,6 +18,6 @@ export default async function Committees() {
   const people = await getCommittees();
   return <PageShell><InnerHero kicker="The people at the points" title={<>Meet the crew<br/><em>behind the railway.</em></>} copy="A volunteer committee bringing expertise, care and commitment to every part of Society life." image="/images/track.webp" imageAlt="Miniature railway tracks maintained by York Model Engineers" imageTone="bright"/>
     <section className="section committee-intro"><p className="eyebrow dark">Current committee</p><h2>Stewards of the site.<br/><em>Champions of the craft.</em></h2></section>
-    <section className="people-grid">{people.map((person,index)=><Reveal key={person.id} delay={index*.05}><article className={`person ${!person.name ? "vacant" : ""}`}><div className="portrait"><Image src={committeeImage(person.file_url)} alt={person.name || `Vacant ${person.title} position`} fill sizes="(max-width:700px) 100vw, 33vw"/></div><span>{String(index+1).padStart(2,"0")}</span><h3>{person.name || "Position vacant"}</h3><p>{person.title}</p><a href={`mailto:${person.email}`}><Mail size={18}/>{person.email}</a></article></Reveal>)}</section>
+    <section className="people-grid">{people.map((person,index)=><Reveal key={person.id} delay={index*.05}><article className={`person ${!person.name ? `vacant ${styles.vacant}` : ""}`}><div className={`portrait ${styles.portrait} ${person.file_url ? "" : styles.placeholder}`}>{person.file_url ? <Image src={committeeImage(person.file_url)} alt={person.name || `Vacant ${person.title} position`} fill sizes="(max-width:700px) 100vw, 33vw"/> : <UserRound size={104} aria-hidden="true" strokeWidth={1}/>}</div><span>{String(index+1).padStart(2,"0")}</span><h3>{person.name || "Position vacant"}</h3><p>{person.title}</p>{person.email && <a href={`mailto:${person.email}`}><Mail size={18}/>{person.email}</a>}</article></Reveal>)}</section>
   </PageShell>;
 }

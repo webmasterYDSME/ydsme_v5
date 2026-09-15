@@ -1340,24 +1340,3 @@ export async function stageMemberMojoCutover() {
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=cutover-staged");
 }
-
-export async function setMembershipOfficer(formData: FormData) {
-  if (!membershipAdministrationEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const { user, role } = await requireRole(["administrator"]);
-  const targetUserId = idSchema.parse(formData.get("user_id"));
-  const enabled = formData.get("enabled") === "true";
-  const admin = createServiceClient();
-  const { data: target } = await admin.from("user_roles")
-    .select("role").eq("user_id", targetUserId).maybeSingle();
-  if (target?.role !== "committee") redirect("/admin/memberships?error=officer-unavailable");
-  const { error } = enabled
-    ? await admin.from("user_capabilities").upsert({ user_id: targetUserId, capability: "memberships.manage", granted_by: user.id })
-    : await admin.from("user_capabilities").delete().eq("user_id", targetUserId).eq("capability", "memberships.manage");
-  if (error) redirect("/admin/memberships?error=officer-update-failed");
-  await writeAudit({
-    actorUserId: user.id, actorRole: role, action: enabled ? "membership.officer-granted" : "membership.officer-revoked",
-    entityType: "member", entityId: targetUserId, after: { capability: "memberships.manage", enabled },
-  });
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=officer-updated");
-}

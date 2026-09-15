@@ -132,8 +132,8 @@ test.describe("membership public, member and officer journeys", () => {
     const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
     await expect(memberRow).toBeVisible();
     await expect(memberRow.locator(".member-role-readonly strong")).toHaveText("Member");
-    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
+    await expect(memberRow.getByRole("button", { name: "Manage member" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Manage member" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Suspend access" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Archive member" })).toHaveCount(0);
     await expect(page.getByText("Invite a member", { exact: true })).toHaveCount(0);
@@ -596,10 +596,14 @@ test.describe("membership public, member and officer journeys", () => {
   });
 
   test("administrator grants least-privilege membership access and revocation takes effect", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships?section=officer-access#officer-access");
-    const officerArticle = page.locator(".membership-queue-list article").filter({ hasText: "Journey Committee" }).last();
-    await officerArticle.getByRole("button", { name: "Give membership access" }).click();
-    await page.waitForURL(/notice=officer-updated/);
+    await signIn(page, "journey.administrator@example.test", "/admin/members?q=journey.committee%40example.test");
+    const officerRow = page.locator(".member-row").filter({ hasText: "journey.committee@example.test" });
+    await officerRow.getByRole("button", { name: "Manage member", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("checkbox", { name: /Grant Membership Officer/ }).check();
+    await dialog.getByRole("button", { name: "Save changes", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(officerRow).toContainText("Membership Officer");
 
     const users = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     const committee = users.data.users.find(({ email }) => email === "journey.committee@example.test");
@@ -614,8 +618,10 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("heading", { name: "Manage memberships", exact: true })).toBeVisible();
     await page.goto("/admin/members?q=journey.member%40example.test");
     const memberRow = page.locator(".member-row").filter({ hasText: "journey.member@example.test" });
-    await expect(memberRow.getByRole("button", { name: "Suspend access" })).toBeVisible();
-    await expect(memberRow.getByRole("button", { name: "Archive member" })).toBeVisible();
+    await memberRow.getByRole("button", { name: "Manage member" }).click();
+    await page.getByText("Suspend or archive account", { exact: true }).click();
+    await expect(page.getByRole("button", { name: "Suspend access" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Archive member" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
     await admin.from("user_capabilities").delete().eq("user_id", committee.id).eq("capability", "memberships.manage");
     await page.reload();

@@ -1,0 +1,11 @@
+.form :global(.event-editor-panel) { padding: 18px 24px; }
+.form :global(.event-editor-details-grid) { gap: 12px 18px; align-items: start; }
+.form :global(.people-check) { padding: 10px 12px; font-size: 13px; }
+.form h3 { margin: 6px 0 0; font-size: 25px; }
+.form :global(.event-step-help) { margin: 0; }
+.portrait { padding: 12px; border: 1px solid var(--line); background: #eee9de; }
+.portrait summary { cursor: pointer; font-size: 13px; font-weight: 650; }
+.portrait[open] summary { margin-bottom: 12px; }
+@media(max-width:720px) {
+  .form :global(.event-editor-panel) { padding: 16px 18px; }
+}

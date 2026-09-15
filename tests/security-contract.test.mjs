@@ -205,12 +205,14 @@ test("separates member-register viewing, status management and role administrati
   ]);
   assert.match(auth, /committee: new Set\([\s\S]*"members\.view"/);
   assert.match(adminPage, /section === "workshops" \? "workshops\.manage" : "members\.view"/);
-  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: "Member register"/);
+  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: administrator \? "People" : "Member register"/);
   assert.match(adminPage, /const administrator = session\.role === "administrator"/);
   assert.match(adminPage, /const canManageMemberStatus = administrator \|\| session\.membershipOfficer/);
-  assert.match(adminPage, /administrator \? <form className="member-role-form" action=\{updateMemberRole\}/);
-  assert.match(adminPage, /canChangeThisStatus[\s\S]*action=\{suspendMember\}[\s\S]*action=\{deleteMember\}/);
-  assert.match(actions, /updateMemberRole[\s\S]*requireRole\(\["administrator"\]\)/);
+  assert.match(adminPage, /administrator && member.membership_status === "active" && <PeopleEditorDialog/);
+  assert.match(adminPage, /!administrator && canChangeThisStatus[\s\S]*<MemberAccessDialog/);
+  assert.match(await read("app/components/MemberAccessActions.tsx"), /action=\{suspendMember\}[\s\S]*action=\{deleteMember\}/);
+  assert.match(await read("app/components/PeopleEditorDialog.tsx"), /manageAccess && member && member.id !== actorId && <MemberAccessActions/);
+  assert.match(await read("lib/actions/people.ts"), /savePeople[\s\S]*requireRole\(\["administrator"\]\)/);
   assert.match(actions, /requireMemberStatusManager[\s\S]*session\.role !== "administrator" && !session\.membershipOfficer/);
   assert.match(actions, /deleteMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+archive\+a\+committee\+member\+or\+administrator/);
   assert.match(actions, /suspendMember[\s\S]*requireMemberStatusManager\(\)[\s\S]*Only\+an\+administrator\+can\+suspend\+a\+committee\+member\+or\+administrator/);
@@ -372,7 +374,7 @@ test("bounds portal reads and synchronizes member profile updates", async () => 
   assert.match(adminPage, /\.range\(\(currentPage - 1\) \* ANNOUNCEMENT_PAGE_SIZE/);
   assert.match(adminPage, /\.in\("reference_id", visibleWorkshopIds\)/);
   assert.match(settings, /requireCapability\("settings\.manage"\)/);
-  assert.match(settings, /head: true/);
+  assert.match(await read("app/admin/people/page.tsx"), /\.range\(\(page - 1\) \* pageSize/);
   assert.match(account, /createClient/);
   assert.doesNotMatch(account, /createAdminClient/);
   assert.doesNotMatch(audit, /before_state,after_state/);
@@ -765,7 +767,7 @@ test("caches reusable public API reads and invalidates them after writes", async
   assert.match(publicProjects, /createPublicClient\(\)/);
   assert.doesNotMatch(publicProjects, /from "@\/lib\/supabase\/server"/);
   assert.match(contentActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);
-  assert.match(contentActions, /updateTag\(PUBLIC_COMMITTEE_CACHE_TAG\)/);
+  assert.match(await read("lib/actions/people.ts"), /updateTag\(PUBLIC_COMMITTEE_CACHE_TAG\)/);
   assert.match(contentActions, /updateTag\(PUBLIC_SITE_CONFIG_CACHE_TAG\)/);
   assert.match(contentActions, /updateTag\(PUBLIC_DONATIONS_CACHE_TAG\)/);
   assert.match(bookingActions, /updateTag\(PUBLIC_EVENTS_CACHE_TAG\)/);

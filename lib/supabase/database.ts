@@ -158,6 +158,9 @@ export type Database = {
       }
       committees: {
         Row: {
+          is_public: boolean
+          position: number
+          updated_at: string
           created_at: string
           created_by: string | null
           email: string
@@ -168,6 +171,9 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          is_public?: boolean
+          position?: number
+          updated_at?: string
           created_at?: string
           created_by?: string | null
           email: string
@@ -178,6 +184,9 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          is_public?: boolean
+          position?: number
+          updated_at?: string
           created_at?: string
           created_by?: string | null
           email?: string
@@ -3154,6 +3163,7 @@ export type Database = {
       }
       public_committee_roster: {
         Row: {
+          position: number | null
           email: string | null
           file_url: string | null
           id: number | null
