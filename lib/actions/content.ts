@@ -37,6 +37,7 @@ const eventTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "Ente
   .transform(value => value.length === 5 ? `${value}:00` : value);
 
 const eventSchema = z.object({
+  source_event_id: z.coerce.number().int().positive().optional(),
   id: z.coerce.number().int().positive().optional(), name: text(2, 180), descriptions: text(2, 5000),
   start_date: z.iso.date(), end_date: z.iso.date(), start_time: eventTime, end_time: eventTime,
   event_type: z.enum(["public", "member_only"]),
@@ -74,6 +75,7 @@ async function activeAdministratorCount() {
 export async function saveEvent(formData: FormData): Promise<{ error: string; field?: string } | { url: string }> {
   const { user, role } = await requireRole(["administrator", "committee"]);
   const parsed = eventSchema.safeParse({
+    source_event_id: formData.get("source_event_id") || undefined,
     id: formData.get("id") || undefined, name: formData.get("name"), descriptions: formData.get("descriptions"),
     start_date: formData.get("start_date"), end_date: formData.get("end_date"), start_time: formData.get("start_time"), end_time: formData.get("end_time"),
     event_type: formData.get("event_type"), file_url: formData.get("file_url") || "",
@@ -89,7 +91,8 @@ export async function saveEvent(formData: FormData): Promise<{ error: string; fi
   if (parsed.data.booking_mode === "website" && (parsed.data.event_type !== "public" || !parsed.data.booking_capacity)) {
     return { error: "Website booking needs a public event and a visitor capacity.", field: "booking_capacity" };
   }
-  const { id, booking_capacity, ...parsedValues } = parsed.data;
+  const { id, source_event_id, booking_capacity, ...parsedValues } = parsed.data;
+  if (id && source_event_id) return { error: "Choose either editing or duplicating an event." };
   const values = {
     ...parsedValues,
     public_teaser_enabled: parsedValues.event_type === "member_only" && parsedValues.public_teaser_enabled,
@@ -102,13 +105,24 @@ export async function saveEvent(formData: FormData): Promise<{ error: string; fi
   const admin = createAdminClient();
   const { data: before } = id ? await admin.from("events").select("name,event_type,lifecycle_status,booking_mode,file_url,public_teaser_enabled").eq("id", id).maybeSingle() : { data: null };
   const quarantinePath = String(formData.get("quarantine_path") || "");
-  if (!quarantinePath && !before?.file_url) return { error: "Add an event image before saving." };
+  let copiedImage = false;
+  const source = source_event_id ? await admin.from("events").select("file_url").eq("id", source_event_id).maybeSingle() : null;
+  if (source_event_id && (source?.error || !source?.data)) return { error: "The original event is no longer available. Create a new event instead." };
+  if (!quarantinePath && !before?.file_url && !source?.data?.file_url) return { error: "Add an event image before saving." };
   if (quarantinePath) {
     try {
       values.file_url = (await finalizeQuarantinedUpload("event-image", quarantinePath, user.id)).canonicalPath;
     } catch {
       return { error: "The event image failed validation. Choose another image or try saving again." };
     }
+  } else if (source?.data?.file_url) {
+    const sourcePath = storageObjectPath(source.data.file_url, "images");
+    if (!sourcePath) return { error: "Choose a new image for this event; the original artwork cannot be copied." };
+    const destination = `events/${user.id}/${crypto.randomUUID()}.${sourcePath.split(".").pop() || "webp"}`;
+    const { error: copyError } = await admin.storage.from("images").copy(sourcePath, destination);
+    if (copyError) return { error: "The artwork could not be copied. Choose a new image or try again." };
+    values.file_url = `images/${destination}`;
+    copiedImage = true;
   } else {
     values.file_url = id ? before?.file_url ?? "" : "";
   }
@@ -117,7 +131,7 @@ export async function saveEvent(formData: FormData): Promise<{ error: string; fi
     : admin.from("events").insert({ ...values, host: user.id }).select("id,lifecycle_status").single();
   const { data: saved, error } = await query;
   if (error) {
-    if (quarantinePath) {
+    if (quarantinePath || copiedImage) {
       const failedPath = storageObjectPath(values.file_url, "images");
       if (failedPath) await admin.storage.from("images").remove([failedPath]);
     }

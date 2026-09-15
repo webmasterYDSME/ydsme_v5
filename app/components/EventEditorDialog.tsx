@@ -2,7 +2,8 @@
 
 import { type FormEvent, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus } from "lucide-react";
+import { Copy, Pencil, Plus } from "lucide-react";
+import { EventDescriptionField } from "./EventDescriptionField";
 import { saveEvent } from "@/lib/actions/content";
 import { EditorDialog } from "@/app/components/EditorDialog";
 import { EventBookingFields } from "@/app/components/EventBookingFields";
@@ -30,24 +31,24 @@ export type EventEditorRecord = {
 export function EventEditorDialog({ event, currentImage, intent = event ? "edit" : "create", triggerClassName }: {
   event?: EventEditorRecord;
   currentImage?: string;
-  intent?: "create" | "edit" | "reschedule";
+  intent?: "create" | "edit" | "reschedule" | "duplicate";
   triggerClassName?: string;
 }) {
   const [dirty, setDirty] = useState(false);
   const [instance, setInstance] = useState(0);
   const [saving, setSaving] = useState(false);
-  const title = intent === "create" ? "Create an event" : intent === "reschedule" ? `Reschedule ${event?.name || "event"}` : `Edit ${event?.name || "event"}`;
+  const title = intent === "duplicate" ? `Duplicate ${event?.name || "event"}` : intent === "create" ? "Create an event" : intent === "reschedule" ? `Reschedule ${event?.name || "event"}` : `Edit ${event?.name || "event"}`;
   return <EditorDialog
-    trigger={<>{intent === "create" ? <Plus/> : <Pencil/>}{intent === "create" ? "Create event" : intent === "reschedule" ? "Reschedule" : "Edit"}</>}
+    trigger={<>{intent === "create" ? <Plus/> : intent === "duplicate" ? <Copy/> : <Pencil/>}{intent === "create" ? "Create event" : intent === "duplicate" ? "Duplicate" : intent === "reschedule" ? "Reschedule" : "Edit"}</>}
     triggerClassName={triggerClassName} eyebrow="Society timetable" title={title}
     description="Step 1: event details. Step 2: add an image, then save or publish."
     dirty={dirty} busy={saving}
     onAfterClose={() => { setDirty(false); setInstance(value => value + 1); }}
-  >{({ requestClose }) => <EventForm key={instance} event={event} currentImage={currentImage} requestClose={requestClose} setDirty={setDirty} setSaving={setSaving}/>}</EditorDialog>;
+  >{({ requestClose }) => <EventForm key={`${instance}:${event?.updated_at || "new"}`} duplicate={intent === "duplicate"} event={event} currentImage={currentImage} requestClose={requestClose} setDirty={setDirty} setSaving={setSaving}/>}</EditorDialog>;
 }
 
-function EventForm({ event, currentImage, requestClose, setDirty, setSaving }: {
-  event?: EventEditorRecord; currentImage?: string; requestClose: () => void;
+function EventForm({ event, currentImage, duplicate = false, requestClose, setDirty, setSaving }: {
+  event?: EventEditorRecord; currentImage?: string; duplicate?: boolean; requestClose: () => void;
   setDirty: (value: boolean) => void; setSaving: (value: boolean) => void;
 }) {
   const router = useRouter();
@@ -68,8 +69,8 @@ function EventForm({ event, currentImage, requestClose, setDirty, setSaving }: {
   const [error, setError] = useState<{ error: string; field?: string }>();
   const [name, setName] = useState(event?.name || "");
   const [description, setDescription] = useState(event?.descriptions || "");
-  const [date, setDate] = useState(event?.start_date || "");
-  const [endDate, setEndDate] = useState(event?.end_date || "");
+  const [date, setDate] = useState(duplicate ? "" : event?.start_date || "");
+  const [endDate, setEndDate] = useState(duplicate ? "" : event?.end_date || "");
   const [startTime, setStartTime] = useState(event?.start_time.slice(0, 5) || "");
   const [endTime, setEndTime] = useState(event?.end_time.slice(0, 5) || "");
   const [multiDay, setMultiDay] = useState(Boolean(event && event.start_date !== event.end_date));
@@ -90,7 +91,7 @@ function EventForm({ event, currentImage, requestClose, setDirty, setSaving }: {
     }
     const submitter = (submission.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const data = new FormData(form);
-    data.set("lifecycle_status", submitter?.value || (event?.lifecycle_status === "published" ? "published" : "draft"));
+    data.set("lifecycle_status", submitter?.value || (!duplicate && event?.lifecycle_status === "published" ? "published" : "draft"));
     if (String(data.get("end_date")) < date || (String(data.get("end_date")) === date && endTime <= startTime)) {
       const field = String(data.get("end_date")) < date ? "end_date" : "end_time";
       setError({ error: "The event must end after it starts.", field });
@@ -127,11 +128,12 @@ function EventForm({ event, currentImage, requestClose, setDirty, setSaving }: {
   return <form className="editor-form event-editor-form event-editor-simple event-editor-stepped" noValidate onSubmit={submit} onChange={() => { setDirty(true); setError(undefined); }}>
     <div className="event-editor-panel" hidden={step !== 1}>
       <fieldset disabled={pending} className="event-editor-fields" aria-labelledby={detailsId}>
-        {event ? <input type="hidden" name="id" value={event.id}/> : null}
+        {event ? <input type="hidden" name={duplicate ? "source_event_id" : "id"} value={event.id}/> : null}
         <h3 id={detailsId} ref={detailsHeading} tabIndex={-1}>Event details</h3>
+        {duplicate && <p className="event-step-help">Creating a new event from this entry. Choose a new date and review the copied description, image and booking settings. Existing bookings stay with the original event.</p>}
         <div className="event-editor-details-grid">
           <label className="wide">Event name<input name="name" value={name} onChange={e => setName(e.target.value)} minLength={2} maxLength={180} required {...fieldError("name")}/></label>
-          <label className="wide">Description<textarea name="descriptions" value={description} onChange={e => setDescription(e.target.value)} rows={3} minLength={2} maxLength={5000} required {...fieldError("descriptions")}/></label>
+          <EventDescriptionField value={description} onChange={value => { setDescription(value); setDirty(true); setError(undefined); }} name={name} audience={audience} booking={booking} invalid={error?.field === "descriptions"} errorId={error?.field === "descriptions" ? errorId : undefined}/>
           <label>Date<input name="start_date" type="date" value={date} onChange={e => setDate(e.target.value)} required {...fieldError("start_date")}/></label>
           <label className="check"><input type="checkbox" checked={multiDay} onChange={e => setMultiDay(e.target.checked)}/>Runs over several days</label>
           {multiDay ? <label>End date<input name="end_date" type="date" min={date} value={endDate} onChange={e => setEndDate(e.target.value)} required {...fieldError("end_date")}/></label> : <input type="hidden" name="end_date" value={date}/>}
@@ -165,9 +167,9 @@ function EventForm({ event, currentImage, requestClose, setDirty, setSaving }: {
       <div>
         {step === 1 ? <button key="next" className="button dark" type="submit" value="next">Next: event image</button> : <>
         <button key="back" className="button outline" type="button" disabled={pending} onClick={event => { event.preventDefault(); setError(undefined); showStep(1); }}>Back to details</button>
-        {event && event.lifecycle_status !== "archived" ? <button className="button outline" disabled={pending} type="submit" value="cancelled">{event.lifecycle_status === "cancelled" ? "Save as cancelled" : "Cancel event"}</button> : null}
+        {event && !duplicate && event.lifecycle_status !== "archived" ? <button className="button outline" disabled={pending} type="submit" value="cancelled">{event.lifecycle_status === "cancelled" ? "Save as cancelled" : "Cancel event"}</button> : null}
         <button className="button outline" disabled={pending} type="submit" value="draft">Save draft</button>
-        <button className="button dark" disabled={pending} type="submit" value="published">{pending ? "Saving…" : event?.lifecycle_status === "published" ? "Save changes" : "Publish event"}</button>
+        <button className="button dark" disabled={pending} type="submit" value="published">{pending ? "Saving…" : !duplicate && event?.lifecycle_status === "published" ? "Save changes" : "Publish event"}</button>
         </>}
       </div>
     </footer>
