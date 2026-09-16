@@ -7,5 +7,5 @@ export function CaptchaField() {
   const [token, setToken] = useState("");
   const sitekey = process.env.NEXT_PUBLIC_TURNSTILE_SITEKEY;
   if (!sitekey) return <input type="hidden" name="captchaToken" value=""/>;
-  return <div className="captcha-field"><input type="hidden" name="captchaToken" value={token}/><Turnstile sitekey={sitekey} onVerify={setToken} onExpire={()=>setToken("")} refreshExpired="auto"/></div>;
+  return <div className="captcha-field"><input type="hidden" name="captchaToken" value={token}/><Turnstile sitekey={sitekey} appearance="interaction-only" onVerify={setToken} onExpire={()=>setToken("")} refreshExpired="auto"/></div>;
 }
