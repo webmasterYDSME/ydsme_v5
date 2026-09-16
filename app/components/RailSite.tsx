@@ -191,7 +191,7 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
   return <>
     <a className="skip-link" href="#main-content">Skip to main content</a>
     <header className={headerTheme === "light" ? "site-header site-header-light" : "site-header"}>
-      <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt={siteConfig.fullName} width={76} height={76} /></span><span>York Model<br/><b>Engineers</b></span></Link>
+      <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={76} height={76} /></span><span className="brand-wordmark"><span className="brand-name">York Model</span><strong>Engineers</strong></span></Link>
       <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{headerNav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href={memberHref} onClick={()=>setOpen(false)}>{memberLabel} <ArrowUpRight size={15}/></Link></nav>
       <Link className="member-login" href={memberHref}>{memberLabel} <ArrowUpRight size={15}/></Link>
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
