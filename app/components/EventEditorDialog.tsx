@@ -8,6 +8,7 @@ import { saveEvent } from "@/lib/actions/content";
 import { EditorDialog } from "@/app/components/EditorDialog";
 import { EventBookingFields } from "@/app/components/EventBookingFields";
 import { EventImageUploadField, type EventImageUploadHandle } from "@/app/components/EventImageUploadField";
+import { DatePicker } from "@/app/components/DatePicker";
 
 export type EventEditorRecord = {
   id: number;
@@ -57,6 +58,8 @@ function EventForm({ event, currentImage, duplicate = false, requestClose, setDi
   const errorId = useId();
   const detailsId = useId();
   const artworkId = useId();
+  const startDateId = useId();
+  const endDateId = useId();
   const [step, setStep] = useState<1 | 2>(1);
   const detailsHeading = useRef<HTMLHeadingElement>(null);
   const artworkHeading = useRef<HTMLHeadingElement>(null);
@@ -109,7 +112,7 @@ function EventForm({ event, currentImage, duplicate = false, requestClose, setDi
         setError(result);
         if (result.field) {
           showStep(1);
-          window.requestAnimationFrame(() => (form.elements.namedItem(result.field!) as HTMLInputElement | null)?.focus());
+          window.requestAnimationFrame(() => (form.querySelector<HTMLInputElement>(`[data-date-picker-name="${result.field}"]`) ?? form.elements.namedItem(result.field!) as HTMLInputElement | null)?.focus());
         }
       } else {
         setDirty(false);
@@ -134,9 +137,9 @@ function EventForm({ event, currentImage, duplicate = false, requestClose, setDi
         <div className="event-editor-details-grid">
           <label className="wide">Event name<input name="name" value={name} onChange={e => setName(e.target.value)} minLength={2} maxLength={180} required {...fieldError("name")}/></label>
           <EventDescriptionField value={description} onChange={value => { setDescription(value); setDirty(true); setError(undefined); }} name={name} audience={audience} booking={booking} invalid={error?.field === "descriptions"} errorId={error?.field === "descriptions" ? errorId : undefined}/>
-          <label>Date<input name="start_date" type="date" value={date} onChange={e => setDate(e.target.value)} required {...fieldError("start_date")}/></label>
+          <label htmlFor={startDateId}>Date<DatePicker id={startDateId} name="start_date" value={date} onValueChange={(value) => setDate(value)} required ariaInvalid={error?.field === "start_date"} ariaDescribedBy={error?.field === "start_date" ? errorId : undefined}/></label>
           <label className="check"><input type="checkbox" checked={multiDay} onChange={e => setMultiDay(e.target.checked)}/>Runs over several days</label>
-          {multiDay ? <label>End date<input name="end_date" type="date" min={date} value={endDate} onChange={e => setEndDate(e.target.value)} required {...fieldError("end_date")}/></label> : <input type="hidden" name="end_date" value={date}/>}
+          {multiDay ? <label htmlFor={endDateId}>End date<DatePicker id={endDateId} name="end_date" min={date} value={endDate} onValueChange={(value) => setEndDate(value)} required ariaInvalid={error?.field === "end_date"} ariaDescribedBy={error?.field === "end_date" ? errorId : undefined}/></label> : <input type="hidden" name="end_date" value={date}/>}
           <div className="wide event-time-fields">
             <label>Start time<input name="start_time" type="time" value={startTime} onChange={e => setStartTime(e.target.value)} required {...fieldError("start_time")}/></label>
             <label>End time<input name="end_time" type="time" value={endTime} onChange={e => setEndTime(e.target.value)} required {...fieldError("end_time")}/></label>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, GraduationCap } from "lucide-react";
+import { Check, GraduationCap } from "lucide-react";
+import { DatePicker } from "@/app/components/DatePicker";
 import { defaultMembershipPlan, eligibleMembershipPlans } from "@/lib/membership-rules";
 
 export type EligibilityPlan = {
@@ -60,22 +61,9 @@ export function MembershipEligibilityFields({
   }
 
   return <div className="membership-eligibility-picker">
-    <label className="membership-dob-field">
+    <label className="membership-dob-field" htmlFor="membership-date-of-birth">
       <span className="membership-field-label">Date of birth</span>
-      <span className="membership-date-control">
-        <input
-          name="date_of_birth"
-          type="date"
-          autoComplete="bday"
-          value={dateOfBirth}
-          max={today}
-          required
-          onInput={(event) => updateDateOfBirth(event.currentTarget.value, event.currentTarget)}
-          onChange={(event) => updateDateOfBirth(event.target.value, event.target)}
-        />
-        <CalendarDays aria-hidden="true"/>
-      </span>
-      <span className="membership-date-guide" aria-hidden="true"><span>Day</span><i/><span>Month</span><i/><span>Year</span></span>
+      <DatePicker id="membership-date-of-birth" name="date_of_birth" value={dateOfBirth} max={today} required autoComplete="bday" className="membership-date-control" submissionFormat="display" onValueChange={(value, input) => updateDateOfBirth(value, input)}/>
     </label>
 
     {selectedPlan ? <>
