@@ -28,6 +28,13 @@ const accounts = [
 const eventName = "Journey Public Running Day";
 const workshopTitle = "Journey Workshop Session";
 const documentName = "Journey Security Upload";
+const fixtureDate = (daysAhead) => {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + daysAhead);
+  return date.toISOString().slice(0, 10);
+};
+const eventDate = fixtureDate(7);
+const workshopDate = fixtureDate(8);
 
 async function allUsers() {
   const users = [];
@@ -116,8 +123,8 @@ if (mode === "setup") {
   const { data: event, error: eventError } = await admin.from("events").insert({
     name: eventName,
     descriptions: "Isolated browser-journey fixture for visitor booking and check-in.",
-    start_date: "2026-09-15",
-    end_date: "2026-09-15",
+    start_date: eventDate,
+    end_date: eventDate,
     start_time: "10:00",
     end_time: "16:00",
     event_type: "public",
@@ -134,7 +141,7 @@ if (mode === "setup") {
   const { data: workshop, error: workshopError } = await admin.from("workshops").insert({
     title: workshopTitle,
     descriptions: "Isolated browser-journey fixture for member reservation and committee roster management.",
-    date: "2026-09-16",
+    date: workshopDate,
     start_time: "18:00",
     end_time: "20:00",
     host_name: "Journey Committee",
