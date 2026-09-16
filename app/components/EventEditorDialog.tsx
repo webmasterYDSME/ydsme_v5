@@ -152,7 +152,8 @@ function EventForm({ event, currentImage, duplicate = false, requestClose, setDi
             <label className="check event-public-visibility"><input name="public_teaser_enabled" type="checkbox" checked={teaser} onChange={e => setTeaser(e.target.checked)}/>Add this members-only event to the public events page</label>
           </> : <>
             <p>Once published, this event appears on the public events page and in the members’ area. Everyone can attend.</p>
-            <label className="check"><input name="display_in_homepage" type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)}/>Feature on homepage</label>
+            <input name="display_in_homepage" type="hidden" value={featured ? "true" : "false"}/>
+            <label className="check"><input type="checkbox" checked={featured} onChange={e => setFeatured(e.target.checked)} disabled/>Feature on homepage</label>
           </>}
         </section>
       </fieldset>
