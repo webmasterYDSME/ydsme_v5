@@ -26,13 +26,13 @@ test("membership workspace keeps tasks focused and preserves deep links", async 
     await expect(page.locator("#applications")).toBeVisible();
     await expect(page.locator("#plans")).toHaveCount(0);
     await expect(page.locator("#add-member")).toHaveCount(0);
-    await tabs.getByRole("link", {name:"Member register",exact:true}).click();
+    await tabs.getByRole("link", {name:"Members",exact:true}).click();
     await expect(page.getByRole("textbox",{name:"Find a membership"})).toBeVisible();
     await expect(page.locator("#applications")).toHaveCount(0);
     await page.getByRole("link",{name:"Add membership",exact:true}).click();
     await expect(page.locator("#add-member")).toBeVisible();
     await expect(page.locator("#renewals")).toHaveCount(0);
-    await tabs.getByRole("link",{name:"Payments",exact:true}).click();
+    await tabs.getByRole("link",{name:"Payments & renewals",exact:true}).click();
     await expect(page.locator("#renewals")).toBeVisible();
     await tabs.getByRole("link",{name:"Types & fees",exact:true}).click();
     await expect(page.locator("#plans")).toBeVisible();

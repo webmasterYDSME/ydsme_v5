@@ -140,7 +140,9 @@ test('officer records payment first and confirms Junior guardian consent afterwa
   const login=page.locator('.auth-flip-back form');
   await login.locator('[name="email"]').fill(officer);await login.locator('[name="password"]').fill(password);
   await login.getByRole('button',{name:/Sign in securely/}).click();await page.waitForURL(/\/admin\/memberships/);
+  await page.goto('/admin/memberships?section=applications#applications');
   const article=page.locator('#applications article').filter({hasText:'Journey Membership Junior'});
+  await article.locator('details > summary').click();
   const payment=article.locator('form').filter({hasText:'Mark paid and activate'});
   await payment.locator('[name="payment_reference"]').fill('JOURNEY-JUNIOR-CASH');
   await payment.getByRole('button',{name:'Mark paid and activate'}).click();
@@ -152,7 +154,8 @@ test('officer records payment first and confirms Junior guardian consent afterwa
   const {data:member}=await admin.from('members').select('effective_state,auth_user_id').eq('id',application.converted_member_id).single();
   expect(member).toMatchObject({effective_state:'active',auth_user_id:null});
   await page.goto('/admin/memberships?view=attention');
-  const review=page.locator('article').filter({hasText:'Journey Membership Junior'}).filter({has:page.getByRole('button',{name:'Record verification'})});
+  const review=page.locator('#verification article').filter({hasText:'Journey Membership Junior'});
+  await review.locator('details > summary').click();
   await review.locator('[name="reason"]').fill('Spoke to guardian and confirmed consent.');
   await review.getByRole('button',{name:'Record verification'}).click();
   await page.waitForURL(/notice=verification-recorded/);
