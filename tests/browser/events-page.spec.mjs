@@ -24,7 +24,9 @@ test("public events show uncropped artwork and useful details at desktop and pho
       expect(primary.height).toBeGreaterThanOrEqual(50);
       expect(secondary.height).toBeCloseTo(primary.height, 0);
       if (width <= 560) expect(secondary.y).toBeGreaterThanOrEqual(primary.y + primary.height);
-      if (width <= 900) expect((await page.locator(".events-feature").boundingBox()).height).toBeGreaterThanOrEqual(1000);
+      const feature = await page.locator(".events-feature").boundingBox();
+      expect(primary.y + primary.height).toBeLessThanOrEqual(feature.y + feature.height);
+      expect(secondary.y + secondary.height).toBeLessThanOrEqual(feature.y + feature.height);
       await expect(page.locator(".events-feature a", { hasText: "Get directions" })).toHaveAttribute("href", /53\.94183%2C-1\.11166/);
     } else {
       await expect(page.locator(".inner-hero")).toBeVisible();

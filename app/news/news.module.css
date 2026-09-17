@@ -1,0 +1,15 @@
+.news:global(.news-board) { min-height: 0; padding: clamp(40px,5vw,72px) var(--public-content-inline) clamp(56px,6vw,96px); background: var(--paper); }
+.news :global(.news-heading) { grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); gap: 48px; margin-bottom: 48px; }
+.news :global(.news-heading h1) { font-size: clamp(44px,5.5vw,72px); line-height: 1.02; }
+.news :global(.news-heading > p) { max-width: 38ch; font-size: 17px; line-height: 1.75; }
+.news :global(.news-card) { grid-template-columns: 180px minmax(0,1fr); gap: clamp(32px,4vw,64px); padding-block: 40px; align-items: start; }
+.news :global(.news-card-date) { padding-top: 8px; line-height: 1.6; }
+.news :global(.news-card h2) { max-width: 28ch; margin: 0 0 20px; font: 500 clamp(32px,3.5vw,46px)/1.1 var(--font-display); color: var(--deep); overflow-wrap: anywhere; }
+.news :global(.news-card p) { max-width: var(--public-reading-max); font-size: 17px; line-height: 1.8; overflow-wrap: anywhere; }
+.news :global(.news-empty) { padding: 56px 24px; }
+@media (max-width: 800px) {
+  .news :global(.news-heading) { grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px; }
+  .news :global(.news-heading > p) { max-width: 60ch; }
+  .news :global(.news-card) { grid-template-columns: 1fr; gap: 16px; padding-block: 32px; }
+  .news :global(.news-card-date) { padding-top: 0; }
+}

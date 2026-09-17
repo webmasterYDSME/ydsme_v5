@@ -1,0 +1,53 @@
+/* The shared frame adopts the content-width tokens first. Page sections migrate
+   separately so each part of the redesign can be previewed independently. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100svh;
+  background: var(--paper);
+}
+
+.frame > main { flex: 1 0 auto; }
+.frame > header,
+.frame > footer { flex-shrink: 0; }
+
+.header:global(.site-header),
+.footer:global(.site-footer) {
+  padding-inline: var(--public-content-inline);
+}
+
+@media (min-width: 901px) {
+  .header :global(.brand) { flex-shrink: 0; }
+  .header :global(.brand-wordmark) { min-width: 0; }
+  .header :global(.main-nav) {
+    gap: clamp(16px, 1.5vw, 24px);
+    padding-inline: 24px;
+    font-size: 17px;
+    white-space: nowrap;
+  }
+  .header :global(.member-login) { flex-shrink: 0; }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .header :global(.brand) { gap: 10px; }
+  .header :global(.brand-name) { font-size: 29px; }
+  .header :global(.main-nav) { gap: 14px; padding-inline: 18px; font-size: 15px; }
+  .header :global(.member-login) { font-size: 12px; padding-inline: 12px; }
+}
+
+.footer:global(.site-footer) {
+  column-gap: 32px;
+}
+
+@media (min-width: 1181px) {
+  .footer:global(.site-footer) {
+    grid-template-columns: minmax(230px, 1.4fr) minmax(220px, 1.2fr) minmax(105px, .6fr) minmax(105px, .6fr) minmax(170px, .9fr);
+    column-gap: 24px;
+  }
+  .footer :global(.footer-brand) {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .footer h2 { font-size: 44px; }
+}

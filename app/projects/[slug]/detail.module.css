@@ -1,0 +1,35 @@
+.detail { --project-space: clamp(48px, 6vw, 80px); }
+.detail:global(.public-project-detail) { background: var(--paper); }
+.detail :global(.public-project-hero) { min-height: 0; padding: 48px var(--public-content-inline) var(--project-space); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(32px, 4vw, 64px); align-items: center; }
+.detail :global(.public-project-hero-image) { min-height: 0; aspect-ratio: 4 / 3; }
+.detail :global(.public-project-hero-copy) { padding: 0; min-width: 0; }
+.detail :global(.public-project-back) { max-width: 100%; min-height: 44px; margin-bottom: 24px; font-size: 11px; }
+.detail :global(.public-project-hero h1) { font-size: clamp(44px, 4.5vw, 64px); line-height: 1.02; overflow-wrap: anywhere; }
+.detail :global(.public-project-summary) { max-width: var(--public-reading-max); font-size: 17px; line-height: 1.75; }
+.detail :global(.public-project-byline) { margin-top: 28px; font-size: 13px; line-height: 1.6; gap: 12px 24px; }
+.detail :global(.public-project-story) { padding: var(--project-space) var(--public-content-inline); }
+.detail :global(.public-project-story > header) { gap: 20px 48px; margin-bottom: 40px; }
+.detail :global(.public-project-story > header h2) { font-size: clamp(38px, 4vw, 56px); line-height: 1.05; }
+.detail :global(.public-project-story > header > p:last-child) { font-size: 16px; line-height: 1.75; max-width: 55ch; }
+.detail :global(.public-project-update) { grid-template-columns: 56px minmax(0, 1fr); gap: 32px; padding-block: 40px; }
+.detail :global(.public-project-update time) { font-size: 11px; }
+.detail :global(.public-project-update h3) { font-size: clamp(30px, 3vw, 40px); line-height: 1.1; overflow-wrap: anywhere; }
+.detail :global(.public-project-update > div:last-child > p) { max-width: var(--public-reading-max); font-size: 17px; line-height: 1.8; }
+.detail :global(.public-project-photo-grid) { gap: 16px; }
+.detail :global(.public-project-photo-grid figure) { height: auto; aspect-ratio: 4 / 3; }
+.detail :global(.public-project-photo-grid.photos-1 figure) { height: auto; aspect-ratio: 16 / 9; }
+.detail :global(.public-project-photo-grid figcaption) { position: relative; inset: auto; margin-top: auto; font-size: 13px; line-height: 1.5; }
+.detail :global(.public-project-photo-grid figure) { display: flex; flex-direction: column; }
+.detail :global(.public-projects-empty) { padding: 40px 24px; }
+.detail :global(.public-projects-empty p) { font-size: 16px; line-height: 1.75; }
+@media (max-width: 900px) {
+  .detail :global(.public-project-hero) { grid-template-columns: 1fr; padding-top: 32px; }
+  .detail :global(.public-project-hero-copy) { grid-row: 1; }
+  .detail :global(.public-project-hero-image) { aspect-ratio: 16 / 10; }
+  .detail :global(.public-project-story > header) { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .detail :global(.public-project-update) { grid-template-columns: 1fr; gap: 16px; }
+  .detail :global(.public-project-photo-grid), .detail :global(.public-project-photo-grid.photos-2) { grid-template-columns: 1fr; }
+  .detail :global(.public-project-photo-grid.photos-1 figure) { aspect-ratio: 4 / 3; }
+}

@@ -10,6 +10,7 @@ import { getPublicEventDetail } from "@/lib/public-event-detail";
 import { publicStorageUrl } from "@/lib/supabase/public";
 import { publicPageMetadata, safeJsonLd, SITE_URL } from "@/lib/seo";
 import { eventStructuredData, searchDescription } from "@/lib/event-seo";
+import styles from "../events.module.css";
 
 export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ id: string }> };
@@ -33,7 +34,7 @@ export default async function PublicEventPage({ params }: Props) {
   const date = event.start_date === event.end_date
     ? format(parseISO(event.start_date), "EEEE d MMMM yyyy")
     : `${format(parseISO(event.start_date), "d MMMM yyyy")} – ${format(parseISO(event.end_date), "d MMMM yyyy")}`;
-  return <PageShell headerTheme="light">
+  return <PageShell headerTheme="light"><div className={styles.events}>
     <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(eventStructuredData(event, SITE_URL, image)) }}/>
     <article className="section public-event-detail">
       <Link href="/events" className="public-project-back"><ArrowLeft/>All public events</Link>
@@ -56,5 +57,5 @@ export default async function PublicEventPage({ params }: Props) {
       </div>
       <section className="public-event-detail-description" aria-labelledby="event-description-title"><h2 id="event-description-title">About this event</h2><p className="event-description">{event.descriptions}</p></section>
     </article>
-  </PageShell>;
+  </div></PageShell>;
 }

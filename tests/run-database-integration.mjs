@@ -31,6 +31,8 @@ try {
     "tests/membership-offline.local.test.mjs",
     "tests/membership-edge-cases.local.test.mjs",
     "tests/membership-platform.local.test.mjs",
+    "tests/membership-simplified.local.test.mjs",
+    "tests/membership-checkout-cutoff.local.test.mjs",
     "tests/membership-payment-settings.local.test.mjs",
     "tests/public-project-featuring.local.test.mjs",
   ];

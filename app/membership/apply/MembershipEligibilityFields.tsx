@@ -26,17 +26,17 @@ function pounds(pence: number, whole = false) {
 
 export function MembershipEligibilityFields({
   plans,
+  initialDraft = {},
   today,
-  guardianLed,
   onGuardianLedChange,
 }: {
+  initialDraft?: Record<string,string>;
   plans: EligibilityPlan[];
   today: string;
-  guardianLed: boolean;
   onGuardianLedChange: (value: boolean) => void;
 }) {
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [dateOfBirth, setDateOfBirth] = useState(() => { const value = initialDraft.date_of_birth || ""; const parts = value.split("/"); return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : value; });
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialDraft.plan_id || null);
   const todayDate = new Date(`${today}T00:00:00Z`);
   const eligibility = dateOfBirth ? eligibleMembershipPlans(plans, dateOfBirth, todayDate) : null;
   const adultPlan = eligibility?.plans.find((plan) => plan.slug === "adult") ?? null;
@@ -56,7 +56,7 @@ export function MembershipEligibilityFields({
     const nextEligibility = eligibleMembershipPlans(plans, value, todayDate);
     const nextPlan = defaultMembershipPlan(nextEligibility.plans);
     setSelectedPlanId(nextPlan?.id ?? null);
-    if (nextPlan?.slug !== "junior") onGuardianLedChange(false);
+    onGuardianLedChange(nextPlan?.slug === "junior");
     input.setCustomValidity(nextPlan ? "" : "Membership is available from age 14. Please check the date entered.");
   }
 
@@ -79,7 +79,7 @@ export function MembershipEligibilityFields({
 
     {dateOfBirth && !selectedPlan ? <div className="membership-plan-prompt error" aria-live="polite">
       <span>Check your date of birth</span>
-      <p>No available membership matches the age entered.</p>
+      <p>Junior membership starts at age 14. Please check the date of birth entered.</p>
     </div> : null}
 
     {selectedPlan && !hasAdultStudentChoice ? <div className="membership-plan-result" aria-live="polite">
@@ -105,17 +105,6 @@ export function MembershipEligibilityFields({
           <b>{pounds(plan.amount_pence, true)}<small>per year</small></b>
         </label>)}
       </div>
-    </fieldset> : null}
-
-    {selectedPlan?.slug === "junior" ? <fieldset className="membership-junior-fields">
-      <legend>Guardian details and consent</legend>
-      <p>A guardian email is mandatory. The application cannot proceed until the guardian confirms.</p>
-      <div className="membership-field-grid">
-        <label>Guardian name<input name="guardian_name" type="text" autoComplete="name" required/></label>
-        <label>Guardian email<input name="guardian_email" type="email" autoComplete="email" required/></label>
-      </div>
-      <label className="membership-check-card"><input name="guardian_led" type="checkbox" checked={guardianLed} onChange={(event) => onGuardianLedChange(event.target.checked)}/><span><strong>The Junior does not have their own email</strong>Use the guardian email for this application and membership correspondence. A personal portal account will not be created for the Junior.</span></label>
-      <label className="membership-check-card"><input name="guardian_consent" type="checkbox" required/><span><strong>Permission to contact the guardian</strong>I confirm that the named guardian is expecting this consent request.</span></label>
     </fieldset> : null}
   </div>;
 }

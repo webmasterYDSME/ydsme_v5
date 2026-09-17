@@ -1,5 +1,6 @@
 import { LegalPage } from "../components/LegalPage";
 import { publicPageMetadata } from "@/lib/seo";
+import styles from "../components/LegalPage.module.css";
 
 export const metadata = publicPageMetadata({
   title: "Privacy Notice",
@@ -9,6 +10,7 @@ export const metadata = publicPageMetadata({
 
 export default function PrivacyPolicy() {
   return <LegalPage
+    className={styles.legal}
     eyebrow="Legal · Your information"
     title="Privacy notice"
     summary="A plain-English account of the personal information the Society uses, why we use it, and the choices and rights available to you."

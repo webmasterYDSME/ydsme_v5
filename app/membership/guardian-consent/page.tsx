@@ -6,6 +6,7 @@ import { confirmGuardianMembershipConsent } from "@/lib/actions/membership";
 import { publicPageMetadata } from "@/lib/seo";
 import { redirect } from "next/navigation";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
+import styles from "./consent.module.css";
 
 export const metadata = publicPageMetadata({
   title: "Guardian Consent",
@@ -24,23 +25,23 @@ export default async function GuardianConsentPage({
   const confirmed = query.consent === "confirmed";
   const invalid = query.consent === "link-invalid" || (!token && !confirmed);
 
-  return <PageShell headerTheme="light"><main className="membership-consent-page">
-    <section className="membership-consent-card">
+  return <PageShell headerTheme="light"><div className={`membership-consent-page ${styles.consent}`}>
+    <section className="membership-consent-card" aria-labelledby="consent-title">
       <Link className="membership-apply-back" href="/membership"><ArrowLeft/>Membership overview</Link>
       {confirmed ? <>
         <CheckCircle2 className="membership-consent-icon"/>
         <p className="eyebrow dark">Consent confirmed</p>
-        <h1>Thank you.</h1>
+        <h1 id="consent-title">Thank you.</h1>
         <p>The junior application is ready for a membership officer to review before payment.</p>
       </> : invalid ? <>
         <ShieldCheck className="membership-consent-icon"/>
         <p className="eyebrow dark">Link unavailable</p>
-        <h1>This consent link has expired.</h1>
+        <h1 id="consent-title">This consent link has expired.</h1>
         <p>Ask the applicant to contact the Society Treasurer for a replacement.</p>
       </> : <>
         <ShieldCheck className="membership-consent-icon"/>
         <p className="eyebrow dark">Junior membership</p>
-        <h1>Confirm guardian consent.</h1>
+        <h1 id="consent-title">Confirm guardian consent.</h1>
         <p>By confirming, you agree that the junior applicant may apply for Society membership and that membership-related financial notices may be sent to the guardian email supplied.</p>
         <form action={confirmGuardianMembershipConsent}>
           <input type="hidden" name="token" value={token ?? ""}/>
@@ -48,5 +49,5 @@ export default async function GuardianConsentPage({
         </form>
       </>}
     </section>
-  </main></PageShell>;
+  </div></PageShell>;
 }

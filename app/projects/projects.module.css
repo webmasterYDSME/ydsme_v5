@@ -1,0 +1,30 @@
+.projects:global(.public-projects-page) {
+  min-height: 0;
+  padding: clamp(40px, 5vw, 72px) var(--public-content-inline) clamp(56px, 6vw, 96px);
+  background: var(--paper);
+}
+.projects :global(.public-projects-heading) { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 48px; margin-bottom: 48px; }
+.projects :global(.public-projects-heading h1) { font-size: clamp(44px, 5.5vw, 72px); line-height: 1.02; }
+.projects :global(.public-projects-heading > p) { max-width: 38ch; font-size: 17px; line-height: 1.75; }
+.projects :global(.public-project-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+.projects :global(.public-project-grid > .reveal) { min-width: 0; }
+.projects :global(.public-project-card-image) { height: auto; aspect-ratio: 16 / 10; }
+.projects :global(.public-project-card-copy) { padding: 28px; }
+.projects :global(.public-project-card h2) { font-size: clamp(30px, 3vw, 40px); line-height: 1.1; overflow-wrap: anywhere; }
+.projects :global(.public-project-card-copy > p:not(.public-project-category)) { margin-bottom: 28px; font-size: 16px; line-height: 1.75; }
+.projects :global(.public-project-card footer) { margin: auto -28px -28px; padding: 16px 28px; flex-wrap: wrap; gap: 12px 20px; }
+.projects :global(.public-project-card footer span) { font-size: 13px; overflow-wrap: anywhere; }
+.projects :global(.public-project-card footer a) { min-height: 44px; font-size: 11px; }
+.projects :global(.public-projects-empty) { min-height: 280px; padding: 40px; }
+.projects :global(.public-projects-empty h2) { font-size: clamp(30px, 3.5vw, 42px); line-height: 1.1; }
+.projects :global(.public-projects-empty p) { max-width: 55ch; font-size: 16px; line-height: 1.75; }
+@media (max-width: 800px) {
+  .projects :global(.public-projects-heading) { grid-template-columns: 1fr; gap: 24px; margin-bottom: 32px; }
+  .projects :global(.public-projects-heading > p) { max-width: 60ch; }
+  .projects :global(.public-project-grid) { grid-template-columns: 1fr; gap: 24px; }
+}
+@media (max-width: 480px) {
+  .projects :global(.public-project-card-copy) { padding: 24px 20px; }
+  .projects :global(.public-project-card footer) { margin-inline: -20px; margin-bottom: -24px; padding: 16px 20px; }
+  .projects :global(.public-projects-empty) { padding: 32px 24px; }
+}

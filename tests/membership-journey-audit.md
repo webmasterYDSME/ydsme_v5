@@ -1,5 +1,7 @@
 # Membership journey audit — 15 September 2026
 
+> Historical baseline. The new signup and one-time renewal implementation is documented in [the 17 September audit](membership-simplified-journey-audit.md).
+
 ## Result
 
 The expanded local run passed **17 browser journeys**, **6 membership database suites**, and **90 unit/source-contract checks**. Production builds and lint passed. The Stripe test-mode journey passed checkout creation/expiry, activation, webhook replay, stale-event handling, and refund review.

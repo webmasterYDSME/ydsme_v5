@@ -1,0 +1,82 @@
+.booking:global(.booking-page) {
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 48px var(--public-content-inline) clamp(56px, 6vw, 96px);
+  background: var(--paper);
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-bottom: 24px;
+  color: #59655d;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.back:hover { color: var(--rust); }
+.back:focus-visible { outline: 2px solid var(--rust); outline-offset: 4px; }
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(32px, 4vw, 64px);
+  align-items: start;
+}
+.booking :global(.booking-event-panel),
+.booking :global(.booking-form-panel) {
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(28px, 3vw, 40px);
+  overflow: visible;
+}
+.booking :global(.booking-event-panel) { overflow: hidden; }
+.booking :global(.booking-event-panel h1) {
+  font-size: clamp(44px, 4.7vw, 68px);
+  line-height: .98;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
+.booking :global(.booking-event-panel .eyebrow) { margin-bottom: 20px; }
+.booking :global(.booking-facts) { margin: 32px 0 24px; }
+.booking :global(.booking-facts > div) { grid-template-columns: 106px minmax(0, 1fr); gap: 16px; }
+.booking :global(.booking-facts dd) { line-height: 1.6; overflow-wrap: anywhere; }
+.booking :global(.booking-assurance) { align-items: flex-start; line-height: 1.65; margin-bottom: 0; }
+.booking :global(.booking-assurance svg) { flex: 0 0 19px; margin-top: 2px; }
+.description { position: relative; z-index: 1; margin-top: 24px; border-top: 1px solid rgba(255,255,255,.2); }
+.description summary { padding-top: 20px; min-height: 44px; cursor: pointer; font-size: 14px; font-weight: 700; }
+.description summary:focus-visible { outline: 2px solid var(--brass); outline-offset: 4px; }
+.description p { max-width: var(--public-reading-max); margin: 20px 0 0; color: #edf3ee; font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.jump:global(.button) { display: none; }
+.booking :global(.booking-form-panel) { border: 1px solid var(--line); background: #fffdf7; scroll-margin-top: 24px; }
+.booking :global(.booking-form),
+.booking :global(.booking-confirmation),
+.booking :global(.booking-sold-out) { width: 100%; max-width: var(--public-form-max); }
+.booking :global(.booking-form-heading) { flex-direction: column; gap: 16px; margin-bottom: 24px; }
+.booking :global(.booking-form-heading h2),
+.booking :global(.booking-confirmation h2),
+.booking :global(.booking-sold-out h2) { font-size: clamp(38px, 3.8vw, 52px); line-height: 1; margin-bottom: 0; }
+.booking :global(.booking-form-heading > span) { margin: 0; width: fit-content; }
+.booking :global(.booking-form > label) { font-size: 12px; margin-block: 22px; }
+.booking :global(.booking-form label small) { font-size: 12px; line-height: 1.6; }
+.booking :global(.booking-form .button) { min-height: 56px; padding: 14px 20px; white-space: normal; }
+.booking :global(.booking-sold-out > p:not(.eyebrow)),
+.booking :global(.booking-confirmation > p:not(.eyebrow)) { margin-top: 24px; }
+.booking :global(.booking-email-note svg) { flex-shrink: 0; }
+
+@media (max-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .booking :global(.booking-form-panel) { justify-items: start; }
+  .jump:global(.button) { position: relative; z-index: 1; display: inline-flex; margin-top: 28px; }
+}
+@media (max-width: 600px) {
+  .booking:global(.booking-page) { padding-top: 24px; }
+  .back { margin-bottom: 16px; }
+  .booking :global(.booking-event-panel),
+  .booking :global(.booking-form-panel) { padding: 28px 20px; }
+  .booking :global(.booking-event-panel h1) { font-size: 44px; }
+  .booking :global(.booking-facts > div) { grid-template-columns: 1fr; gap: 6px; }
+  .jump:global(.button) { width: 100%; }
+}

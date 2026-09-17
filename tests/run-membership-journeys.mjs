@@ -17,6 +17,7 @@ const environment = {
   JOURNEY_PORT: "3011",
   JOURNEY_START_MODE: "production",
   JOURNEY_TEST_MODE: "true",
+  LOCAL_MAILPIT_URL: "http://127.0.0.1:55324",
   JOURNEY_MEMBERSHIP_TESTS: "true",
   JOURNEY_MEMBERSHIP_WORKSPACE: "true",
   JOURNEY_TEST_PASSWORD: password,
@@ -37,7 +38,11 @@ function run(command, args) {
 function cleanMembershipJourneys() {
   const sql = String.raw`
 begin;
-delete from public.rate_limits where scope in ('membership-application','membership-verification-resend','membership-contact-change');
+delete from public.membership_notifications where kind='membership.renewal-invitation' and member_id in(select member_id from public.membership_renewal_invitations where membership_year in(select membership_year from public.membership_renewal_campaigns where opened_by in(select id from auth.users where email='journey.membership.officer@example.test')));
+delete from public.membership_renewal_invitations where membership_year in(select membership_year from public.membership_renewal_campaigns where opened_by in(select id from auth.users where email='journey.membership.officer@example.test'));
+delete from public.membership_renewal_campaigns where opened_by in(select id from auth.users where email='journey.membership.officer@example.test');
+delete from public.membership_signup_sessions where email like 'journey.%@example.test';
+delete from public.rate_limits where scope in ('membership-application','membership-verification-resend','membership-contact-change','signup-code-email','signup-code-ip','signup-code-cooldown','signup-code-verify','signup-code-global');
 delete from public.membership_contact_change_requests where member_id in (
   select id from public.members where full_name like 'Journey Membership%'
 );
@@ -100,7 +105,9 @@ try {
   run("npm", ["run", "build"]);
   run(process.execPath, ["tests/journey-fixtures.mjs", "setup"]);
   fixturesCreated = true;
-  run("npx", ["playwright", "test", "tests/browser/membership-journeys.spec.mjs", "tests/browser/membership-workspace.spec.mjs", "--workers=1"]);
+  run("npx", ["playwright", "test", "tests/browser/membership-journeys.spec.mjs", "--grep", "active members can|committee members can|DOB selects|application presents|membership officer page fits|honorary creation|membership officer configures|administrator grants", "--workers=1"]);
+  cleanMembershipJourneys();
+  run("npx", ["playwright", "test", "tests/browser/membership-simple.spec.mjs", "tests/browser/membership-workspace.spec.mjs", "--workers=1"]);
 } finally {
   cleanMembershipJourneys();
   if (fixturesCreated) run(process.execPath, ["tests/journey-fixtures.mjs", "cleanup"]);

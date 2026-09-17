@@ -1,0 +1,23 @@
+/* Shared content widths live in a separate asset so every route receives the
+   same gutters even when a previously deployed global bundle is cached. */
+:root {
+  --public-content-max: 80rem;
+  --public-content-gutter: 20px;
+  --public-content-inline: max(var(--public-content-gutter), calc((100% - var(--public-content-max)) / 2));
+  --public-reading-max: 65ch;
+  --public-workspace-max: 62.5rem;
+  --public-form-max: 35rem;
+  --public-confirmation-max: 42.5rem;
+}
+
+@media (min-width: 701px) {
+  :root {
+    --public-content-gutter: 32px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --public-content-gutter: 48px;
+  }
+}

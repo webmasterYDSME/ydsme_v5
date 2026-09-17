@@ -14,14 +14,16 @@ export function LegalPage({
   summary,
   updated,
   children,
+  className,
 }: {
   eyebrow: string;
   title: string;
   summary: string;
   updated: string;
   children: ReactNode;
+  className?: string;
 }) {
-  return <PageShell>
+  return <PageShell><div className={className}>
     <header className="legal-masthead">
       <div>
         <p className="eyebrow">{eyebrow}</p>
@@ -41,5 +43,5 @@ export function LegalPage({
       </aside>
       <article className="legal-copy">{children}</article>
     </div>
-  </PageShell>;
+  </div></PageShell>;
 }

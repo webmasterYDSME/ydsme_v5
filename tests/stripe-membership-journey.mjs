@@ -60,6 +60,8 @@ function localCleanup() {
   const emails = fixtureEmails.map((email) => `'${email}'`).join(",");
   const sql = String.raw`
 begin;
+delete from public.membership_renewal_invitations where membership_year in(select membership_year from public.membership_renewal_campaigns where opened_by in(select id from auth.users where email='journey.membership.stripe-officer@example.test'));
+delete from public.membership_renewal_campaigns where opened_by in(select id from auth.users where email='journey.membership.stripe-officer@example.test');
 delete from public.membership_notifications where application_id in (
   select id from public.membership_applications where contact_email in (${emails})
 ) or member_id in (select id from public.members where contact_email in (${emails}));
@@ -218,6 +220,14 @@ async function openApplicationCheckout(token, applicationId) {
     const page = await browser.newPage();
     await page.goto(`${siteUrl}/membership/checkout?token=${encodeURIComponent(token)}`);
     await page.getByRole("heading", { name: "Review your payment" }).waitFor();
+    // A stale November quote must return to review, not silently open a new price.
+    await page.locator('[name="reviewed_quote"]').evaluate(input => { input.value = "outdated-November-quote"; });
+    await page.getByRole("button", { name: "Continue to payment" }).click();
+    await page.waitForURL(/notice=review-updated-price/);
+    await page.getByRole("status").filter({hasText:"review the current price"}).waitFor();
+    const attemptsBeforeReview = await admin.from("membership_checkout_attempts").select("id").eq("application_id",applicationId);
+    assert.equal(attemptsBeforeReview.error,null);
+    assert.equal(attemptsBeforeReview.data.length,0,"A stale quote created a payment attempt before review.");
     await page.getByRole("button", { name: "Continue to payment" }).click();
     await page.waitForURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 20_000 });
   } finally {
@@ -318,15 +328,14 @@ try {
     const expectedInitialAmount = new Date(application.created_at).getUTCMonth() === 11
       ? configured.currentPrice.amount_pence
       : Math.round(configured.currentPrice.amount_pence * (12 - new Date(application.created_at).getUTCMonth()) / 12);
-    assert.equal(session.mode, "subscription", `${journey.slug} Checkout is not a subscription.`);
+    assert.equal(session.mode, "payment", `${journey.slug} Checkout is not a subscription.`);
     assert.equal(session.amount_total, expectedInitialAmount, `${journey.slug} has the wrong initial charge.`);
     assert.equal(session.metadata.membership_application_id, application.id);
     assert.equal(session.metadata.membership_plan_price_id, configured.currentPrice.id);
     const planLines = await stripe.checkout.sessions.listLineItems(session.id, { limit: 10 });
-    assert.equal(planLines.data.length, 2, `${journey.slug} Checkout does not have exactly two lines.`);
+    assert.equal(planLines.data.length, 1, `${journey.slug} Checkout does not have exactly two lines.`);
     assert.ok(planLines.data.some((line) => !line.price?.recurring), `${journey.slug} has no one-time initial line.`);
-    assert.ok(planLines.data.some((line) => line.price?.id === configured.recurringPrice.id),
-      `${journey.slug} has the wrong annual renewal price.`);
+    assert.ok(planLines.data.every(line => !line.price?.recurring));
     const expired = await stripe.checkout.sessions.expire(session.id);
     await sendSignedEvent(stripeEvent("checkout.session.expired", expired));
     await waitFor(async () => {
@@ -339,17 +348,17 @@ try {
   const expiredToken = `expired-${randomUUID()}-${randomUUID()}`;
   const expiredApplication = await createApplication(fixtureExpiredEmail, expiredToken);
   const openSession = await openApplicationCheckout(expiredToken, expiredApplication.id);
-  assert.equal(openSession.mode, "subscription");
+  assert.equal(openSession.mode, "payment");
   assert.match(openSession.custom_text?.submit?.message || "", /covers membership through 31 December/);
-  assert.match(openSession.custom_text?.submit?.message || "", /Automatic renewal is off/);
+  assert.match(openSession.custom_text?.submit?.message || "", /one-time payment/);
   assert.doesNotMatch(openSession.custom_text?.submit?.message || "", /trial|days free|Stripe/i);
   assert.equal(openSession.metadata.ydsme_integration, "memberships");
   assert.equal(openSession.metadata.membership_application_id, expiredApplication.id);
   assert.ok(openSession.metadata.membership_checkout_attempt_id);
   const lines = await stripe.checkout.sessions.listLineItems(openSession.id, { limit: 10 });
-  assert.equal(lines.data.length, 2);
+  assert.equal(lines.data.length, 1);
   assert.ok(lines.data.some((line) => !line.price?.recurring), "The prorated initial term is not a one-time line.");
-  assert.ok(lines.data.some((line) => line.price?.recurring?.interval === "year"), "The annual renewal line is missing.");
+  assert.ok(lines.data.every(line => !line.price?.recurring));
   const expiredSession = await stripe.checkout.sessions.expire(openSession.id);
   await sendSignedEvent(stripeEvent("checkout.session.expired", expiredSession));
   await waitFor(async () => {
@@ -368,52 +377,11 @@ try {
   assert.equal(paidSession.amount_total, initialAmount);
 
   customer = await stripe.customers.create({ email: fixtureEmail, name: "Journey Membership Stripe Paid" });
-  const paymentMethod = await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id });
-  await stripe.customers.update(customer.id, { invoice_settings: { default_payment_method: paymentMethod.id } });
-  subscription = await stripe.subscriptions.create({
-    customer: customer.id,
-    items: [{ price: recurringPrice.id }],
-    trial_end: Math.floor(Date.UTC(billingYear + 1, 0, 1) / 1000),
-    default_payment_method: paymentMethod.id,
-    metadata: {
-      purpose: "automated_test_setup",
-    },
-  });
-  await stripe.invoiceItems.create({
-    customer: customer.id,
-    subscription: subscription.id,
-    amount: initialAmount,
-    currency: "gbp",
-    description: `Membership through 31 December ${billingYear}`,
-  });
-  const draftInvoice = await stripe.invoices.create({
-    customer: customer.id,
-    subscription: subscription.id,
-    collection_method: "charge_automatically",
-    auto_advance: false,
-  });
-  await stripe.invoices.finalizeInvoice(draftInvoice.id);
-  const invoice = await stripe.invoices.pay(draftInvoice.id);
-  const invoiceId = invoice.id;
-  assert.equal(invoice.status, "paid", "The test subscription invoice was not paid.");
-  const invoicePayments = await stripe.invoicePayments.list({ invoice: invoiceId, limit: 10 });
-  const invoicePayment = invoicePayments.data.find((item) => item.is_default) ?? invoicePayments.data[0];
-  const paymentIntentId = typeof invoicePayment?.payment.payment_intent === "string"
-    ? invoicePayment.payment.payment_intent : invoicePayment?.payment.payment_intent?.id;
-  assert.ok(paymentIntentId, "The paid subscription invoice has no payment intent.");
-  // Let the locally forwarded setup invoice settle while the subscription is
-  // deliberately outside the membership integration. Checkout is the only
-  // event that should activate and record this initial term.
-  await new Promise((resolve) => setTimeout(resolve, 1_000));
-  subscription = await stripe.subscriptions.update(subscription.id, { metadata: {
-    ydsme_integration: "memberships",
-    membership_application_id: paidApplication.id,
-    membership_plan_price_id: nextPlanPriceId,
-    membership_year: String(billingYear + 1),
-    membership_checkout_attempt_id: paidSession.metadata.membership_checkout_attempt_id,
-    membership_auto_renew: "false",
-  } });
-
+  const intent = await stripe.paymentIntents.create({ amount: initialAmount, currency: "gbp", customer: customer.id,
+    payment_method: "pm_card_visa", payment_method_types: ["card"], confirm: true });
+  assert.equal(intent.status, "succeeded");
+  const paymentIntentId = intent.id;
+  const invoiceId = null;
   const completedSession = {
     ...paidSession,
     amount_total: initialAmount,
@@ -422,7 +390,8 @@ try {
     invoice: invoiceId,
     payment_status: "paid",
     status: "complete",
-    subscription: subscription.id,
+    subscription: null,
+    payment_intent: paymentIntentId,
   };
   const completedEvent = stripeEvent("checkout.session.completed", completedSession);
   const firstDelivery = await sendSignedEvent(completedEvent);
@@ -457,30 +426,48 @@ try {
   assert.equal(payment.amount_pence, initialAmount);
   assert.equal(payment.stripe_invoice_id, invoiceId);
   assert.equal(payment.stripe_payment_intent_id, paymentIntentId);
-  const storedSubscription = await row(
-    admin.from("membership_subscriptions").select("stripe_subscription_id,status,cancel_at_period_end").eq("member_id", member.id).single(),
-    "Membership subscription is missing",
-  );
-  assert.equal(storedSubscription.cancel_at_period_end, true);
-  assert.equal((await stripe.subscriptions.retrieve(storedSubscription.stripe_subscription_id)).cancel_at_period_end, true);
+  const storedSubscriptions = await admin.from("membership_subscriptions").select("id").eq("member_id", member.id);
+  assert.equal(storedSubscriptions.error, null);
+  assert.equal(storedSubscriptions.data.length, 0, "One-time payment created a Billing subscription.");
 
   const replay = await sendSignedEvent(completedEvent);
   assert.deepEqual(replay, { received: true, replay: true });
   const paymentCount = await admin.from("membership_payments").select("id", { count: "exact", head: true }).eq("term_id", term.id);
   assert.equal(paymentCount.count, 1, "Webhook replay duplicated the payment.");
 
-  const currentSubscription = await stripe.subscriptions.retrieve(subscription.id);
-  await sendSignedEvent(stripeEvent("customer.subscription.updated", {
-    ...currentSubscription, status: "past_due", cancel_at_period_end: false,
-  }, completedEvent.created + 100));
-  await sendSignedEvent(stripeEvent("customer.subscription.updated", {
-    ...currentSubscription, status: "active", cancel_at_period_end: true,
-  }, completedEvent.created - 100));
-  const afterOutOfOrder = await row(
-    admin.from("membership_subscriptions").select("status,cancel_at_period_end").eq("member_id", member.id).single(),
-    "Unable to inspect out-of-order subscription state",
-  );
-  assert.deepEqual(afterOutOfOrder, { status: "past_due", cancel_at_period_end: false });
+  // Simulate a DB-link failure after Supabase created the invitation.
+  const invitedUserId = member.auth_user_id;
+  assert.equal((await admin.from("members").update({auth_user_id:null}).eq("id",member.id)).error,null);
+  await sendSignedEvent(stripeEvent("checkout.session.completed",completedSession));
+  assert.equal((await admin.from("members").select("auth_user_id").eq("id",member.id).single()).data.auth_user_id,invitedUserId,"A webhook retry did not recover its own signed portal invitation.");
+
+  const renewalYear = billingYear + 1;
+  assert.equal((await admin.from("membership_renewal_campaigns").insert({ membership_year: renewalYear, opened_by: officerAccount.user.id })).error, null);
+  const renewalToken = randomUUID()+randomUUID();
+  assert.equal((await admin.rpc("queue_membership_renewal_invitation", { p_member_id: member.id, p_year: renewalYear, p_actor: officerAccount.user.id, p_token: renewalToken, p_token_hash: tokenHash(renewalToken) })).error, null);
+  const renewalBrowser = await chromium.launch();
+  let renewalSession;
+  try {
+    const page = await renewalBrowser.newPage();
+    await page.goto(siteUrl + "/membership/renew?token=" + renewalToken);
+    await page.getByRole("button", { name: "Pay membership renewal" }).click();
+    await page.waitForURL(/^https:\/\/checkout\.stripe\.com\//, { timeout: 20000 });
+    renewalSession = (await stripe.checkout.sessions.list({limit:30})).data.find(session => session.client_reference_id === member.id && session.status === "open");
+    assert.ok(renewalSession);
+    assert.equal(renewalSession.mode,"payment");
+    assert.equal(renewalSession.amount_total,planPrice.amount_pence);
+    assert.match(renewalSession.success_url,/membership\/renew\?token=/);
+    const renewalIntent = await stripe.paymentIntents.create({ amount: renewalSession.amount_total, currency:"gbp", customer:customer.id, payment_method:"pm_card_visa", payment_method_types:["card"], confirm:true });
+    const renewalEvent = stripeEvent("checkout.session.completed", {...renewalSession, status:"complete", payment_status:"paid", customer:customer.id, payment_intent:renewalIntent.id});
+    await sendSignedEvent(renewalEvent);
+    assert.deepEqual(await sendSignedEvent(renewalEvent),{received:true,replay:true});
+    const renewalTerm = await row(admin.from("membership_terms").select("status,amount_paid_pence").eq("member_id",member.id).eq("membership_year",renewalYear).single(),"Renewal term missing");
+    assert.equal(renewalTerm.status,"paid");
+    assert.equal(renewalTerm.amount_paid_pence,planPrice.amount_pence);
+    await page.goto(siteUrl + "/membership/renew?token=" + renewalToken);
+    await page.getByRole("heading",{name:"Your membership is already paid"}).waitFor();
+    assert.equal((await admin.from("membership_subscriptions").select("id").eq("member_id",member.id)).data.length,0);
+  } finally { if(renewalSession) await stripe.checkout.sessions.expire(renewalSession.id); await renewalBrowser.close(); }
 
   const partialAmount = Math.max(1, Math.floor(initialAmount / 2));
   const refund = await stripe.refunds.create({ payment_intent: paymentIntentId, amount: partialAmount });
@@ -499,10 +486,10 @@ try {
   assert.ok((reviewAlerts.count ?? 0) > 0, "The payment reversal did not alert membership officers.");
 
   console.log(JSON.stringify({
-    checkout: "all-four-plans-subscription-mode-created-and-expired",
-    activation: "verified-invoice-webhook",
+    checkout: "all-four-plans-one-time-checkout-created-and-expired",
+    activation: "verified-payment-webhook",
     replay: "idempotent",
-    outOfOrder: "ignored-stale-state",
+    renewal: "one-time-paid-without-login-or-subscription",
     refund: "underpayment-sent-to-review",
   }));
 } finally {

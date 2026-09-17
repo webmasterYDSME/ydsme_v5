@@ -1,3 +1,5 @@
+import styles from "../components/LegalPage.module.css";
+import cookieStyles from "./cookies.module.css";
 import { LegalPage } from "../components/LegalPage";
 import { publicPageMetadata } from "@/lib/seo";
 
@@ -9,6 +11,7 @@ export const metadata = publicPageMetadata({
 
 export default function CookiePolicy() {
   return <LegalPage
+    className={`${styles.legal} ${cookieStyles.cookies}`}
     eyebrow="Legal · Browser storage"
     title="Cookie notice"
     summary="The public website does not use advertising or analytics cookies. Essential storage supports secure member sign-in and abuse prevention."
@@ -23,11 +26,11 @@ export default function CookiePolicy() {
       <h2>What this website uses</h2>
       <p>We currently use only storage that is necessary to provide requested features, maintain member authentication and protect account and booking forms. The public information pages do not use advertising, cross-site tracking or audience-measurement cookies.</p>
       <div className="legal-table-wrap"><table>
-        <thead><tr><th>Provider or identifier</th><th>Purpose</th><th>Typical duration</th></tr></thead>
+        <thead><tr><th scope="col">Provider or identifier</th><th scope="col">Purpose</th><th scope="col">Typical duration</th></tr></thead>
         <tbody>
-          <tr><td><code>sb-&lt;project&gt;-auth-token</code> and numbered fragments, where required (Supabase)</td><td>Keeps a Society member securely signed in, refreshes the authenticated session and applies the correct access permissions.</td><td>For the authenticated session, until sign-out or expiry. The exact expiry may be renewed while the account remains signed in.</td></tr>
-          <tr><td><code>ydsme-booking-security</code></td><td>Assigns a random, first-party browser identifier used in pseudonymous checks that prevent rapid repeated reservations for the same event. It does not contain your name, email address or IP address.</td><td>24 hours.</td></tr>
-          <tr><td>Cloudflare Turnstile security storage; this may include <code>cf_clearance</code> if challenge clearance is enabled</td><td>Helps identify automated or abusive sign-in, password-reset and magic-link requests and may remember that a browser passed a security challenge.</td><td>Short-lived or for the configured challenge period.</td></tr>
+          <tr><td data-label="Provider or identifier"><code>sb-&lt;project&gt;-auth-token</code> and numbered fragments, where required (Supabase)</td><td data-label="Purpose">Keeps a Society member securely signed in, refreshes the authenticated session and applies the correct access permissions.</td><td data-label="Typical duration">For the authenticated session, until sign-out or expiry. The exact expiry may be renewed while the account remains signed in.</td></tr>
+          <tr><td data-label="Provider or identifier"><code>ydsme-booking-security</code></td><td data-label="Purpose">Assigns a random, first-party browser identifier used in pseudonymous checks that prevent rapid repeated reservations for the same event. It does not contain your name, email address or IP address.</td><td data-label="Typical duration">24 hours.</td></tr>
+          <tr><td data-label="Provider or identifier">Cloudflare Turnstile security storage; this may include <code>cf_clearance</code> if challenge clearance is enabled</td><td data-label="Purpose">Helps identify automated or abusive sign-in, password-reset and magic-link requests and may remember that a browser passed a security challenge.</td><td data-label="Typical duration">Short-lived or for the configured challenge period.</td></tr>
         </tbody>
       </table></div>
       <p>Cookie names can include a project-specific reference or be split into fragments because browsers limit the size of an individual cookie.</p>

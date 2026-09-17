@@ -65,14 +65,14 @@ test("membership integration uses hosted Checkout, verified webhooks and entitle
     readFile(new URL("supabase/migrations/202608200036_membership_zero_value_invoice_guard.sql", root), "utf8"),
     readFile(new URL("supabase/migrations/202608210006_membership_atomic_activation_remediation.sql", root), "utf8"),
   ]);
-  assert.match(membership, /mode: "subscription"/);
-  assert.match(membership, /trial_end:/);
+  assert.match(membership, /mode: "payment"/);
+  assert.doesNotMatch(membership, /trial_end:/);
   assert.doesNotMatch(membership, /subscription_data:\s*\{[\s\S]{0,180}proration_behavior:/);
   assert.match(membership, /membership_checkout_attempt_id/);
   assert.match(membership, /reserveCheckoutAttempt/);
   assert.doesNotMatch(membership, /payment_method_types/);
   assert.match(membership, /integration_identifier: MEMBERSHIP_INTEGRATION_IDENTIFIER/);
-  assert.match(membership, /You can cancel anytime from your Account\./);
+  assert.match(membership, /No automatic renewal payment will be taken\./);
   assert.match(webhook, /constructEvent\(payload, signature, webhookSecret\)/);
   assert.match(webhook, /session\.subscription/);
   assert.match(webhook, /stripe_subscription_id:/);
@@ -116,7 +116,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(membership, /auth\/invite\?next=\/account/);
   assert.doesNotMatch(membership, /membership_active: true[\s\S]{0,240}next=\/reset-password/);
   const checkoutAttempt = verificationRoute.indexOf("createApplicationCheckout(application.id");
-  const unavailableRedirect = verificationRoute.indexOf("payment-unavailable");
+  const unavailableRedirect = verificationRoute.indexOf("payment-unavailable", checkoutAttempt);
   const paymentReminder = verificationRoute.indexOf("membership.application-payment-reminder");
   assert.ok(checkoutAttempt >= 0 && checkoutAttempt < unavailableRedirect && unavailableRedirect < paymentReminder);
   assert.match(checkoutRoute, /getApplicationCheckoutSummaryFromToken/);
@@ -239,15 +239,17 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(actions, /const selectedPlan = formData\.get\("student_declaration"\) === "on"[\s\S]*defaultMembershipPlan\(eligible\.plans\)/);
   assert.match(actions, /p_plan_id: selectedPlan\.id/);
   assert.match(officerEligibilityFields, /name="date_of_birth"[\s\S]*onInput=/);
-  assert.match(eligibilityFields, /name="guardian_email"[\s\S]*required/);
+  assert.doesNotMatch(eligibilityFields, /name="guardian_name"/);
+  assert.match(applicationWizard, /name="guardian_name"[\s\S]*required/);
+  assert.match(applicationWizard, /name="guardian_email"[\s\S]*required/);
   assert.match(applicationPage, /MembershipApplicationWizard/);
   assert.match(applicationWizard, /list="membership-title-options"/);
   assert.match(applicationWizard, /<option value="Mx"\/>/);
   assert.match(applicationWizard, /A copy is available on request and in the website’s member area after activation/);
   assert.match(applicationWizard, /membership card and lanyard/);
-  assert.match(applicationWizard, /regular newsletters and important announcements/);
+  assert.match(applicationWizard, /essential membership messages/);
   assert.match(applicationWizard, /I agree to follow the Club Rules/);
-  assert.match(membershipCore, /MEMBERSHIP_TERMS_VERSION = "2026-08-21"/);
+  assert.match(membershipCore, /MEMBERSHIP_TERMS_VERSION = "2026-09-17"/);
   assert.match(applicationWizard, /value="bank_transfer"/);
   assert.match(applicationWizard, /value="cheque"/);
   assert.match(guardianPage, /I confirm my consent/);

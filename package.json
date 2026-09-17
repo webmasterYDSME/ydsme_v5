@@ -19,9 +19,12 @@
     "test:database": "node tests/run-database-integration.mjs",
     "test:browser": "node tests/run-browser-smoke.mjs",
     "test:membership-journeys": "node tests/run-membership-journeys.mjs",
+    "test:membership-visual": "node --env-file=.env.local scripts/run-membership-visual-matrix.mjs",
+    "test:membership-edges": "node --env-file=.env.local scripts/run-membership-edge-reconciliation.mjs",
     "test:stripe-membership": "node --env-file=.env.local tests/run-stripe-membership-journey.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern supabase/.temp --ignore-pattern supabase/.branches",
-    "verify": "npm run lint && npm run build && npm run test:unit"
+    "verify": "npm run lint && npm run build && npm run test:unit",
+    "stripe:listen-local": "node --env-file=.env.local scripts/listen-local-stripe.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

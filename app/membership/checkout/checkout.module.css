@@ -1,0 +1,52 @@
+.checkout:global(.membership-checkout-page) {
+  min-height: 0;
+  padding: 40px var(--public-content-inline) clamp(56px, 6vw, 96px);
+  background: var(--paper);
+}
+.checkout :global(.membership-checkout-wrap) { width: 100%; max-width: var(--public-workspace-max); }
+.checkout :global(.membership-checkout-back) { min-height: 44px; margin-bottom: 24px; }
+.checkout :global(.membership-checkout-card) {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  box-shadow: 0 16px 40px rgba(20,43,34,.06);
+}
+.checkout :global(.membership-checkout-main),
+.checkout :global(.membership-checkout-summary) { padding: 36px; }
+.checkout :global(.membership-checkout-heading) { grid-template-columns: 48px minmax(0, 1fr); gap: 16px; }
+.checkout :global(.membership-checkout-icon) { width: 48px; height: 48px; }
+.checkout :global(.membership-checkout-heading h1) { font-size: clamp(40px, 4.5vw, 58px); line-height: 1; font-weight: 500; }
+.checkout :global(.membership-checkout-intro) { font-size: 16px; line-height: 1.75; }
+.checkout :global(.membership-checkout-member) { grid-template-columns: 40px minmax(0, 1fr); gap: 10px 14px; }
+.checkout :global(.membership-checkout-member strong) { overflow: visible; overflow-wrap: anywhere; line-height: 1.5; }
+.checkout :global(.membership-checkout-plan) { grid-column: 2; justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
+.checkout :global(.membership-checkout-renewal label) { padding: 18px 16px; }
+.checkout :global(.membership-checkout-renewal label strong) { font-size: 14px; line-height: 1.5; }
+.checkout :global(.membership-checkout-renewal label small),
+.checkout :global(.membership-checkout-renewal > p:last-child) { font-size: 13px; line-height: 1.65; }
+.checkout :global(.membership-checkout-summary) { display: flex; flex-direction: column; }
+.checkout :global(.membership-checkout-price) { font-size: clamp(58px, 5.5vw, 76px); line-height: 1; overflow-wrap: anywhere; }
+.checkout :global(.membership-checkout-cover) { font-size: 14px; line-height: 1.65; }
+.checkout :global(.membership-checkout-summary dl) { gap: 20px; }
+.checkout :global(.membership-checkout-summary dl > div) { flex-wrap: wrap; gap: 6px 16px; }
+.checkout :global(.membership-checkout-summary dt) { font-size: 11px; }
+.checkout :global(.membership-checkout-summary dd) { font-size: 15px; }
+.checkout :global(.membership-checkout-renewal-note),
+.checkout :global(.membership-checkout-security) { font-size: 12px; line-height: 1.65; }
+.checkout :global(.membership-checkout-submit) { min-height: 56px; padding: 14px 16px; text-align: center; line-height: 1.5; }
+.checkout :global(.membership-checkout-submit svg) { flex-shrink: 0; }
+
+@media (max-width: 900px) {
+  .checkout :global(.membership-checkout-card) { grid-template-columns: minmax(0, 1fr); }
+  .checkout :global(.membership-checkout-main),
+  .checkout :global(.membership-checkout-summary) { padding: 32px; }
+  .checkout :global(.membership-checkout-summary dl) { margin: 0; }
+  .checkout :global(.membership-checkout-renewal-note) { margin: 24px 0; }
+  .checkout :global(.membership-checkout-submit) { margin-top: 0; }
+}
+@media (max-width: 600px) {
+  .checkout:global(.membership-checkout-page) { padding-top: 24px; }
+  .checkout :global(.membership-checkout-back) { margin-bottom: 16px; }
+  .checkout :global(.membership-checkout-main),
+  .checkout :global(.membership-checkout-summary) { padding: 28px 20px; }
+  .checkout :global(.membership-checkout-heading) { grid-template-columns: 1fr; }
+  .checkout :global(.membership-checkout-heading h1) { font-size: 42px; }
+}

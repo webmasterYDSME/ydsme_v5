@@ -1,0 +1,65 @@
+.page {
+  padding: 56px var(--public-content-inline) 80px;
+  background: var(--paper);
+}
+
+.card {
+  width: 100%;
+  max-width: var(--public-confirmation-max);
+  margin-inline: auto;
+  padding: 40px;
+  border: 1px solid #d1c8b7;
+  background: #fffdfa;
+  box-shadow: 0 12px 36px rgba(35, 49, 42, .06);
+  overflow-wrap: anywhere;
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 24px;
+  border-radius: 50%;
+  color: var(--deep);
+  background: #e4ebe1;
+}
+
+.icon svg { width: 32px; height: 32px; }
+
+.card h1 {
+  margin: 12px 0 24px;
+  color: var(--deep);
+  font: 500 clamp(38px, 4.5vw, 58px)/1.02 var(--font-display);
+}
+
+.card > p:not(:global(.eyebrow)) {
+  max-width: 55ch;
+  color: #626c66;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-block: 28px;
+  padding: 20px;
+  background: #f2eee4;
+  color: #626c66;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.note svg { flex: 0 0 20px; width: 20px; height: 20px; margin-top: 2px; }
+.actions { margin-top: 28px; padding-top: 24px; border-top: 1px solid #d1c8b7; }
+.card :global(.button) { min-height: 52px; white-space: normal; text-align: center; }
+
+@media (max-width: 600px) {
+  .page { padding-block: 32px 56px; }
+  .card { padding: 28px 24px; }
+  .card h1 { font-size: 40px; }
+  .note { padding: 16px; }
+  .card :global(.button) { width: 100%; padding-inline: 16px; }
+}

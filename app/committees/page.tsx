@@ -26,7 +26,7 @@ export default async function Committees() {
         <Reveal key={person.id} delay={Math.min(index * .05, .2)}>
           <article className={[styles.card, !person.name ? styles.vacant : ""].join(" ")}>
             <div className={[styles.portrait, !person.file_url ? styles.placeholder : ""].join(" ")}>
-              {person.file_url ? <Image src={committeeImage(person.file_url)} alt={person.name || "Vacant committee position"} fill sizes="(max-width:600px) 88vw, (max-width:960px) 42vw, 340px"/> : <UserRound size={88} aria-hidden="true" strokeWidth={1}/>}
+              {person.file_url ? <Image src={committeeImage(person.file_url)} alt={person.name || "Vacant committee position"} fill sizes="(max-width:600px) 100vw, (max-width:960px) 50vw, (max-width:1376px) 33vw, 406px"/> : <UserRound size={88} aria-hidden="true" strokeWidth={1}/>}
               {!person.name && <span className={styles.vacancyBadge}>Position vacant</span>}
             </div>
             <div className={styles.details}>

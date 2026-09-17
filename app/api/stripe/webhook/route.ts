@@ -129,8 +129,9 @@ async function activateMembershipCheckout(event: Stripe.Event) {
   if (
     session.integration_identifier !== MEMBERSHIP_INTEGRATION_IDENTIFIER
     || session.metadata?.ydsme_integration !== "memberships"
-    || session.mode !== "subscription"
+    || !["subscription", "payment"].includes(session.mode)
     || session.payment_status !== "paid"
+    || session.status !== "complete"
     || session.currency !== "gbp"
   ) return false;
 
@@ -149,33 +150,23 @@ async function activateMembershipCheckout(event: Stripe.Event) {
 
   const subscriptionId = stripeId(session.subscription);
   const invoiceId = stripeId(session.invoice);
-  if (!subscriptionId || !invoiceId) {
-    throw new Error("Verified membership Checkout has no subscription or invoice reference.");
-  }
-  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-  if (subscription.metadata?.ydsme_integration !== "memberships") {
-    throw new Error("Verified membership subscription metadata is incomplete.");
-  }
-  const payment = await invoicePaymentIds(invoiceId);
+  if (session.mode === "subscription" && (!subscriptionId || !invoiceId)) throw new Error("Missing legacy subscription references.");
+  const subscription = subscriptionId ? await getStripe().subscriptions.retrieve(subscriptionId) : null;
+  if (subscription && subscription.metadata?.ydsme_integration !== "memberships") throw new Error("Invalid subscription metadata.");
+  const payment = session.mode === "payment" ? { intentId: stripeId(session.payment_intent) } : await invoicePaymentIds(invoiceId!);
   if (!payment.intentId) throw new Error("Verified membership payment has no payment reference.");
   const { data: planPrice, error: planPriceError } = await createServiceClient()
     .from("membership_plan_prices")
     .select("id,plan_id,stripe_price_id,membership_year")
     .eq("id", planPriceId)
     .maybeSingle();
-  if (planPriceError || !planPrice?.stripe_price_id || planPrice.membership_year !== membershipYear) {
+  if (planPriceError || !planPrice || planPrice.membership_year !== membershipYear) {
     throw new Error("Verified membership payment refers to an unavailable annual price.");
   }
 
-  const renewalYear = membershipYear + 1;
-  const renewalPrice = await ensureMembershipPlanPrice(planPrice.plan_id, renewalYear);
-  if (!renewalPrice.stripe_price_id) {
-    throw new Error("The forthcoming annual membership price is not ready for online renewal.");
-  }
-
-  const desiredCancelAtPeriodEnd = session.metadata.membership_auto_renew === "false"
-    || subscription.cancel_at_period_end;
-  const period = subscriptionPeriod(subscription);
+  const renewalPrice = subscription ? await ensureMembershipPlanPrice(planPrice.plan_id, membershipYear + 1) : null;
+  const desiredCancelAtPeriodEnd = subscription ? session.metadata.membership_auto_renew === "false" || subscription.cancel_at_period_end : false;
+  const period = subscription ? subscriptionPeriod(subscription) : { start: null, end: null };
   const admin = createServiceClient();
   const common = {
     p_plan_price_id: planPriceId,
@@ -187,14 +178,15 @@ async function activateMembershipCheckout(event: Stripe.Event) {
     p_stripe_invoice_id: invoiceId,
     p_stripe_customer_id: customerId,
     p_stripe_subscription_id: subscriptionId,
-    p_stripe_subscription_status: subscription.status,
+    p_stripe_subscription_status: subscription?.status ?? null,
     p_cancel_at_period_end: desiredCancelAtPeriodEnd,
     p_current_period_end: period.end,
   };
   const { data, error } = applicationId
-    ? await admin.rpc("activate_membership_application", {
+    ? await admin.rpc("activate_membership_application_checkout", {
       ...common,
       p_application_id: applicationId,
+      p_stripe_event_created_at: new Date(event.created * 1000).toISOString(),
     })
     : await admin.rpc("activate_membership_renewal", {
       ...common,
@@ -208,9 +200,9 @@ async function activateMembershipCheckout(event: Stripe.Event) {
   const memberId = (data as Array<{ member_id: string }> | null)?.[0]?.member_id;
   if (!memberId) throw new Error("Verified membership activation returned no member.");
   const postActivationAdmin = createServiceClient();
-  await postActivationAdmin.from("membership_subscriptions").update({
+  if (subscription) await postActivationAdmin.from("membership_subscriptions").update({
     current_period_start: period.start,
-    stripe_price_id: renewalPrice.stripe_price_id,
+    stripe_price_id: renewalPrice?.stripe_price_id,
     stripe_event_created_at: new Date(event.created * 1000).toISOString(),
   }).eq("member_id", memberId);
   await processMembershipProviderCommands(memberId);
@@ -220,7 +212,7 @@ async function activateMembershipCheckout(event: Stripe.Event) {
     stripe_payment_intent_id: payment.intentId,
     completed_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }).eq("stripe_checkout_session_id", session.id);
+  }).eq("stripe_checkout_session_id", session.id).neq("status", "payment_review");
   if (applicationId) {
     await postActivationAdmin.from("membership_notifications").update({
       email_status: "cancelled",

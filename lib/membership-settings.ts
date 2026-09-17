@@ -28,10 +28,10 @@ export const defaultMembershipPaymentSettings: Omit<MembershipPaymentSettings, "
   bank_account_name: "York City & District Society of Model Engineers",
   bank_sort_code: "00-00-00",
   bank_account_number: "00000000",
-  bank_transfer_instructions: "Use the unique membership reference shown in your payment instructions.",
+  bank_transfer_instructions: "Contact the Membership Officer if you need help with the transfer.",
   cheque_payee: "York City & District Society of Model Engineers",
-  cheque_delivery_instructions: "Contact the Society Treasurer to arrange delivery of your cheque.",
-  cash_instructions: "Contact the Society Treasurer to arrange a complete cash payment.",
+  cheque_delivery_instructions: "Give the cheque to the Society Treasurer.",
+  cash_instructions: "Give the cash payment to the Society Treasurer.",
 };
 
 export type PublicMembershipPaymentContact = Pick<
@@ -67,16 +67,129 @@ export async function getMembershipPaymentSettings(id?: string | null): Promise<
   return data ?? { id: "default", version: 0, ...defaultMembershipPaymentSettings };
 }
 
-export function offlinePaymentInstructions(method: "cash" | "bank_transfer" | "cheque", settings: MembershipPaymentSettings, reference: string) {
-  if (method === "bank_transfer") {
-    return `Pay the complete fee to ${settings.bank_account_name}, sort code ${settings.bank_sort_code}, account ${settings.bank_account_number}. Use reference ${reference}. ${settings.bank_transfer_instructions}`;
-  }
-  if (method === "cheque") {
-    return `Make the cheque payable to ${settings.cheque_payee} and write reference ${reference} on the reverse. ${settings.cheque_delivery_instructions}`;
-  }
-  return `${settings.cash_instructions} Quote reference ${reference}.`;
+type OfflinePaymentInstructionDetails = {
+  applicantName: string;
+  amountPence: number;
+};
+
+type OfflinePaymentReminderDetails = OfflinePaymentInstructionDetails & {
+  applicationExpiresAt: Date;
+};
+
+const paymentMoney = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+function bankTransferAdditionalNote(value: string) {
+  return value
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !/\breference\b/i.test(sentence))
+    .join(" ")
+    .trim();
 }
 
-export function membershipPaymentReference(applicationId: string) {
-  return `MEM-${applicationId.replaceAll("-", "").slice(0, 8).toUpperCase()}`;
+export function offlinePaymentInstructions(method: "cash" | "bank_transfer" | "cheque", settings: MembershipPaymentSettings, details: OfflinePaymentInstructionDetails) {
+  if (method === "bank_transfer") {
+    const additionalNote = bankTransferAdditionalNote(settings.bank_transfer_instructions);
+    return [
+      "Thank you for applying for Society membership.",
+      "",
+      "Bank transfer details",
+      `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+      `Account name: ${settings.bank_account_name}`,
+      `Sort code: ${settings.bank_sort_code}`,
+      `Account number: ${settings.bank_account_number}`,
+      `Reference: ${details.applicantName}`,
+      "",
+      "Enter your full name as the payment reference.",
+      additionalNote,
+    ].filter((line, index, lines) => line || lines[index - 1]).join("\n").trim();
+  }
+  if (method === "cheque") {
+    return [
+      "Thank you for applying for Society membership.",
+      "",
+      "Cheque payment details",
+      `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+      `Payable to: ${settings.cheque_payee}`,
+      `Applicant’s full name to write on the back of the cheque: ${details.applicantName}`,
+      `How to deliver it: ${settings.cheque_delivery_instructions}`,
+      "",
+      "Your membership will be activated after the cheque has been received, cleared and recorded.",
+    ].join("\n");
+  }
+  return [
+    "Thank you for applying for Society membership.",
+    "",
+    "Cash payment details",
+    `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+    `Member name: ${details.applicantName}`,
+    `How to pay: ${settings.cash_instructions}`,
+    "",
+    "Your membership will be activated after the cash payment has been received and recorded.",
+  ].join("\n");
+}
+
+export function offlinePaymentReminder(method: "cash" | "bank_transfer" | "cheque", settings: MembershipPaymentSettings, details: OfflinePaymentReminderDetails) {
+  const expiryDate = new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/London",
+  }).format(details.applicationExpiresAt);
+  const introduction = `We have not yet recorded the ${paymentMoney.format(details.amountPence / 100)} payment for ${details.applicantName}’s Society membership.`;
+  const closing = [
+    `This application will remain open until ${expiryDate}. If you no longer wish to continue, you can ignore this email.`,
+    "",
+    "Need help? Email the Membership Officer.",
+  ];
+
+  if (method === "bank_transfer") {
+    return [
+      introduction,
+      "",
+      "Bank transfer details",
+      `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+      `Account name: ${settings.bank_account_name}`,
+      `Sort code: ${settings.bank_sort_code}`,
+      `Account number: ${settings.bank_account_number}`,
+      `Reference: ${details.applicantName}`,
+      "",
+      "Enter the applicant’s full name as the payment reference.",
+      "",
+      "If you have already paid, no action is needed. Please allow a little time for us to match the payment.",
+      "",
+      ...closing,
+    ].join("\n");
+  }
+  if (method === "cheque") {
+    return [
+      introduction,
+      "",
+      "Cheque payment details",
+      `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+      `Payable to: ${settings.cheque_payee}`,
+      `Applicant’s full name to write on the back of the cheque: ${details.applicantName}`,
+      `How to deliver it: ${settings.cheque_delivery_instructions}`,
+      "",
+      "If you have already given us the cheque, no action is needed. Please allow time for it to clear and be recorded.",
+      "",
+      ...closing,
+    ].join("\n");
+  }
+  return [
+    introduction,
+    "",
+    "Cash payment details",
+    `Amount: ${paymentMoney.format(details.amountPence / 100)}`,
+    `Member name: ${details.applicantName}`,
+    `How to pay: ${settings.cash_instructions}`,
+    "",
+    "If you have already paid, no action is needed. Please allow a little time for the payment to be recorded.",
+    "",
+    ...closing,
+  ].join("\n");
 }

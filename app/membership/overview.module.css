@@ -1,0 +1,68 @@
+.overview {
+  --membership-section-space: clamp(56px, 6vw, 96px);
+  --membership-column-gap: clamp(32px, 4vw, 64px);
+}
+.overview :global(.inner-hero) {
+  display: flex;
+  align-items: center;
+  height: auto;
+  min-height: 620px;
+  padding: 180px var(--public-content-inline) 72px;
+}
+.overview :global(.inner-copy) { position: relative; inset: auto; width: 100%; max-width: 900px; }
+.overview :global(.inner-hero h1) { font-size: clamp(52px, 6.5vw, 92px); line-height: .94; }
+.overview :global(.inner-copy > p:not(.eyebrow)) { max-width: 52ch; color: rgba(255,255,255,.94); font-size: 18px; line-height: 1.65; }
+.overview :global(.button-row) { flex-wrap: wrap; }
+.overview :global(.section),
+.overview :global(.join-panel),
+.options { padding: var(--membership-section-space) var(--public-content-inline); }
+.overview :global(.membership-lead) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--membership-column-gap);
+  align-items: center;
+}
+.overview :global(.membership-lead h2),
+.overview :global(.join-panel h2),
+.optionsHeading h2 { margin: 0; font: 500 clamp(46px, 5.2vw, 76px)/.98 var(--font-display); letter-spacing: -.035em; }
+.overview :global(.membership-lead > div:last-child > p) { max-width: var(--public-reading-max); font-size: 27px; line-height: 1.4; }
+.overview :global(.membership-lead ul) { margin-bottom: 0; }
+.overview :global(.membership-lead li) { gap: 12px; font-size: 16px; line-height: 1.6; padding-block: 16px; }
+.overview :global(.membership-lead li svg) { flex: 0 0 18px; margin-top: 3px; }
+.options { background: #eee8dc; scroll-margin-top: 24px; }
+.optionsHeading { display: flex; justify-content: space-between; align-items: end; gap: 32px; margin-bottom: 40px; }
+.optionsHeading h2 em { color: var(--rust); font-weight: 400; }
+.optionsHeading > p { margin: 0; color: #59635d; font-size: 15px; line-height: 1.7; }
+.overview :global(.tier-grid) { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; border: 0; background: none; }
+.overview :global(.tier-grid > div) { min-width: 0; }
+.overview :global(.tier) { height: 100%; min-height: 0; padding: 28px; border: 1px solid var(--line); background: #fffdf7; }
+.overview :global(.tier.featured) { background: var(--brass); border-color: #b48c3b; }
+.overview :global(.tier-top) { min-height: 28px; align-items: center; gap: 12px; }
+.overview :global(.tier b) { position: static; font-size: 8px; white-space: nowrap; }
+.overview .planName { margin: 32px 0 16px; font: 700 14px/1.5 var(--font-sans); text-transform: uppercase; letter-spacing: .1em; overflow-wrap: anywhere; }
+.overview :global(.tier) .price { margin: 0 0 20px; color: var(--ink); font: 500 clamp(48px, 4.5vw, 62px)/1 var(--font-display); text-transform: none; letter-spacing: -.03em; }
+.price small { display: inline-block; margin-left: 8px; font: 500 12px/1.5 var(--font-sans); letter-spacing: 0; }
+.overview :global(.tier) .description { margin: 0; font-size: 15px; line-height: 1.75; color: #4e5a52; }
+.overview :global(.tier.featured) .description { color: #23372f; }
+.overview :global(.join-panel) { display: flex; gap: var(--membership-column-gap); }
+.overview :global(.join-panel > div) { max-width: 760px; }
+.overview :global(.join-panel > div > p:last-child) { margin: 24px 0 0; max-width: 55ch; font-size: 16px; line-height: 1.75; color: rgba(255,255,255,.8); }
+.overview :global(.join-panel > .button) { flex-shrink: 0; width: auto; margin: 0; }
+
+@media (max-width: 1100px) {
+  .overview :global(.tier-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .overview :global(.membership-lead) { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .overview :global(.inner-hero) { min-height: 0; padding-block: 140px 56px; }
+  .overview :global(.inner-hero h1) { font-size: clamp(42px, 10vw, 58px); }
+  .overview :global(.inner-copy > p:not(.eyebrow)) { font-size: 16px; }
+  .overview :global(.vertical-label) { display: none; }
+  .overview :global(.button-row .button) { width: 100%; }
+  .optionsHeading { display: block; }
+  .optionsHeading > p { margin-top: 24px; }
+  .overview :global(.join-panel) { flex-direction: column; align-items: flex-start; }
+  .overview :global(.join-panel > .button) { width: 100%; }
+}
+@media (max-width: 560px) {
+  .overview :global(.tier-grid) { grid-template-columns: minmax(0, 1fr); }
+}
