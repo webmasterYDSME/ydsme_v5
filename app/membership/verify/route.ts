@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { createApplicationCheckout, MembershipCheckoutUnavailableError, membershipTokenHash } from "@/lib/membership";
-import { getMembershipPaymentSettings, membershipPaymentReference, offlinePaymentInstructions } from "@/lib/membership-settings";
+import { createApplicationCheckout, ensureMembershipPlanPrice, MembershipCheckoutUnavailableError, membershipBillingYear, membershipTokenHash, proratedMembershipFee } from "@/lib/membership";
+import { getMembershipPaymentSettings, offlinePaymentInstructions, offlinePaymentReminder } from "@/lib/membership-settings";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
 
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (token.length < 20 || token.length > 200) redirect("/membership/apply?application=link-invalid");
   const admin = createServiceClient();
   const { data: application } = await admin.from("membership_applications")
-    .select("id,status,payment_method,requested_plan_id,verification_expires_at,contact_email,full_name,guardian_email,guardian_led,payment_settings_version_id")
+    .select("id,status,payment_method,requested_plan_id,verification_expires_at,expires_at,contact_email,full_name,guardian_email,guardian_led,payment_settings_version_id,created_at")
     .eq("verification_token_hash", membershipTokenHash(token)).maybeSingle();
   if (!application || application.status !== "email_verification_pending"
     || new Date(application.verification_expires_at) <= new Date()) {
@@ -52,8 +52,16 @@ export async function GET(request: Request) {
   }
   const settings = application.payment_method === "stripe" ? null
     : await getMembershipPaymentSettings(application.payment_settings_version_id);
+  const pricingDate = new Date(application.created_at);
+  const price = application.payment_method === "stripe"
+    ? null
+    : await ensureMembershipPlanPrice(application.requested_plan_id, membershipBillingYear(pricingDate)).catch(() => null);
+  if (application.payment_method !== "stripe" && !price) redirect("/membership/apply?application=payment-unavailable");
   const instructions = settings && application.payment_method !== "stripe"
-    ? offlinePaymentInstructions(application.payment_method, settings, membershipPaymentReference(application.id)) : null;
+    ? offlinePaymentInstructions(application.payment_method, settings, {
+      applicantName: application.full_name,
+      amountPence: proratedMembershipFee(price!.amount_pence, pricingDate),
+    }) : null;
   let checkoutUrl: string | null = null;
   let checkoutUnavailable = false;
   if (status === "awaiting_payment") {
@@ -81,16 +89,36 @@ export async function GET(request: Request) {
       recipient_email: application.contact_email,
     });
   } else if (status !== "awaiting_approval") {
-    await admin.from("membership_notifications").insert({
-      application_id: application.id,
-      kind: `membership.application-${application.payment_method}-instructions`,
-      title: `${application.full_name}'s membership application is ready for payment`,
-      body: `${application.full_name}'s verified application is ready. ${instructions} Partial payments are not accepted; membership starts after an officer confirms the complete payment.`,
-      portal_visible: false,
-      deduplication_key: `application-payment-instructions-${application.id}`,
-      recipient_email: application.contact_email,
-    });
+    await admin.from("membership_notifications").insert([
+      {
+        application_id: application.id,
+        kind: `membership.application-${application.payment_method}-instructions`,
+        title: application.payment_method === "bank_transfer" ? "Your membership bank transfer details"
+          : application.payment_method === "cheque" ? "Your membership cheque payment details"
+            : "Your membership cash payment details",
+        body: instructions,
+        portal_visible: false,
+        scheduled_for: new Date().toISOString(),
+        deduplication_key: `application-payment-instructions-${application.id}`,
+        recipient_email: application.contact_email,
+      },
+      {
+        application_id: application.id,
+        kind: "membership.application-payment-reminder",
+        title: `Reminder: complete ${application.full_name}’s Society membership payment`,
+        body: offlinePaymentReminder(application.payment_method, settings!, {
+          applicantName: application.full_name,
+          amountPence: proratedMembershipFee(price!.amount_pence, pricingDate),
+          applicationExpiresAt: new Date(application.expires_at),
+        }),
+        portal_visible: false,
+        scheduled_for: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        deduplication_key: `application-payment-reminder-${application.id}`,
+        recipient_email: application.contact_email,
+      },
+    ]);
   }
   if (checkoutUrl) redirect(checkoutUrl);
-  redirect(`/membership/apply?application=${status === "awaiting_approval" ? "awaiting-approval" : status.replaceAll("_", "-")}`);
+  const resultToken = status === "awaiting_approval" ? "" : `&token=${encodeURIComponent(token)}`;
+  redirect(`/membership/apply?application=${status === "awaiting_approval" ? "awaiting-approval" : status.replaceAll("_", "-")}${resultToken}`);
 }

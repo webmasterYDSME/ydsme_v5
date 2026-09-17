@@ -73,7 +73,7 @@ test("keeps event management current and uses only the website booking system", 
   assert.match(publicEvents, /event.available_places > 0 \? "Book free places" : "View booking details"/);
   assert.match(publicEvents, /more.map\(event =>/);
   assert.match(publicEvents, /id=\{`event-\$\{event.id\}`\}/);
-  assert.match(await read("app/events/[id]/book/page.tsx"), /href=\{`\/events#event-\$\{event\.id\}`\}/);
+  assert.match(await read("app/events/[id]/book/page.tsx"), /href=\{`\/events\/\$\{event\.id\}`\}/);
 });
 
 test("automatically archives workshops after their scheduled date", async () => {
@@ -423,7 +423,7 @@ test("keeps the supplied logo and local member login", async () => {
   assert.match(signInCard, /auth-flip-front[\s\S]*?<form action=\{sendMagicLink\}/);
   assert.match(signInCard, /SubmitOnEnterInput[\s\S]*?enterKeyHint="go"/);
   assert.match(signInCard, /showBack\("password"\)[\s\S]*?Sign in with email and password/);
-  assert.match(signInCard, /backMode === "password-reset" \? "Back to password sign in"/);
+  assert.match(signInCard, /action=\{sendPasswordReset\}[\s\S]*?onClick=\{\(\) => showBack\("password"\)\}[\s\S]*?Back to password sign in/);
   assert.match(signInCard, /action=\{signInWithPassword\}[\s\S]*?showBack\("password-reset"\)[\s\S]*?Forgotten your password/);
   assert.match(signInCard, /minLength=\{6\}/);
   assert.match(authActions, /existingPasswordSchema = z\.string\(\)\.min\(6\)/);
@@ -876,7 +876,7 @@ test("keeps membership application and callback states on the dedicated applicat
   assert.match(membershipPage, /redirect\(`\/membership\/apply\?application=/);
   assert.match(applicationWizard, /action=\{submitMembershipApplication\}/);
   const applicationSources = `${applicationPage}\n${applicationWizard}\n${eligibilityFields}`;
-  for (const field of ["plan_id", "full_name", "contact_email", "date_of_birth", "payment_method", "auto_renew", "terms"]) {
+  for (const field of ["plan_id", "full_name", "contact_email", "date_of_birth", "payment_method", "terms"]) {
     assert.match(applicationSources, new RegExp(`name="${field}"`));
   }
   assert.match(eligibilityFields, /name="date_of_birth"[\s\S]*required/);
@@ -885,7 +885,8 @@ test("keeps membership application and callback states on the dedicated applicat
   assert.match(applicationWizard, /hidden=\{stage !== 0\}/);
   assert.match(applicationWizard, /checkValidity\(\)/);
   assert.match(applicationPage, /if \(outcome\)[\s\S]*membership-application-result-page/);
-  assert.match(applicationPage, /There is nothing else you need to do\./);
+  assert.match(applicationPage, /Thank you for applying for Society membership/);
+  assert.match(applicationPage, /We’ll email you soon with your membership details and information about website access/);
   assert.match(actions, /eligibleMembershipPlans/);
   for (const source of [actions, verification, checkout, billing]) {
     assert.match(source, /\/membership\/apply\?application=/);

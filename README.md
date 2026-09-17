@@ -16,13 +16,32 @@ Open the website at [http://localhost:3010](http://localhost:3010), local Supaba
 
 This project's Supabase services use the dedicated `55320–55329` port range: API `55321`, database `55322`, Studio `55323`, local email `55324`, and Edge Function debugger `55328`. Keep other local Supabase projects on different ranges to avoid collisions.
 
-Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Stripe, Facebook, production SMTP and production webhooks should remain disabled during local development.
+Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Use only Stripe test-mode credentials locally. Facebook, production SMTP and production webhooks should remain disabled during local development.
 
-Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables allowlisted website journeys; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
+Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables the website journeys in an isolated test environment; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
 
 `npm run supabase:start` also installs local-only Vault values used by scheduled jobs. Membership emails are sent to Mailpit immediately after they are queued; a one-minute job retries any delivery interrupted by a transient failure.
 
 The local database currently contains a private production snapshot for development. Its ignored export files live under `supabase/.temp/`; never commit, upload or share them. `supabase db reset` erases the local snapshot and rebuilds only the schema because automatic production-data seeding is intentionally disabled.
+
+## Local Stripe membership testing
+
+With the Stripe CLI installed and a test-mode `STRIPE_SECRET_KEY` in `.env.local`, run:
+
+```bash
+npm run stripe:configure-local-membership
+npm run stripe:listen-local
+```
+
+Keep the listener running in a separate terminal alongside `npm run dev`. It saves the CLI signing secret as `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` in the ignored `.env.local` file and forwards test events to the local website. Restart the dev server if it has not reloaded the environment. Restart the listener whenever starting a new testing session.
+
+The setup command connects only to the local Supabase stack and creates/reuses four test products. Membership amounts come from the website's fee records and are passed as one-time Checkout prices; no recurring prices or subscriptions are configured. No manual Stripe dashboard product setup is needed.
+
+For local CAPTCHA testing, use Cloudflare’s documented test sitekey and matching test secret in `.env.local` (see https://developers.cloudflare.com/turnstile/troubleshooting/testing/). Keep production keys in deployment configuration.
+
+Open `/membership/apply`. In `MEMBERSHIP_MODE=pilot`, any valid email address can use the isolated membership journey. Read verification codes and account invitations in local Mailpit at http://127.0.0.1:55324. Pay using Stripe's test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC. Confirm the member becomes active in `/admin/memberships`, with manual review still pending where applicable. For queued membership notices, keep `npx supabase functions serve deliver-membership-notifications` running in another terminal. Its local configuration sends only to Mailpit. Supabase Auth invitations and signup codes use local Mailpit directly.
+
+The automated `test:stripe-membership` runner manages its own server and signed fixtures; stop the manual listener before running it to avoid concurrent delivery into the shared local database.
 
 ## Main routes
 

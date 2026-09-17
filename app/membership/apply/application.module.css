@@ -26,6 +26,14 @@
 .application :global(.membership-application-result) { width: 100%; max-width: var(--public-confirmation-max); padding: 40px; }
 .application :global(.membership-application-result h1) { font-size: clamp(38px, 4.5vw, 58px); line-height: 1; }
 .application :global(.membership-application-result > p:not(.eyebrow)) { max-width: 55ch; font-size: 16px; line-height: 1.75; }
+.offlinePaymentDetails { width: min(560px, 100%); margin-top: 28px; padding: 24px; border: 1px solid #d2cab9; background: #f6f1e6; text-align: left; }
+.offlinePaymentDetails h2 { margin: 0 0 16px; font: 600 28px/1 var(--font-display); }
+.offlinePaymentDetails dl { margin: 0; display: grid; }
+.offlinePaymentDetails dl div { padding: 11px 0; display: grid; grid-template-columns: minmax(120px, .7fr) minmax(0, 1.3fr); gap: 18px; border-top: 1px solid #ddd5c6; }
+.offlinePaymentDetails dt { color: #69736d; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.offlinePaymentDetails dd { margin: 0; color: var(--deep); font-size: 14px; font-weight: 750; overflow-wrap: anywhere; }
+.offlinePaymentDetails p { margin: 16px 0 0; color: #4f5e56; font-size: 13px; line-height: 1.55; }
+.offlinePaymentDetails p + p { margin-top: 5px; }
 .application :global(.membership-apply-unavailable) { width: calc(100% - 2 * var(--public-content-gutter)); max-width: var(--public-confirmation-max); margin: 48px auto 72px; padding: 32px; }
 
 @media (max-width: 760px) {
@@ -43,6 +51,8 @@
   .application :global(.membership-apply-workspace .membership-wizard-actions) { padding: 16px 20px; }
   .application:global(.membership-application-result-page) { padding-block: 32px 56px; }
   .application :global(.membership-application-result) { padding: 32px 24px; }
+  .offlinePaymentDetails { padding: 20px; }
+  .offlinePaymentDetails dl div { grid-template-columns: 1fr; gap: 4px; }
 }
 
 @media print {

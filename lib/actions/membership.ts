@@ -1,5 +1,6 @@
 "use server";
 
+import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -8,13 +9,14 @@ import {
   PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
   PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
 } from "@/lib/cache-tags";
+import { refreshMembershipApplicationPaymentLink } from "@/lib/membership";
+import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
 import { writeAudit } from "@/lib/audit";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
   membershipAdministrationEnabled,
   membershipBillingEnabled,
   membershipMode,
-  membershipPilotAllows,
   membershipRecoveryEnabled,
 } from "@/lib/features";
 import {
@@ -38,8 +40,8 @@ import {
 import { consumeRateLimit } from "@/lib/rate-limit";
 import {
   getMembershipPaymentSettings,
-  membershipPaymentReference,
   offlinePaymentInstructions,
+  offlinePaymentReminder,
 } from "@/lib/membership-settings";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { createClient as createServerClient } from "@/lib/supabase/server";
@@ -63,7 +65,7 @@ const applicationSchema = z.object({
   title: z.string().trim().max(10).default(""),
   full_name: z.string().trim().min(2).max(180),
   contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
-  contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
+  contact_number: z.string().trim().max(40).optional().refine(validMembershipPhone, membershipPhoneHint).transform((value) => value || null),
   date_of_birth: z.iso.date(),
   payment_method: z.enum(["stripe", "cash", "bank_transfer", "cheque"]),
   auto_renew: z.string().optional().transform((value) => value === "on"),
@@ -72,7 +74,6 @@ const applicationSchema = z.object({
   guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
   guardian_consent: z.string().optional().transform((value) => value === "on"),
   guardian_led: z.string().optional().transform((value) => value === "on"),
-  shared_contact: z.string().optional().transform((value) => value === "on"),
   newsletter_opt_in: z.string().optional().transform((value) => value === "on"),
   terms: z.literal("on"),
 });
@@ -83,15 +84,13 @@ export async function submitMembershipApplication(formData: FormData) {
   const parsed = applicationSchema.safeParse({ ...fields, date_of_birth: normalizeApplicationDate(fields.date_of_birth) });
   if (!parsed.success) redirect("/membership/apply?application=invalid");
   const applicationEmail = parsed.data.guardian_led ? parsed.data.guardian_email : parsed.data.contact_email;
+  const verified = await getSignupVerification();
+  if (!verified || verified.email !== applicationEmail || verified.full_name !== normalizeIdentityName(parsed.data.full_name)) redirect("/membership/apply?application=verification-required");
   if (!applicationEmail) redirect("/membership/apply?application=invalid");
-  if (!membershipPilotAllows(applicationEmail)) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   if (membershipMode() === "live") {
     const { count, error: blockerError } = await createServiceClient().from("membership_migration_reviews")
       .select("id", { count: "exact", head: true }).eq("status", "pending");
     if (blockerError || (count ?? 0) > 0) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  }
-  if (!await verifyTurnstile(String(formData.get("captchaToken") || ""))) {
-    redirect("/membership/apply?application=security-check");
   }
   if (!await consumeRateLimit("membership-application", 5, 60 * 60, applicationEmail)) {
     redirect("/membership/apply?application=received");
@@ -117,6 +116,7 @@ export async function submitMembershipApplication(formData: FormData) {
   if (junior && (!parsed.data.guardian_name || !parsed.data.guardian_email || !parsed.data.guardian_consent)) {
     redirect("/membership/apply?application=eligibility");
   }
+  if (junior && !parsed.data.guardian_led) redirect("/membership/apply?application=eligibility");
   if (parsed.data.guardian_led && !junior) redirect("/membership/apply?application=eligibility");
   if (junior && parsed.data.guardian_email === applicationEmail && !parsed.data.guardian_led) {
     redirect("/membership/apply?application=eligibility");
@@ -126,54 +126,38 @@ export async function submitMembershipApplication(formData: FormData) {
   const identityName = normalizeIdentityName(parsed.data.full_name);
   const [{ data: memberCandidates }, { data: applicationCandidates }] = await Promise.all([
     admin.from("members").select("id,auth_user_id,contact_email,full_name")
-      .ilike("contact_email", escapedEmail)
-      .eq("date_of_birth", parsed.data.date_of_birth).neq("effective_state", "archived"),
+      .ilike("contact_email", escapedEmail),
     admin.from("membership_applications").select("id,status,full_name")
       .ilike("contact_email", escapedEmail)
-      .eq("date_of_birth", parsed.data.date_of_birth)
-      .not("status", "in", "(converted,rejected,expired)"),
+      .not("status", "in", "(converted,expired)"),
   ]);
   const existingMember = memberCandidates?.find((candidate) => normalizeIdentityName(candidate.full_name) === identityName);
   const existingApplication = applicationCandidates?.find((candidate) => normalizeIdentityName(candidate.full_name) === identityName);
-  if (existingMember) {
-    await admin.from("membership_notifications").insert({
-      member_id: existingMember.id, recipient_user_id: existingMember.auth_user_id,
-      recipient_email: existingMember.contact_email, kind: "membership.duplicate-application",
-      title: `A membership application used ${existingMember.full_name}'s email address`,
-      body: `A new application was submitted using the correspondence email on ${existingMember.full_name}'s membership record. No duplicate membership or payment was created. Sign in to renew, or contact the membership officer if this was not you.`,
-      action_href: existingMember.auth_user_id ? "/account" : null, portal_visible: Boolean(existingMember.auth_user_id),
-      deduplication_key: `duplicate-membership-application-${existingMember.id}-${new Date().toISOString().slice(0, 10)}`,
-    });
-    redirect("/membership/apply?application=received");
-  }
+  if (existingMember) redirect("/membership/apply?application=already-member");
   if (existingApplication) {
-    const statusToken = membershipToken();
-    await admin.from("membership_applications").update({
-      application_status_token_hash: membershipTokenHash(statusToken),
-      application_status_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", existingApplication.id);
-    await admin.from("membership_notifications").insert({
-      application_id: existingApplication.id,
-      recipient_email: applicationEmail,
-      kind: "membership.application-resumed",
-      title: `${parsed.data.full_name}'s membership application is already saved`,
-      body: `A second application or payment has not been created. Open the secure link to see the current stage of ${parsed.data.full_name}'s application.`,
-      action_href: `/membership/status?token=${encodeURIComponent(statusToken)}`,
-      portal_visible: false,
-      deduplication_key: `application-resumed-${existingApplication.id}-${new Date().toISOString().slice(0, 10)}`,
-    });
-    redirect("/membership/apply?application=received");
+    if (existingApplication.status === "rejected") redirect("/membership/apply?application=contact-officer");
+    if (existingApplication.status === "awaiting_payment") {
+      const href = await refreshMembershipApplicationPaymentLink(existingApplication.id);
+      redirect(href ?? "/membership/apply?application=already-member");
+    }
+    redirect(`/membership/apply?application=awaiting-${existingApplication.status.replace("awaiting_", "").replaceAll("_", "-")}`);
   }
-
   const token = membershipToken();
   const statusToken = membershipToken();
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const applicationExpiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const paymentSettings = await getMembershipPaymentSettings();
   if (parsed.data.payment_method === "bank_transfer" && !paymentSettings.configured) {
     redirect("/membership/apply?application=payment-method-unavailable");
   }
+  const offlinePrice = parsed.data.payment_method === "stripe"
+    ? null
+    : await ensureMembershipPlanPrice(plan.id, membershipBillingYear(now)).catch(() => null);
+  if (parsed.data.payment_method !== "stripe" && !offlinePrice) {
+    redirect("/membership/apply?application=payment-method-unavailable");
+  }
+  const offlineAmountPence = offlinePrice ? proratedMembershipFee(offlinePrice.amount_pence, now) : null;
   const { data: application, error } = await admin.from("membership_applications").insert({
     requested_plan_id: plan.id,
     title: parsed.data.title,
@@ -182,40 +166,64 @@ export async function submitMembershipApplication(formData: FormData) {
     contact_number: parsed.data.contact_number,
     date_of_birth: parsed.data.date_of_birth,
     payment_method: parsed.data.payment_method,
-    auto_renew: parsed.data.payment_method === "stripe" && parsed.data.auto_renew,
+    auto_renew: false,
+    status: parsed.data.payment_method === "stripe" ? "awaiting_payment" : `awaiting_${parsed.data.payment_method}`,
+    email_verified_at: verified.verified_at,
+    guardian_verified_at: junior ? verified.verified_at : null,
+    manual_verification: plan.requires_approval ? "pending" : "not_required",
     student_declaration: parsed.data.student_declaration,
     guardian_name: parsed.data.guardian_name,
+    guardian_consent_version: junior ? "2026-09-17" : null,
     guardian_email: parsed.data.guardian_email,
     guardian_consent: parsed.data.guardian_consent,
     guardian_led: parsed.data.guardian_led,
-    contact_role: parsed.data.guardian_led ? "guardian" : parsed.data.shared_contact ? "shared_household" : "self",
+    contact_role: parsed.data.guardian_led ? "guardian" : memberCandidates?.length || applicationCandidates?.length ? "shared_household" : "self",
     portal_invitation_status: parsed.data.guardian_led ? "not_requested" : "eligible",
     newsletter_opt_in: parsed.data.newsletter_opt_in,
     payment_settings_version_id: paymentSettings.id === "default" ? null : paymentSettings.id,
     verification_token_hash: membershipTokenHash(token),
     verification_expires_at: expiresAt.toISOString(),
+    expires_at: applicationExpiresAt.toISOString(),
     application_status_token_hash: membershipTokenHash(statusToken),
-    application_status_expires_at: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    application_status_expires_at: applicationExpiresAt.toISOString(),
     terms_version: MEMBERSHIP_TERMS_VERSION,
     terms_accepted_at: now.toISOString(),
   }).select("id").single();
 
-  // Keep the public response deliberately generic for both duplicate and new identities.
-  if (!error && application) {
-    await admin.from("membership_notifications").insert({
-      application_id: application.id,
-      recipient_email: applicationEmail,
-      kind: "membership.application-verify",
-      title: `Verify ${parsed.data.full_name}'s membership application`,
-      body: parsed.data.guardian_led
-        ? `Confirm this email address and your consent for ${parsed.data.full_name}'s Junior membership application.`
-        : `Confirm your email address to continue ${parsed.data.full_name}'s ${plan.name} membership application.`,
-      action_href: `/membership/verify?token=${encodeURIComponent(token)}`,
-      portal_visible: false,
-      deduplication_key: `application-verify-${application.id}`,
-    });
+  if (error || !application) redirect(`/membership/apply?application=${error?.message.includes("membership_identity_already_exists") ? "contact-officer" : "save-failed"}`);
+  await admin.from("membership_signup_sessions").update({ application_id: application.id }).eq("id", verified.id);
+  await clearSignupVerification();
+  if (parsed.data.payment_method === "stripe") {
+    await admin.from("membership_notifications").insert({ application_id: application.id, recipient_email: applicationEmail,
+      kind: "membership.application-payment-reminder", title: "Complete your membership payment",
+      body: "Your verified application is saved. Pay to activate your membership.", action_href: `/membership/checkout?token=${token}`,
+      scheduled_for: new Date(Date.now()+86400000).toISOString(), portal_visible: false, deduplication_key: `application-payment-reminder-${application.id}` });
+    redirect(`/membership/checkout?token=${token}`);
   }
-  redirect("/membership/apply?application=received");
+  await admin.from("membership_notifications").insert([
+    { application_id: application.id, recipient_email: applicationEmail,
+      kind: "membership.application-payment-instructions",
+      title: parsed.data.payment_method === "bank_transfer" ? "Your membership bank transfer details"
+        : parsed.data.payment_method === "cheque" ? "Your membership cheque payment details"
+          : "Your membership cash payment details",
+      body: offlinePaymentInstructions(parsed.data.payment_method, paymentSettings, {
+        applicantName: parsed.data.full_name,
+        amountPence: offlineAmountPence!,
+      }),
+      scheduled_for: now.toISOString(),
+      portal_visible: false, deduplication_key: `application-payment-instructions-${application.id}` },
+    { application_id: application.id, recipient_email: applicationEmail,
+      kind: "membership.application-payment-reminder",
+      title: `Reminder: complete ${parsed.data.full_name}’s Society membership payment`,
+      body: offlinePaymentReminder(parsed.data.payment_method, paymentSettings, {
+        applicantName: parsed.data.full_name,
+        amountPence: offlineAmountPence!,
+        applicationExpiresAt,
+      }),
+      scheduled_for: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      portal_visible: false, deduplication_key: `application-payment-reminder-${application.id}` },
+  ]);
+  redirect(`/membership/apply?application=awaiting-${parsed.data.payment_method.replaceAll("_", "-")}&token=${encodeURIComponent(statusToken)}`);
 }
 
 export async function unsubscribeMembershipNewsletter(formData: FormData) {
@@ -272,19 +280,19 @@ export async function confirmGuardianMembershipConsent(formData: FormData) {
 export async function continueApplicationCheckout(formData: FormData) {
   if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = z.string().min(20).max(200).parse(formData.get("token"));
-  const autoRenew = formData.get("auto_renew") === "on";
   const admin = createServiceClient();
   const { data } = await admin.from("membership_applications").select("id")
     .eq("verification_token_hash", membershipTokenHash(token))
     .eq("status", "awaiting_payment")
     .gt("verification_expires_at", new Date().toISOString()).maybeSingle();
   if (!data) redirect("/membership/apply?application=payment-link-invalid");
-  await admin.from("membership_applications").update({ auto_renew: autoRenew, updated_at: new Date().toISOString() })
+  await admin.from("membership_applications").update({ auto_renew: false, updated_at: new Date().toISOString() })
     .eq("id", data.id).eq("status", "awaiting_payment");
   let checkoutUrl: string;
   try {
-    checkoutUrl = await createApplicationCheckoutFromToken(token);
+    checkoutUrl = await createApplicationCheckoutFromToken(token, String(formData.get("reviewed_quote") || ""));
   } catch (error) {
+    if (error instanceof Error && error.name === "MembershipCheckoutRefreshRequired") redirect(`/membership/checkout?token=${encodeURIComponent(token)}&notice=review-updated-price`);
     redirect(error instanceof Error && error.name === "MembershipCheckoutUnavailableError"
       ? "/membership/apply?application=payment-unavailable"
       : "/membership/apply?application=payment-link-invalid");
@@ -351,7 +359,7 @@ export async function reviewMembershipApplication(formData: FormData) {
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: application } = await admin.from("membership_applications")
-    .select("id,contact_email,full_name,payment_method,status,payment_settings_version_id")
+    .select("id,contact_email,full_name,payment_method,status,payment_settings_version_id,requested_plan_id,created_at")
     .eq("id", applicationId).eq("status", "awaiting_approval").maybeSingle();
   if (!application) redirect("/admin/memberships?error=application-unavailable");
 
@@ -382,9 +390,16 @@ export async function reviewMembershipApplication(formData: FormData) {
   }).eq("id", application.id);
   if (error) redirect("/admin/memberships?error=application-update-failed");
   const settings = await getMembershipPaymentSettings(application.payment_settings_version_id);
-  const reference = membershipPaymentReference(application.id);
+  const pricingDate = new Date(application.created_at);
+  const price = application.payment_method === "stripe"
+    ? null
+    : await ensureMembershipPlanPrice(application.requested_plan_id, membershipBillingYear(pricingDate)).catch(() => null);
+  if (application.payment_method !== "stripe" && !price) redirect("/admin/memberships?error=price-unavailable");
   const instructions = application.payment_method === "stripe" ? null
-    : offlinePaymentInstructions(application.payment_method, settings, reference);
+    : offlinePaymentInstructions(application.payment_method, settings, {
+      applicantName: application.full_name,
+      amountPence: proratedMembershipFee(price!.amount_pence, pricingDate),
+    });
   await admin.from("membership_notifications").insert({
     application_id: application.id, recipient_email: application.contact_email,
     kind: "membership.application-approved", title: `${application.full_name}'s membership application is approved`,

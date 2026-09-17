@@ -14,9 +14,10 @@ const money = (pence: number) => new Intl.NumberFormat("en-GB", {
   style: "currency", currency: "GBP",
 }).format(pence / 100);
 
-export default async function MembershipCheckoutConfirmation({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
+export default async function MembershipCheckoutConfirmation({ searchParams }: { searchParams: Promise<{ token?: string; notice?: string }> }) {
   if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const token = (await searchParams).token ?? "";
+  const query = await searchParams;
+  const token = query.token ?? "";
   const summary = await getApplicationCheckoutSummaryFromToken(token);
   if (!summary) redirect("/membership/apply?application=payment-link-invalid");
   return <PageShell headerTheme="light">
@@ -26,6 +27,7 @@ export default async function MembershipCheckoutConfirmation({ searchParams }: {
 
         <form action={continueApplicationCheckout} className="membership-checkout-card">
           <input type="hidden" name="token" value={token}/>
+          <input type="hidden" name="reviewed_quote" value={summary.quoteKey}/>
 
           <section className="membership-checkout-main" aria-labelledby="checkout-confirmation-title">
             <div className="membership-checkout-heading">
@@ -35,6 +37,8 @@ export default async function MembershipCheckoutConfirmation({ searchParams }: {
                 <h1 id="checkout-confirmation-title">Review your payment.</h1>
               </div>
             </div>
+            {query.notice === "review-updated-price" && <p role="status">Please review the current price and membership end date below before continuing. Your application and email verification are saved.</p>}
+            {summary.checkoutPaused && <p role="status">New payment pages reopen at midnight tonight, 1 December (UK time). Return then to review the following year’s annual fee, with the remaining December days included free. Your application and email verification are saved.</p>}
             <p className="membership-checkout-intro">Check the membership and payment details below before continuing.</p>
 
             <div className="membership-checkout-member">
@@ -43,35 +47,15 @@ export default async function MembershipCheckoutConfirmation({ searchParams }: {
               <span className="membership-checkout-plan">{summary.planName}</span>
             </div>
 
-            <div className="membership-checkout-renewal">
-              <p className="eyebrow dark">Your renewal choice</p>
-              <label htmlFor="membership-auto-renew">
-                <input id="membership-auto-renew" type="checkbox" name="auto_renew" defaultChecked={summary.autoRenew}/>
-                <strong>Automatically renew each 1 January</strong>
-                <small>Keep your membership up to date without arranging another payment.</small>
-              </label>
-              <p>You can cancel at any time from your Account. Switching this off does not change the payment due today.</p>
-            </div>
+            <p>This is a one-time payment. We will invite you when annual renewals open.</p>
           </section>
 
           <aside className="membership-checkout-summary" aria-label="Payment summary">
-            <p className="eyebrow">Due today</p>
+            <p className="eyebrow">{summary.checkoutPaused ? "November quote · payment paused" : "Due today"}</p>
             <strong className="membership-checkout-price">{money(summary.initialAmountPence)}</strong>
             <p className="membership-checkout-cover"><CalendarCheck/>Membership through 31 December {summary.membershipYear}</p>
 
-            <dl>
-              <div>
-                <dt>Annual renewal</dt>
-                <dd>{money(summary.annualAmountPence)}</dd>
-              </div>
-              <div>
-                <dt>Renewal date</dt>
-                <dd>1 January {summary.membershipYear + 1}</dd>
-              </div>
-            </dl>
-            <p className="membership-checkout-renewal-note">This next payment is taken only while automatic renewal remains on.</p>
-
-            <PendingSubmitButton className="button membership-checkout-submit" pendingLabel="Opening secure payment…"><ShieldCheck/>Continue to payment</PendingSubmitButton>
+            <PendingSubmitButton disabled={summary.checkoutPaused} className="button membership-checkout-submit" pendingLabel="Opening secure payment…"><ShieldCheck/>Continue to payment</PendingSubmitButton>
             <p className="membership-checkout-security"><ShieldCheck/>Your membership starts after the payment has been confirmed.</p>
           </aside>
         </form>

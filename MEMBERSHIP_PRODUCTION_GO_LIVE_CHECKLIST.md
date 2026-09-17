@@ -80,7 +80,7 @@ Never paste secret values into this checklist, commits, logs, screenshots, or su
 ### Vercel production
 
 - [ ] `MEMBERSHIP_MODE=membermojo` before deployment and migration.
-- [ ] `MEMBERSHIP_PILOT_EMAILS` contains only approved individual pilot addresses.
+- [ ] `MEMBERSHIP_MODE=pilot` is used only in an isolated local or preview environment with its own database.
 - [ ] `NEXT_PUBLIC_SITE_URL=https://yorkmodelengineers.co.uk` and redirects preserve secure links.
 - [ ] `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is a valid live publishable key for the production Stripe account.
 - [ ] `STRIPE_RESTRICTED_KEY` is a newly created live restricted key with only the permissions required by the website.

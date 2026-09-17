@@ -52,7 +52,10 @@ test("keeps signup mail actionable and combines activation with account setup", 
 
   assert.match(verification, /membership\.application-payment-reminder/);
   assert.match(verification, /Finish \$\{application\.full_name\}'s membership payment/);
-  assert.match(verification, /\$\{application\.full_name\}'s membership application is ready for payment/);
+  assert.match(verification, /Your membership bank transfer details/);
+  assert.match(verification, /Your membership cheque payment details/);
+  assert.match(verification, /Your membership cash payment details/);
+  assert.match(verification, /body: instructions/);
   assert.match(verification, /scheduled_for: new Date\(Date\.now\(\) \+ 2 \* 60 \* 60 \* 1000\)/);
   assert.doesNotMatch(verification, /membership\.application-approval-required/);
   assert.match(membership, /membership_active: true/);
@@ -95,7 +98,9 @@ test("uses Society language for member-facing payment updates", async () => {
     read("supabase/migrations/202608200035_member_facing_payment_language.sql"),
   ]);
 
-  assert.match(application, /We’re still verifying your payment/);
+  assert.match(application, /Thank you for applying for Society membership/);
+  assert.match(application, /We’ll email you soon with your membership details and information about website access/);
+  assert.doesNotMatch(application, /We’re still verifying your payment/);
   assert.doesNotMatch(application, /Stripe is processing your payment/);
   assert.match(account, /membership securely online/);
   assert.match(account, /Continue to payment/);
@@ -105,4 +110,59 @@ test("uses Society language for member-facing payment updates", async () => {
   assert.match(webhook, /\$\{member\.full_name\}'s annual membership payment[^`]+has been confirmed/);
   assert.match(paymentLanguage, /replacement online or offline payment/);
   assert.match(paymentLanguage, /complete online or offline renewal/);
+});
+
+test("lists the bank-transfer amount and uses the applicant name as the reference", async () => {
+  const [application, settings, worker] = await Promise.all([
+    read("app/membership/apply/page.tsx"),
+    read("lib/membership-settings.ts"),
+    read("supabase/functions/deliver-membership-notifications/index.ts"),
+  ]);
+
+  assert.match(application, /Bank transfer details/);
+  assert.match(application, /paymentMoney\.format\(offlinePaymentDetails\.amountPence/);
+  assert.match(application, /Payment reference[\s\S]*offlinePaymentDetails\.applicantName/);
+  assert.match(settings, /`Amount: \$\{paymentMoney\.format\(details\.amountPence/);
+  assert.match(settings, /`Reference: \$\{details\.applicantName\}`/);
+  assert.match(settings, /Enter your full name as the payment reference/);
+  assert.doesNotMatch(settings, /Use the unique membership reference/);
+  assert.match(worker, /white-space:pre-line/);
+});
+
+test("lists cash and cheque amounts without generated references", async () => {
+  const [application, settings, actions] = await Promise.all([
+    read("app/membership/apply/page.tsx"),
+    read("lib/membership-settings.ts"),
+    read("lib/actions/membership.ts"),
+  ]);
+
+  assert.match(application, /Cash payment details/);
+  assert.match(application, /Cheque payment details/);
+  assert.match(settings, /`Member name: \$\{details\.applicantName\}`/);
+  assert.match(settings, /`Applicant’s full name to write on the back of the cheque: \$\{details\.applicantName\}`/);
+  assert.match(settings, /cheque_delivery_instructions: "Give the cheque to the Society Treasurer\."/);
+  assert.match(settings, /cash_instructions: "Give the cash payment to the Society Treasurer\."/);
+  assert.match(settings, /Your membership will be activated after the cash payment/);
+  assert.match(settings, /Your membership will be activated after the cheque/);
+  assert.doesNotMatch(actions, /membershipPaymentReference/);
+  assert.doesNotMatch(settings, /MEM-/);
+});
+
+test("queues one seven-day reminder for unpaid offline applications", async () => {
+  const [actions, verification, settings, lifecycle] = await Promise.all([
+    read("lib/actions/membership.ts"),
+    read("app/membership/verify/route.ts"),
+    read("lib/membership-settings.ts"),
+    read("supabase/migrations/202609170001_membership_simplified_journeys.sql"),
+  ]);
+
+  assert.match(actions, /kind: "membership\.application-payment-reminder"/);
+  assert.match(actions, /scheduled_for: new Date\(now\.getTime\(\) \+ 7 \* 24 \* 60 \* 60 \* 1000\)/);
+  assert.match(actions, /deduplication_key: `application-payment-reminder-\$\{application\.id\}`/);
+  assert.match(verification, /offlinePaymentReminder/);
+  assert.match(verification, /scheduled_for: new Date\(Date\.now\(\) \+ 7 \* 24 \* 60 \* 60 \* 1000\)/);
+  assert.match(settings, /If you have already paid, no action is needed/);
+  assert.match(settings, /If you have already given us the cheque, no action is needed/);
+  assert.match(settings, /This application will remain open until/);
+  assert.match(lifecycle, /new\.status in \('converted','expired','rejected'\)[\s\S]*membership\.application-payment-reminder/);
 });

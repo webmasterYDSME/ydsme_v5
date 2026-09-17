@@ -72,11 +72,7 @@ test("every membership application stage remains usable on a narrow phone", asyn
   await expectNoOverflow("About you stage");
   await form.getByRole("button", { name: "Continue" }).click();
 
-  await expect(form.getByRole("group", { name: "Payment method" })).toBeVisible();
-  await expectNoOverflow("Payment stage");
-  await form.getByRole("button", { name: "Continue" }).click();
-
-  await expect(form.getByRole("heading", { name: "Before you submit" })).toBeVisible();
+  await expect(form.getByRole("heading", { name: "Before you continue" })).toBeVisible();
   await expect(form.getByText(/membership card and lanyard/)).toBeVisible();
   await expectNoOverflow("Review stage");
 });

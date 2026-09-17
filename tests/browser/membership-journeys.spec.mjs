@@ -186,11 +186,13 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("radio", { name: /Student/ })).not.toBeChecked();
 
     await dob.fill(birthDateForAge(16));
-    await expect(page.getByRole("group", { name: "Guardian details and consent" })).toBeVisible();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByRole("group", { name: "Junior applicant and guardian" })).toBeVisible();
     await expect(page.locator('input[name="guardian_email"]')).toHaveAttribute("required", "");
 
+    await page.getByRole("button", { name: "Back", exact: true }).click();
     await dob.fill(birthDateForAge(13));
-    await expect(page.getByText("No available membership matches the age entered.")).toBeVisible();
+    await expect(page.getByText("Junior membership starts at age 14. Please check the date of birth entered.")).toBeVisible();
     await expect(page.getByText("OFFICER APPROVAL")).toHaveCount(0);
   });
 
@@ -390,7 +392,7 @@ test.describe("membership public, member and officer journeys", () => {
       const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(horizontalOverflow, `Page overflowed at ${width}px`).toBeLessThanOrEqual(1);
       const form = page.locator("form.membership-manual-create-form");
-      await form.locator('input[name="date_of_birth"]').fill("1985-05-12");
+      await form.locator('[data-date-picker-name="date_of_birth"]').fill("12/05/1985");
       await expect(form.getByText(initialFee, { exact: true })).toBeVisible();
       const chargeBox = await form.locator(".membership-manual-charge").boundingBox();
       expect(chargeBox?.width ?? 0, `Charge summary was too narrow at ${width}px`).toBeGreaterThan(240);
@@ -667,9 +669,8 @@ test.describe("membership public, member and officer journeys", () => {
     await applicationForm.getByRole("button", { name: "Continue" }).click();
     await applicationForm.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Payment Options`);
     await applicationForm.locator('input[name="contact_email"]').fill("journey.membership.options@example.test");
-    await applicationForm.getByRole("button", { name: "Continue" }).click();
     await expect(page.locator('input[value="bank_transfer"]')).toBeEnabled();
-    await expect(page.getByRole("link", { name: "Journey Treasurer" })).toHaveAttribute("href", "mailto:journey.treasurer@example.test");
+    await expect(page.getByRole("link", { name: "Membership Officer" })).toHaveAttribute("href", "mailto:journey.treasurer@example.test");
     await expect(page.getByText("12345678")).toHaveCount(0);
   });
 

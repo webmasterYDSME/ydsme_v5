@@ -5,6 +5,7 @@ const usesLocalSupabase = /^http:\/\/(?:127\.0\.0\.1|localhost):55321(?:\/|$)/.t
 );
 const sensitiveMembershipPaths = [
   "/membership/checkout",
+  "/membership/renew",
   "/membership/contact-change",
   "/membership/guardian-consent",
   "/membership/newsletter/unsubscribe",
