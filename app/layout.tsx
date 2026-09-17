@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { headers } from "next/headers";
 import { connection } from "next/server";
 import "./globals.css";
+import "./content-width-tokens.css";
 import { organisationJsonLd, safeJsonLd } from "@/lib/seo";
 
 const display = Cormorant_Garamond({ variable: "--font-display", subsets: ["latin"], weight: ["400","500","600","700"], style: ["normal","italic"], display: "swap", preload: false });
