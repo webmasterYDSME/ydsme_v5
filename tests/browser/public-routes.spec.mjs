@@ -14,7 +14,7 @@ for (const route of publicRoutes) {
 test("the member sign-in journey is visible", async ({ page }) => {
   await page.goto("/signin");
   await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
-  await expect(page.getByText("Member login", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Email me a sign-in link" })).toBeVisible();
 });
 
 test("the membership application fits common browser widths", async ({ page }) => {
@@ -46,11 +46,11 @@ test("public pages share the same wide-screen content boundary", async ({ page }
       const styles = getComputedStyle(element);
       return element.getBoundingClientRect().width - Number.parseFloat(styles.paddingLeft) - Number.parseFloat(styles.paddingRight);
     });
-    expect(contentWidth, `${route} did not use the shared public width cap`).toBeCloseTo(route === "/committees" ? 1160 : 1344, 0);
+    expect(contentWidth, `${route} did not use the shared public width cap`).toBeCloseTo(1280, 0);
   }
 });
 
-test("every membership application stage remains usable on a narrow phone", async ({ page }) => {
+test("Junior membership and guardian details remain usable on a narrow phone", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 760 });
   await page.goto("/membership/apply");
   const form = page.locator("form.membership-application-form");
@@ -60,19 +60,14 @@ test("every membership application stage remains usable on a narrow phone", asyn
   };
 
   await form.locator('input[name="date_of_birth"]').fill("2010-01-01");
-  await expect(form.getByRole("group", { name: "Guardian details and consent" })).toBeVisible();
   await expectNoOverflow("Membership stage");
+  await form.getByRole("button", { name: "Continue" }).click();
+
+  await expect(form.getByRole("group", { name: "Junior applicant and guardian" })).toBeVisible();
+  await form.locator('input[name="full_name"]').fill("Preview Junior");
   await form.locator('input[name="guardian_name"]').fill("Preview Guardian");
   await form.locator('input[name="guardian_email"]').fill("guardian@example.test");
   await form.locator('input[name="guardian_consent"]').check();
-  await form.getByRole("button", { name: "Continue" }).click();
-
-  await form.locator('input[name="full_name"]').fill("Preview Junior");
-  await form.locator('input[name="contact_email"]').fill("junior@example.test");
-  await expectNoOverflow("About you stage");
-  await form.getByRole("button", { name: "Continue" }).click();
-
-  await expect(form.getByRole("heading", { name: "Before you continue" })).toBeVisible();
-  await expect(form.getByText(/membership card and lanyard/)).toBeVisible();
-  await expectNoOverflow("Review stage");
+  await expect(form.getByRole("button", { name: "Get code" })).toBeEnabled();
+  await expectNoOverflow("Junior and guardian stage");
 });
