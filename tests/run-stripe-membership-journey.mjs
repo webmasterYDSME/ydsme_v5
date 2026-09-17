@@ -1,15 +1,25 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { readLocalSupabaseEnvironment } from "./local-supabase.mjs";
+
+const local = readLocalSupabaseEnvironment("Stripe membership journey");
+assert.match(process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_SECRET_KEY || "", /^(?:sk|rk)_test_/, "Stripe journeys require a test-mode key.");
+assert.match(process.env.STRIPE_MEMBERSHIP_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "", /^whsec_/, "Stripe journeys require a local webhook signing secret.");
 
 const port = process.env.STRIPE_JOURNEY_PORT || "3014";
 assert.match(port, /^\d{4,5}$/, "STRIPE_JOURNEY_PORT must be a local port.");
 const siteUrl = `http://127.0.0.1:${port}`;
 const environment = {
   ...process.env,
+  NEXT_PUBLIC_SUPABASE_URL: local.API_URL,
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: local.PUBLISHABLE_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: local.SERVICE_ROLE_KEY,
   MEMBERSHIP_MODE: "live",
   NEXT_PUBLIC_SITE_URL: siteUrl,
   STRIPE_JOURNEY_SITE_URL: siteUrl,
-  SUPABASE_TEST_WORKDIR: ".supabase-test",
+  RESEND_API_KEY: "",
+  TURNSTILE_SECRET_KEY: "",
+  NEXT_PUBLIC_TURNSTILE_SITEKEY: "",
 };
 
 const build = spawnSync("npm", ["run", "build"], { env: environment, stdio: "inherit" });

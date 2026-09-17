@@ -8,14 +8,15 @@ test("payment settings require an active officer and preserve version history an
 begin;
 do $$
 declare
-  actor uuid;
+  actor uuid := gen_random_uuid();
   previous_id uuid;
   saved_id uuid;
   test_actor_role text;
   p public.membership_payment_settings_versions;
 begin
-  select u.id into strict actor from public.users u join public.user_roles r on r.user_id=u.id
-    where u.membership_status='active' and r.role='member' limit 1;
+  insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
+    values(actor,'authenticated','authenticated','payment-settings-'||actor||'@example.invalid',now(),
+      '{"full_name":"Payment Settings Test Officer"}',now(),now());
   select * into strict p from public.membership_payment_settings_versions where active;
   previous_id := p.id;
   foreach test_actor_role in array array['member','committee','officer','suspended-officer','administrator'] loop

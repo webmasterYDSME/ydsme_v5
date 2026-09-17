@@ -158,48 +158,38 @@ export default async function MembershipApplication({ searchParams }: { searchPa
 
   return <PageShell headerTheme="light">
     <main className="membership-apply-page">
-      <section className="membership-apply-hero">
-        <div className="membership-apply-hero-copy">
-          <Link className="membership-apply-back" href="/membership"><ArrowLeft/>Membership overview</Link>
-          <p className="eyebrow dark">Membership application</p>
-          <h1>We’re glad you’re<br/><em>joining us.</em></h1>
-          <p>Tell us a little about yourself, choose how you would like to pay, and we’ll guide you through the rest.</p>
+      <section className="membership-apply-intro">
+        <div className="membership-apply-intro-inner">
+          <div className="membership-apply-heading-row" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start" }}>
+            <Link className="membership-apply-back" href="/membership" style={{ margin: 0 }}> <ArrowLeft/>Membership overview</Link>
+            <h1 style={{ gridColumn: 2, margin: 0 }}>Join the <em>Society.</em></h1>
+          </div>
+          <ul className="membership-apply-facts" aria-label="Before you begin">
+            <li><CalendarCheck/><span><strong>Calendar-year membership</strong>Paid terms end on 31 December.</span></li>
+            <li><MailCheck/><span><strong>Secure email check</strong>We verify your address before payment.</span></li>
+            <li><WalletCards/><span><strong>Flexible payment</strong>Pay online, by bank transfer, cheque or cash.</span></li>
+          </ul>
+          <p className="membership-apply-junior"><UserRound aria-hidden="true"/><span><strong>Applying for a junior?</strong> A guardian’s details and consent are needed.</span></p>
         </div>
-        <ol className="membership-apply-steps" aria-label="Application steps">
-          <li><span>01</span><div><strong>Apply</strong><small>Share your details and we’ll match your membership.</small></div></li>
-          <li><span>02</span><div><strong>Verify</strong><small>Open the secure link sent to your email.</small></div></li>
-          <li><span>03</span><div><strong>Join</strong><small>Complete payment and receive your confirmation.</small></div></li>
-        </ol>
       </section>
 
-      {plans.length ? <section className="membership-apply-layout">
-        <aside className="membership-apply-aside">
-          <div>
-            <p className="eyebrow dark">Before you begin</p>
-            <h2>A few useful things to know.</h2>
-            <ul>
-              <li><CalendarCheck/><span><strong>Calendar-year membership</strong>Paid terms end on 31 December.</span></li>
-              <li><MailCheck/><span><strong>Email verification</strong>We verify your address before payment.</span></li>
-              <li><WalletCards/><span><strong>Flexible payment</strong>Pay online, by bank transfer, cheque or complete cash payment.</span></li>
-              <li><UserRound/><span><strong>Junior applicants</strong>A guardian’s details and consent are required.</span></li>
-            </ul>
+      {plans.length ? <section className="membership-apply-workspace">
+        <div className="membership-apply-workspace-inner">
+          <div className="membership-application-card">
+            {errorMessage ? <p className="form-message error" role="alert">{errorMessage}</p> : null}
+            <MembershipApplicationWizard plans={plans.map((plan) => ({
+              id: plan.id,
+              slug: plan.slug,
+              name: plan.name,
+              description: plan.description,
+              minimum_age: plan.minimum_age,
+              maximum_age: plan.maximum_age,
+              amount_pence: plan.amount_pence,
+              today_amount_pence: proratedMembershipFee(plan.amount_pence),
+              membership_year: plan.membership_year,
+            }))} today={today} bankTransferAvailable={paymentSettings.configured}/>
           </div>
-          <div className="membership-apply-help"><strong>Have a membership question?</strong><p>Email <a href={`mailto:${paymentSettings.treasurer_email}`}>{paymentSettings.treasurer_name}</a> before applying.</p></div>
-        </aside>
-
-        <div className="membership-application-card">
-          {errorMessage ? <p className="form-message error" role="alert">{errorMessage}</p> : null}
-          <MembershipApplicationWizard plans={plans.map((plan) => ({
-            id: plan.id,
-            slug: plan.slug,
-            name: plan.name,
-            description: plan.description,
-            minimum_age: plan.minimum_age,
-            maximum_age: plan.maximum_age,
-            amount_pence: plan.amount_pence,
-            today_amount_pence: proratedMembershipFee(plan.amount_pence),
-            membership_year: plan.membership_year,
-          }))} today={today} bankTransferAvailable={paymentSettings.configured}/>
+          <p className="membership-apply-help"><strong>Need help before applying?</strong> Email <a href={`mailto:${paymentSettings.treasurer_email}`}>{paymentSettings.treasurer_name}</a>.</p>
         </div>
       </section> : <section className="membership-apply-unavailable">
         <ShieldCheck/>

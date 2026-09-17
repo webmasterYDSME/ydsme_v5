@@ -18,6 +18,7 @@ const environment = {
   JOURNEY_START_MODE: "production",
   JOURNEY_TEST_MODE: "true",
   JOURNEY_MEMBERSHIP_TESTS: "true",
+  JOURNEY_MEMBERSHIP_WORKSPACE: "true",
   JOURNEY_TEST_PASSWORD: password,
   MEMBERSHIP_MODE: "live",
   TURNSTILE_SECRET_KEY: "",
@@ -36,7 +37,10 @@ function run(command, args) {
 function cleanMembershipJourneys() {
   const sql = String.raw`
 begin;
-delete from public.rate_limits where scope in ('membership-application','membership-verification-resend');
+delete from public.rate_limits where scope in ('membership-application','membership-verification-resend','membership-contact-change');
+delete from public.membership_contact_change_requests where member_id in (
+  select id from public.members where full_name like 'Journey Membership%'
+);
 delete from public.membership_notifications where application_id in (
   select id from public.membership_applications where contact_email in (
     'journey.membership.adult@example.test','journey.membership.student@example.test','journey.membership.junior@example.test','journey.membership.concession@example.test','journey.membership.guardian-led@example.test'
@@ -96,7 +100,7 @@ try {
   run("npm", ["run", "build"]);
   run(process.execPath, ["tests/journey-fixtures.mjs", "setup"]);
   fixturesCreated = true;
-  run("npx", ["playwright", "test", "tests/browser/membership-journeys.spec.mjs"]);
+  run("npx", ["playwright", "test", "tests/browser/membership-journeys.spec.mjs", "tests/browser/membership-workspace.spec.mjs", "--workers=1"]);
 } finally {
   cleanMembershipJourneys();
   if (fixturesCreated) run(process.execPath, ["tests/journey-fixtures.mjs", "cleanup"]);

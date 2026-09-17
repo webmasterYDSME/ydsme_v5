@@ -1,10 +1,17 @@
 import { createClient } from "@supabase/supabase-js";
 import { expect, test } from "@playwright/test";
+import { readLocalSupabaseEnvironment } from "../local-supabase.mjs";
 
 test.describe("membership public, member and officer journeys", () => {
   test.skip(process.env.JOURNEY_MEMBERSHIP_TESTS !== "true", "Run with npm run test:membership-journeys.");
   test.describe.configure({ mode: "serial" });
 
+  const today = new Date();
+  const calendarYear = today.getUTCFullYear();
+  const billingYear = calendarYear + (today.getUTCMonth() === 11 ? 1 : 0);
+  const monthsIncluded = 12 - today.getUTCMonth();
+  const initialFee = `£${(today.getUTCMonth() === 11 ? 60 : monthsIncluded * 5).toFixed(2)}`;
+  const birthDateForAge = (age) => `${calendarYear - age}-01-01`;
   const password = process.env.JOURNEY_TEST_PASSWORD;
   const adultEmail = "journey.membership.adult@example.test";
   const studentEmail = "journey.membership.student@example.test";
@@ -14,9 +21,11 @@ test.describe("membership public, member and officer journeys", () => {
   const guardianLedEmail = "journey.membership.guardian-led@example.test";
   const fixtureEmails = [adultEmail, studentEmail, juniorEmail, concessionEmail, guardianLedEmail];
   const fixtureNamePrefix = "Journey Membership";
-  const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+  const local = readLocalSupabaseEnvironment("Membership browser journeys");
+  const admin = createClient(local.API_URL, local.SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+  const officerEmail = "journey.membership.officer@example.test";
   let originalSettingsId;
   let originalSettingsIds = [];
 
@@ -33,6 +42,7 @@ test.describe("membership public, member and officer journeys", () => {
     const { data: members } = await admin.from("members").select("id").ilike("full_name", `${fixtureNamePrefix}%`);
     const memberIds = (members ?? []).map(({ id }) => id);
     if (memberIds.length) {
+      expect((await admin.from("membership_contact_change_requests").delete().in("member_id", memberIds)).error).toBeNull();
       const { data: terms } = await admin.from("membership_terms").select("id").in("member_id", memberIds);
       const termIds = (terms ?? []).map(({ id }) => id);
       if (termIds.length) {
@@ -101,6 +111,11 @@ test.describe("membership public, member and officer journeys", () => {
   test.beforeAll(async () => {
     expect(password?.length).toBeGreaterThanOrEqual(12);
     await cleanMembershipFixtures();
+    const officer = await admin.auth.admin.createUser({ email: officerEmail, password, email_confirm: true,
+      user_metadata: { full_name: "Journey Membership Officer" } });
+    expect(officer.error).toBeNull();
+    expect((await admin.from("user_roles").upsert({ user_id: officer.data.user.id, role: "committee" }, { onConflict: "user_id" })).error).toBeNull();
+    expect((await admin.from("user_capabilities").insert({ user_id: officer.data.user.id, capability: "memberships.manage" })).error).toBeNull();
     const settings = await databaseRow(
       admin.from("membership_payment_settings_versions").select("id,active").order("version"),
       "Unable to capture membership payment settings",
@@ -120,7 +135,7 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("link", { name: /Committee minutes/ })).toBeVisible();
 
     await page.goto("/dashboard/minutes");
-    await expect(page.getByRole("heading", { name: "Committee minutes" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Committee minutes", exact: true })).toBeVisible();
 
     await page.goto("/dashboard/workbench");
     await expect(page.getByRole("heading", { name: "Project Workbench" })).toBeVisible();
@@ -141,7 +156,8 @@ test.describe("membership public, member and officer journeys", () => {
 
   test.afterAll(async () => {
     await cleanMembershipFixtures();
-    const { data: settings } = await admin.from("membership_payment_settings_versions").select("id,active");
+    const { data: settings } = await admin.from("membership_payment_settings_versions").select("id,active")
+      .eq("treasurer_email", "journey.treasurer@example.test");
     for (const setting of settings ?? []) {
       if (setting.active && setting.id !== originalSettingsId) {
         await admin.from("membership_payment_settings_versions").update({ active: false }).eq("id", setting.id);
@@ -164,16 +180,16 @@ test.describe("membership public, member and officer journeys", () => {
     await page.goto("/membership/apply");
     const dob = page.locator('input[name="date_of_birth"]');
 
-    await dob.fill("2004-08-20");
+    await dob.fill(birthDateForAge(22));
     await expect(page.getByRole("group", { name: "Choose your membership" })).toBeVisible();
     await expect(page.getByRole("radio", { name: /Adult/ })).toBeChecked();
     await expect(page.getByRole("radio", { name: /Student/ })).not.toBeChecked();
 
-    await dob.fill("2010-01-01");
+    await dob.fill(birthDateForAge(16));
     await expect(page.getByRole("group", { name: "Guardian details and consent" })).toBeVisible();
     await expect(page.locator('input[name="guardian_email"]')).toHaveAttribute("required", "");
 
-    await dob.fill("2013-01-01");
+    await dob.fill(birthDateForAge(13));
     await expect(page.getByText("No available membership matches the age entered.")).toBeVisible();
     await expect(page.getByText("OFFICER APPROVAL")).toHaveCount(0);
   });
@@ -235,7 +251,7 @@ test.describe("membership public, member and officer journeys", () => {
 
   test("junior applicant and guardian verify separately before officer approval", async ({ page }) => {
     await submitApplication(page, {
-      dateOfBirth: "2010-01-01", fullName: `${fixtureNamePrefix} Junior Applicant`, email: juniorEmail,
+      dateOfBirth: birthDateForAge(16), fullName: `${fixtureNamePrefix} Junior Applicant`, email: juniorEmail,
       guardianName: `${fixtureNamePrefix} Guardian`, guardianEmail, paymentMethod: "cheque",
     });
     const application = await databaseRow(
@@ -267,7 +283,7 @@ test.describe("membership public, member and officer journeys", () => {
 
   test("guardian-led Junior uses one verification and consent message without a Junior login", async ({ page }) => {
     await submitApplication(page, {
-      dateOfBirth: "2010-06-15", fullName: `${fixtureNamePrefix} Guardian Led Junior`, email: "",
+      dateOfBirth: birthDateForAge(16), fullName: `${fixtureNamePrefix} Guardian Led Junior`, email: "",
       guardianName: `${fixtureNamePrefix} Guardian Led Adult`, guardianEmail: guardianLedEmail,
       guardianLed: true, paymentMethod: "cash",
     });
@@ -302,11 +318,11 @@ test.describe("membership public, member and officer journeys", () => {
   test("Student and Concession complete verification, approval, payment and activation independently", async ({ page }) => {
     for (const applicant of [
       {
-        dateOfBirth: "2004-06-15", fullName: `${fixtureNamePrefix} Student Applicant`,
+        dateOfBirth: birthDateForAge(22), fullName: `${fixtureNamePrefix} Student Applicant`,
         email: studentEmail, planSlug: "student", expectedSlug: "student", reference: "JOURNEY-STUDENT-CASH-001",
       },
       {
-        dateOfBirth: "1940-03-10", fullName: `${fixtureNamePrefix} Concession Applicant`,
+        dateOfBirth: birthDateForAge(86), fullName: `${fixtureNamePrefix} Concession Applicant`,
         email: concessionEmail, expectedSlug: "concession", reference: "JOURNEY-CONCESSION-CASH-001",
       },
     ]) {
@@ -325,7 +341,7 @@ test.describe("membership public, member and officer journeys", () => {
       expect(verified.email_verified_at).toBeTruthy();
     }
 
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships?section=applications#applications");
+    await signIn(page, officerEmail, "/admin/memberships?section=applications#applications");
     for (const applicant of [
       { email: studentEmail, expectedSlug: "student", reference: "JOURNEY-STUDENT-CASH-001" },
       { email: concessionEmail, expectedSlug: "concession", reference: "JOURNEY-CONCESSION-CASH-001" },
@@ -366,7 +382,7 @@ test.describe("membership public, member and officer journeys", () => {
   });
 
   test("membership officer page fits desktop, tablet and phone widths", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships?section=add-member#add-member");
+    await signIn(page, officerEmail, "/admin/memberships?section=add-member#add-member");
     for (const width of [1440, 1100, 820, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.reload();
@@ -375,14 +391,14 @@ test.describe("membership public, member and officer journeys", () => {
       expect(horizontalOverflow, `Page overflowed at ${width}px`).toBeLessThanOrEqual(1);
       const form = page.locator("form.membership-manual-create-form");
       await form.locator('input[name="date_of_birth"]').fill("1985-05-12");
-      await expect(form.getByText("£25.00", { exact: true })).toBeVisible();
+      await expect(form.getByText(initialFee, { exact: true })).toBeVisible();
       const chargeBox = await form.locator(".membership-manual-charge").boundingBox();
       expect(chargeBox?.width ?? 0, `Charge summary was too narrow at ${width}px`).toBeGreaterThan(240);
     }
   });
 
   test("officer approves and clears a cheque without activating on receipt alone", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships");
+    await signIn(page, officerEmail, "/admin/memberships");
     await expect(page.getByRole("heading", { name: "Manage memberships", exact: true })).toBeVisible();
     let article = page.locator(".membership-queue-list article").filter({ hasText: juniorEmail }).first();
     let form = article.locator("form").filter({ hasText: "Approve application" });
@@ -435,12 +451,14 @@ test.describe("membership public, member and officer journeys", () => {
   });
 
   test("officer creates paid and pending memberships and the linked member sees their account", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships?section=add-member#add-member");
+    await signIn(page, officerEmail, "/admin/memberships?section=add-member#add-member");
     let form = page.locator("form.membership-manual-create-form");
     await form.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Linked Member`);
     await form.locator('input[name="date_of_birth"]').fill("1985-05-12");
-    await expect(form.getByText("£25.00", { exact: true })).toBeVisible();
-    await expect(form.getByText(/5 months through 31 December 2026/)).toBeVisible();
+    await expect(form.getByText(initialFee, { exact: true })).toBeVisible();
+    await expect(form.getByText(today.getUTCMonth() === 11
+      ? `Full ${billingYear} fee. The remaining days in December are included at no extra charge.`
+      : `${monthsIncluded} months through 31 December ${billingYear}, reduced from the £60.00 annual fee.`)).toBeVisible();
     await form.locator('input[name="contact_email"]').fill("journey.member@example.test");
     await form.locator('select[name="payment_method"]').selectOption("cash");
     await form.locator('input[name="payment_reference"]').fill("JOURNEY-CASH-001");
@@ -513,13 +531,13 @@ test.describe("membership public, member and officer journeys", () => {
     await page.goto("/admin/memberships?section=renewals#renewals");
     const renewalForm = page.locator("form.membership-cash-renewal-form");
     await renewalForm.locator('select[name="member_id"]').selectOption(linkedMember.id);
-    await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue("2027");
+    await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue(String(billingYear + 1));
     await expect(renewalForm.getByText("£60.00", { exact: true })).toBeVisible();
-    await expect(renewalForm.getByText("Full annual fee for 2027.", { exact: true })).toBeVisible();
+    await expect(renewalForm.getByText(`Full annual fee for ${billingYear + 1}.`, { exact: true })).toBeVisible();
     await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeEnabled();
-    await renewalForm.locator('select[name="membership_year"]').selectOption("2026");
+    await renewalForm.locator('select[name="membership_year"]').selectOption(String(billingYear));
     await expect(renewalForm.getByText("No payment due", { exact: true })).toBeVisible();
-    await expect(renewalForm.getByText(/2026 membership is already paid/)).toBeVisible();
+    await expect(renewalForm.getByText(`This member's ${billingYear} membership is already paid.`)).toBeVisible();
     await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeDisabled();
 
     await signIn(page, "journey.member@example.test", "/account");
@@ -533,8 +551,62 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByText("cash · paid ·", { exact: false })).toBeVisible();
   });
 
+  test("member correspondence changes require confirmation and reject superseded and reused links", async ({ page }) => {
+    const member = await databaseRow(admin.from("members").select("id,contact_email,auth_user_id")
+      .eq("full_name", `${fixtureNamePrefix} Linked Member`).single(), "Linked member missing");
+    await signIn(page, "journey.member@example.test", "/account");
+    const links = [];
+    for (const email of ["journey.membership.old-contact@example.test", "journey.membership.new-contact@example.test"]) {
+      await page.getByRole("textbox", { name: "New membership correspondence email" }).fill(email);
+      await page.getByRole("button", { name: "Change correspondence email", exact: true }).click();
+      await expect(page).toHaveURL(/notice=contact-verification-sent/);
+      const notification = await databaseRow(admin.from("membership_notifications").select("action_href")
+        .eq("member_id", member.id).eq("kind", "membership.contact-change-verification")
+        .eq("recipient_email", email).single(), "Contact verification missing");
+      links.push(notification.action_href);
+      const unchanged = await databaseRow(admin.from("members").select("contact_email,auth_user_id")
+        .eq("id", member.id).single(), "Member disappeared");
+      expect(unchanged).toMatchObject({ contact_email: member.contact_email, auth_user_id: member.auth_user_id });
+      await page.goto("/account");
+    }
+    await page.context().clearCookies();
+    await page.goto(links[0]);
+    await expect(page.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await page.goto(links[1]);
+    await page.getByRole("button", { name: "Confirm email address", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Email address confirmed" })).toBeVisible();
+    const confirmed = await databaseRow(admin.from("members").select("contact_email,auth_user_id")
+      .eq("id", member.id).single(), "Confirmed member missing");
+    expect(confirmed).toMatchObject({ contact_email: "journey.membership.new-contact@example.test", auth_user_id: member.auth_user_id });
+    await page.goto(links[1]);
+    await expect(page.getByRole("heading", { name: "This link is no longer valid" })).toBeVisible();
+    await signIn(page, "journey.member@example.test", "/account");
+    await expect(page.getByRole("heading", { name: "Account details" })).toBeVisible();
+  });
+
+  test("officer handles a reversed bank payment and records the membership decision", async ({ page }) => {
+    const member = await databaseRow(admin.from("members").select("id")
+      .eq("full_name", `${fixtureNamePrefix} Pending Bank`).single(), "Bank member missing");
+    await signIn(page, officerEmail, `/admin/memberships?member=${member.id}&section=member-history`);
+    await page.getByText("Report a returned or reversed payment", { exact: true }).click();
+    const form = page.locator("form").filter({ has: page.getByRole("button", { name: "Send payment for checking" }) });
+    await form.locator('textarea[name="reason"]').fill("Bank transfer reversed after initial confirmation.");
+    await form.getByRole("button", { name: "Send payment for checking" }).click();
+    await expect(page).toHaveURL(/notice=offline-payment-review-created/);
+    const review = await databaseRow(admin.from("members").select("effective_state").eq("id", member.id).single(), "Review member missing");
+    expect(review.effective_state).toBe("payment_review");
+    await page.goto("/admin/memberships?section=payment-reviews");
+    const article = page.locator("#payment-reviews article").filter({ hasText: `${fixtureNamePrefix} Pending Bank` });
+    await article.locator('select[name="resolution"]').selectOption("lapse");
+    await article.locator('textarea[name="reason"]').fill("Confirmed payment returned; member declined a replacement payment.");
+    await article.getByRole("button", { name: "Save decision" }).click();
+    await expect(page).toHaveURL(/notice=payment-review-resolved/);
+    const resolved = await databaseRow(admin.from("members").select("effective_state").eq("id", member.id).single(), "Resolved member missing");
+    expect(resolved.effective_state).toBe("lapsed");
+  });
+
   test("honorary creation has no payment and produces a manual-contact task", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/admin/memberships?section=honorary#honorary");
+    await signIn(page, officerEmail, "/admin/memberships?section=honorary#honorary");
     const section = page.locator("#honorary");
     const form = section.locator("form").filter({ hasText: "Add a new honorary member" });
     await form.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Honorary`);
@@ -570,8 +642,8 @@ test.describe("membership public, member and officer journeys", () => {
     expect(completed.read_at).toBeTruthy();
   });
 
-  test("administrator configures versioned payment instructions and bank transfer becomes public", async ({ page }) => {
-    await signIn(page, "journey.administrator@example.test", "/settings?tab=membership");
+  test("membership officer configures versioned payment instructions and bank transfer becomes public", async ({ page }) => {
+    await signIn(page, officerEmail, "/settings?tab=membership");
     const form = page.locator("form.editor-form");
     await form.locator('input[name="treasurer_name"]').fill("Journey Treasurer");
     await form.locator('input[name="treasurer_email"]').fill("journey.treasurer@example.test");
@@ -590,6 +662,12 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(activeSettings).toMatchObject({ configured: true, treasurer_email: "journey.treasurer@example.test" });
     await page.goto("/membership/apply");
+    const applicationForm = page.locator("form.membership-application-form");
+    await applicationForm.locator('input[name="date_of_birth"]').fill("1980-04-02");
+    await applicationForm.getByRole("button", { name: "Continue" }).click();
+    await applicationForm.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Payment Options`);
+    await applicationForm.locator('input[name="contact_email"]').fill("journey.membership.options@example.test");
+    await applicationForm.getByRole("button", { name: "Continue" }).click();
     await expect(page.locator('input[value="bank_transfer"]')).toBeEnabled();
     await expect(page.getByRole("link", { name: "Journey Treasurer" })).toHaveAttribute("href", "mailto:journey.treasurer@example.test");
     await expect(page.getByText("12345678")).toHaveCount(0);
@@ -625,7 +703,9 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page.getByRole("button", { name: "Save role" })).toHaveCount(0);
     await admin.from("user_capabilities").delete().eq("user_id", committee.id).eq("capability", "memberships.manage");
     await page.reload();
-    await expect(memberRow.getByText("Read-only access.", { exact: true })).toBeVisible();
+    await expect(memberRow.locator(".member-role-readonly strong")).toHaveText("Member");
+    await expect(memberRow.getByRole("button", { name: "Manage member" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Suspend access" })).toHaveCount(0);
     await page.goto("/admin/memberships");
     await expect(page).not.toHaveURL(/\/admin\/memberships/);
   });

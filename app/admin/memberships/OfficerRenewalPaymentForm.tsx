@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CirclePoundSterling } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { DatePicker } from "@/app/components/DatePicker";
 import { confirmExistingMemberOfflineRenewal } from "@/lib/actions/membership";
 
 type RenewalMember = {
@@ -57,7 +58,7 @@ export function OfficerRenewalPaymentForm({
     </select></label>
     <label>Payment method<select name="payment_method"><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label>
     <label>Receipt or payment reference<input name="payment_reference" minLength={2} maxLength={120} required/></label>
-    <label>Date received<input type="date" name="received_on" max={today} defaultValue={today} required/></label>
+    <label htmlFor="officer-renewal-date">Date received<DatePicker id="officer-renewal-date" name="received_on" max={today} defaultValue={today} required/></label>
     <label className="checkbox-row"><input type="checkbox" name="cleared"/>Cheque cleared <em>Cheque payments only</em></label>
     <div className={`membership-renewal-charge ${canRecord ? "" : "is-unavailable"}`} aria-live="polite">
       <CirclePoundSterling aria-hidden="true"/>

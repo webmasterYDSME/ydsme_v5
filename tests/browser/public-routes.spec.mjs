@@ -30,7 +30,7 @@ test("the membership application fits common browser widths", async ({ page }) =
     if (width <= 900) {
       await expect(page.locator(".membership-apply-steps")).toBeHidden();
       const application = await page.locator(".membership-application-card").boundingBox();
-      const help = await page.locator(".membership-apply-aside").boundingBox();
+      const help = await page.locator(".membership-apply-help").boundingBox();
       expect(help?.y ?? 0, `Membership help appeared before the form at ${width}px`).toBeGreaterThan(application?.y ?? 0);
     }
   }

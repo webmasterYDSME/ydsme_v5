@@ -53,6 +53,11 @@ const londonToday = () => new Intl.DateTimeFormat("en-CA", {
 }).format(new Date());
 const normalizeIdentityName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
 const postgrestLikeLiteral = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+const normalizeApplicationDate = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const match = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  return match ? `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}` : value;
+};
 const applicationSchema = z.object({
   plan_id: z.string().uuid().optional(),
   title: z.string().trim().max(10).default(""),
@@ -74,7 +79,8 @@ const applicationSchema = z.object({
 
 export async function submitMembershipApplication(formData: FormData) {
   if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  const parsed = applicationSchema.safeParse(Object.fromEntries(formData));
+  const fields = Object.fromEntries(formData);
+  const parsed = applicationSchema.safeParse({ ...fields, date_of_birth: normalizeApplicationDate(fields.date_of_birth) });
   if (!parsed.success) redirect("/membership/apply?application=invalid");
   const applicationEmail = parsed.data.guardian_led ? parsed.data.guardian_email : parsed.data.contact_email;
   if (!applicationEmail) redirect("/membership/apply?application=invalid");

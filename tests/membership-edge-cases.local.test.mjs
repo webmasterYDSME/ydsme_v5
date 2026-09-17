@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { readLocalSupabaseEnvironment } from "./local-supabase.mjs";
 
-test("enforces membership lifecycle, eligibility, versioning, and duplicate edge cases locally", (t) => {
-  const status = spawnSync("npx", ["supabase", "status", "-o", "env"], { encoding: "utf8" });
-  if (status.status !== 0) return t.skip("Local Supabase is not running.");
-  const apiUrl = status.stdout.match(/^API_URL="([^"]+)"$/m)?.[1];
-  assert.ok(apiUrl);
-  assert.ok(["127.0.0.1", "localhost", "::1"].includes(new URL(apiUrl).hostname));
+test("enforces membership lifecycle, eligibility, versioning, and duplicate edge cases locally", () => {
+  readLocalSupabaseEnvironment("membership-edge-cases");
   const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
   const projectId = config.match(/^project_id\s*=\s*"([^"]+)"/m)?.[1];
   assert.ok(projectId);

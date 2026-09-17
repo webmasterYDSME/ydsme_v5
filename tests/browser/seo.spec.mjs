@@ -2,13 +2,18 @@ import { expect, test } from '@playwright/test';
 
 const origin = 'https://yorkmodelengineers.co.uk';
 
-test('public metadata and workflow indexing headers are correct', async ({ page, request }) => {
-  for (const path of ['/', '/events', '/visitors', '/membership']) {
-    const response = await page.goto(path);
+for (const path of ['/', '/events', '/visitors', '/membership']) {
+  test(`${path} has public metadata and indexing headers`, async ({ page }) => {
+    // Metadata is ready in the DOM; image loading must not gate this SEO check.
+    const response = await page.goto(path, { waitUntil: 'domcontentloaded' });
+    expect(response.status()).toBe(200);
     expect(response.headers()['x-robots-tag']).toBeUndefined();
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${origin}${path === "/" ? "" : path}`);
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S{3}/);
-  }
+  });
+}
+
+test('workflow indexing headers and robots directives are correct', async ({ request }) => {
   for (const path of ['/signin', '/account', '/auth/switch-account', '/events/7/book', '/membership/guardian-consent']) {
     const response = await request.get(path, { maxRedirects: 0 });
     expect(response.headers()['x-robots-tag']).toContain('noindex');

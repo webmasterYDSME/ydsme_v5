@@ -1,10 +1,11 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus } from "lucide-react";
 import { saveWorkshop } from "@/lib/actions/content";
 import { EditorDialog } from "./EditorDialog";
+import { DatePicker } from "./DatePicker";
 
 export type WorkshopEditorRecord = { id: string; title: string; descriptions: string; notes: string; date: string; start_time: string; end_time: string; host_name: string; venue: string; virtual_link: string; maximum_participants: number; lifecycle_status: string; updated_at: string };
 
@@ -33,6 +34,7 @@ function WorkshopForm({ workshop, requestClose, setDirty, setBusy }: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState(workshop?.lifecycle_status || "published");
+  const dateId = useId();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,7 +74,7 @@ function WorkshopForm({ workshop, requestClose, setDirty, setBusy }: {
           <label>Host<input name="host_name" defaultValue={workshop?.host_name} minLength={2} maxLength={180} placeholder="Who is leading the session?" required/></label>
           <label>Maximum places<input type="number" name="maximum_participants" min="1" max="500" defaultValue={workshop?.maximum_participants ?? 20} required/></label>
           <h3 className="wide">When & where</h3>
-          <label className="wide">Date<input type="date" name="date" defaultValue={workshop?.date} required/></label>
+          <label className="wide" htmlFor={dateId}>Date<DatePicker id={dateId} name="date" defaultValue={workshop?.date} required/></label>
           <label>Start time<input type="time" name="start_time" defaultValue={workshop?.start_time.slice(0,5)} required/></label>
           <label>End time<input type="time" name="end_time" defaultValue={workshop?.end_time.slice(0,5)} required/></label>
           <label className="wide">Venue<input name="venue" defaultValue={workshop?.venue} minLength={2} maxLength={240} placeholder="Building, room or meeting point" required/></label>
