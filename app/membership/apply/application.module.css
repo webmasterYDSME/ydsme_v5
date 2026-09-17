@@ -1,0 +1,51 @@
+.application:global(.membership-apply-page) { background: var(--paper); }
+.application :global(.membership-apply-intro),
+.application :global(.membership-apply-workspace) { padding-inline: var(--public-content-inline); }
+.application :global(.membership-apply-intro-inner),
+.application :global(.membership-apply-workspace-inner) { width: 100%; max-width: var(--public-workspace-max); margin-inline: auto; }
+.application :global(.membership-apply-intro) { padding-block: 40px 32px; background: #eee8dc; }
+.application :global(.membership-apply-heading-row) { display: flex; flex-direction: column; align-items: flex-start; gap: 24px; }
+.application :global(.membership-apply-heading-row .membership-apply-back) { margin: 0; min-height: 44px; }
+.application :global(.membership-apply-intro h1) { max-width: 100%; margin: 0; text-align: left; font-size: clamp(44px, 5.5vw, 72px); line-height: .98; white-space: normal; }
+.application :global(.membership-apply-facts) { margin-top: 32px; }
+.application :global(.membership-apply-facts li) { padding: 20px; gap: 12px; }
+.application :global(.membership-apply-facts span),
+.application :global(.membership-apply-facts strong) { font-size: 13px; line-height: 1.6; }
+.application :global(.membership-apply-junior) { margin-top: 20px; font-size: 13px; line-height: 1.6; }
+.application :global(.membership-apply-workspace) { padding-block: 32px 72px; }
+.application :global(.membership-application-card) { max-width: none; }
+.application :global(.membership-apply-workspace .membership-wizard-progress) { padding: 20px 24px 28px; border-radius: 4px 4px 0 0; background: #eee8dc; }
+.application :global(.membership-form-section) { padding: 32px; box-shadow: none; }
+.application :global(.membership-form-section > header) { margin-bottom: 28px; padding-bottom: 24px; }
+.application :global(.membership-form-section > header h2) { font-size: clamp(30px, 3.5vw, 42px); line-height: 1.08; }
+.application :global(.membership-eligibility-picker),
+.application :global(.membership-field-grid) { gap: 24px; }
+.application :global(.membership-apply-workspace .membership-wizard-actions) { padding: 20px 32px; border-radius: 0 0 4px 4px; }
+.application :global(.membership-apply-help) { max-width: var(--public-reading-max); margin: 24px auto 0; font-size: 13px; line-height: 1.6; }
+.application:global(.membership-application-result-page) { padding: 56px var(--public-content-inline) 80px; }
+.application :global(.membership-application-result) { width: 100%; max-width: var(--public-confirmation-max); padding: 40px; }
+.application :global(.membership-application-result h1) { font-size: clamp(38px, 4.5vw, 58px); line-height: 1; }
+.application :global(.membership-application-result > p:not(.eyebrow)) { max-width: 55ch; font-size: 16px; line-height: 1.75; }
+.application :global(.membership-apply-unavailable) { width: calc(100% - 2 * var(--public-content-gutter)); max-width: var(--public-confirmation-max); margin: 48px auto 72px; padding: 32px; }
+
+@media (max-width: 760px) {
+  .application :global(.membership-apply-intro) { padding-block: 24px; }
+  .application :global(.membership-apply-heading-row) { gap: 16px; }
+  .application :global(.membership-apply-facts) { margin-top: 24px; }
+  .application :global(.membership-apply-facts li) { padding: 14px 16px; }
+  .application :global(.membership-apply-workspace) { padding-block: 24px 56px; }
+  .application :global(.membership-apply-workspace .membership-wizard-progress) { padding: 16px 8px; }
+  .application :global(.membership-form-section) { padding: 24px 20px; }
+  .application :global(.membership-form-section > header) { gap: 12px; }
+  .application :global(.membership-form-section > header h2) { font-size: 30px; }
+  .application :global(.membership-eligibility-picker),
+  .application :global(.membership-field-grid) { gap: 18px; }
+  .application :global(.membership-apply-workspace .membership-wizard-actions) { padding: 16px 20px; }
+  .application:global(.membership-application-result-page) { padding-block: 32px 56px; }
+  .application :global(.membership-application-result) { padding: 32px 24px; }
+}
+
+@media print {
+  .application :global(.membership-apply-intro),
+  .application :global(.membership-apply-workspace) { padding: 20px 0; background: white; }
+}

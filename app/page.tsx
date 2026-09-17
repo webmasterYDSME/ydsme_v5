@@ -7,6 +7,7 @@ import { PageShell } from "./components/PageShell";
 import { TargetDonation } from "./components/DonationCards";
 import { getCarriageAnnouncements, getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
+import styles from "./home.module.css";
 
 // Public database content is resolved at request time. This keeps builds
 // independent from a live Supabase schema and avoids caching operational data.
@@ -29,6 +30,7 @@ export default async function Home() {
   const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>
+      <div className={styles.home}>
       <section className="hero" aria-labelledby="home-hero-title">
         <Image src="/images/hero.webp" alt="A miniature steam locomotive at York Model Engineers" fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" />
         <div className="hero-wash" />
@@ -87,7 +89,8 @@ export default async function Home() {
         <div className="visit-copy"><p className="eyebrow">Your day on the rails</p><h2>Come curious.<br/><em>Leave inspired.</em></h2><div className="quick-facts"><p><MapPin/> Rear of The Pastures, North Lane · Dringhouses, York YO24 2JE</p><p><Sparkles/> Free entry · donations welcome</p><p><CalendarDays/> Public open days & special events</p><p><Users/> Wheelchair-friendly paths</p></div><div className="visit-actions"><a className="button brass" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)">Get Directions <Navigation size={17}/></a><Link className="button ghost" href="/visitors">Visitor information <ArrowRight size={17}/></Link></div></div>
       </section>
 
-      {nextEvent ? <section className="section event-tease"><p className="eyebrow dark">On the platform</p><div className="event-title"><span>{format(parseISO(nextEvent.start_date), "dd.MM.yy")}</span><h2>{nextEvent.name}</h2><p>{format(parseISO(nextEvent.start_date), "EEEE")} · {nextEvent.start_time.slice(0,5)}<br/>{nextEvent.is_ticket_required ? "Advance booking required" : "Free entrance & rides"}<br/>Hot food & drinks available</p></div><Link href="/events" className="circle-link" aria-label="See all events"><ArrowRight/></Link></section> : null}
+      {nextEvent ? <section className="section event-tease"><p className="eyebrow dark">On the platform</p><div className="event-title"><span>{format(parseISO(nextEvent.start_date), "dd.MM.yy")}</span><h2>{nextEvent.name}</h2><p>{format(parseISO(nextEvent.start_date), "EEEE")} · {nextEvent.start_time.slice(0,5)}<br/>{nextEvent.is_ticket_required ? "Advance booking required" : "Free entrance & rides"}<br/>Hot food & drinks available</p></div><Link href="/events" className="button dark">See all events <ArrowRight size={17}/></Link></section> : null}
+      </div>
     </PageShell>
   );
 }

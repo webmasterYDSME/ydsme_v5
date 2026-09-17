@@ -6,6 +6,7 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { continueApplicationCheckout } from "@/lib/actions/membership";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
 import { getApplicationCheckoutSummaryFromToken } from "@/lib/membership";
+import styles from "./checkout.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function MembershipCheckoutConfirmation({ searchParams }: {
   const summary = await getApplicationCheckoutSummaryFromToken(token);
   if (!summary) redirect("/membership/apply?application=payment-link-invalid");
   return <PageShell headerTheme="light">
-    <div className="membership-checkout-page">
+    <div className={`membership-checkout-page ${styles.checkout}`}>
       <div className="membership-checkout-wrap">
         <Link className="membership-checkout-back" href="/membership"><ArrowLeft/>Membership overview</Link>
 

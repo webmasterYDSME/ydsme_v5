@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
 import { membershipTokenHash } from "@/lib/membership";
 import { createServiceClient } from "@/lib/supabase/admin";
+import { PageShell } from "@/app/components/PageShell";
+import styles from "../confirmation.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -47,14 +49,14 @@ export default async function MembershipStatus({ searchParams }: { searchParams:
     body: "The membership officer has the application and will send an email when the next action is ready.",
   };
   const plan = Array.isArray(data.membership_plans) ? data.membership_plans[0] : data.membership_plans;
-  return <main className="membership-apply-page">
-    <section className="membership-completion-card" aria-labelledby="membership-status-title">
-      <div className="membership-completion-icon"><MailCheck/></div>
+  return <PageShell headerTheme="light"><div className={styles.page}>
+    <section className={styles.card} aria-labelledby="membership-status-title">
+      <div className={styles.icon} aria-hidden="true">{data.status === "converted" ? <CheckCircle2/> : <MailCheck/>}</div>
       <p className="eyebrow dark">{data.full_name} · {plan?.name || "Membership"}</p>
       <h1 id="membership-status-title">{copy.title}</h1>
       <p>{copy.body}</p>
-      <div className="membership-completion-note"><Clock3/><span>This secure status link relates only to {data.full_name} and expires after 30 days.</span></div>
+      <div className={styles.note}><Clock3 aria-hidden="true"/><span>This secure status link relates only to {data.full_name} and expires after 30 days.</span></div>
       {data.status === "converted" ? <a className="button dark" href="/signin?next=/account"><CheckCircle2/>Sign in to your account</a> : <a className="button outline" href="/membership">Membership information</a>}
     </section>
-  </main>;
+  </div></PageShell>;
 }

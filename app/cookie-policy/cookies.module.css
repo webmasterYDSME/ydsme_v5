@@ -1,0 +1,16 @@
+.cookies :global(.legal-copy td:first-child) { width: auto; }
+.cookies :global(.legal-copy th:first-child) { width: 30%; }
+.cookies :global(.legal-copy th:nth-child(2)) { width: 42%; }
+.cookies :global(.legal-copy code) { white-space: normal; overflow-wrap: anywhere; font-size: .9em; }
+@media (max-width: 700px) {
+  .cookies :global(.legal-copy table),
+  .cookies :global(.legal-copy tbody),
+  .cookies :global(.legal-copy tr),
+  .cookies :global(.legal-copy td) { display: block; width: 100%; }
+  .cookies :global(.legal-copy thead) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .cookies :global(.legal-copy tr) { margin-bottom: 20px; border: 1px solid #bdb7aa; }
+  .cookies :global(.legal-copy td) { padding: 16px 20px; border: 0; font-size: 15px; }
+  .cookies :global(.legal-copy td + td) { border-top: 1px solid #d7d1c5; }
+  .cookies :global(.legal-copy td:first-child) { background: #eee8dc; }
+  .cookies :global(.legal-copy td)::before { content: attr(data-label); display: block; margin-bottom: 8px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--rust); }
+}

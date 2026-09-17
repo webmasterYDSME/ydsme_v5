@@ -18,6 +18,7 @@ import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/featu
 import { getPublicMembershipPlans, proratedMembershipFee } from "@/lib/membership";
 import { getPublicMembershipPaymentContact } from "@/lib/membership-settings";
 import { publicPageMetadata } from "@/lib/seo";
+import styles from "./application.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
@@ -132,7 +133,7 @@ export default async function MembershipApplication({ searchParams }: { searchPa
   if (outcome) {
     const OutcomeIcon = outcome.icon === "mail" ? MailCheck : outcome.icon === "calendar" ? CalendarCheck : ShieldCheck;
     return <PageShell headerTheme="light">
-      <main className={`membership-application-result-page is-${outcome.tone}`}>
+      <div className={`membership-application-result-page is-${outcome.tone} ${styles.application}`}>
         <section className="membership-application-result" role="status">
           <span className="membership-result-icon"><OutcomeIcon aria-hidden="true"/></span>
           <p className="eyebrow dark">{outcome.eyebrow}</p>
@@ -144,7 +145,7 @@ export default async function MembershipApplication({ searchParams }: { searchPa
             <Link className={outcome.primaryHref ? "membership-result-secondary" : "button dark"} href="/membership">Membership overview{!outcome.primaryHref ? <ArrowRight/> : null}</Link>
           </div>
         </section>
-      </main>
+      </div>
     </PageShell>;
   }
 
@@ -157,12 +158,12 @@ export default async function MembershipApplication({ searchParams }: { searchPa
   const errorMessage = query.application ? applicationErrors[query.application] : null;
 
   return <PageShell headerTheme="light">
-    <main className="membership-apply-page">
+    <div className={`membership-apply-page ${styles.application}`}>
       <section className="membership-apply-intro">
         <div className="membership-apply-intro-inner">
-          <div className="membership-apply-heading-row" style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "start" }}>
-            <Link className="membership-apply-back" href="/membership" style={{ margin: 0 }}> <ArrowLeft/>Membership overview</Link>
-            <h1 style={{ gridColumn: 2, margin: 0 }}>Join the <em>Society.</em></h1>
+          <div className="membership-apply-heading-row">
+            <Link className="membership-apply-back" href="/membership"> <ArrowLeft/>Membership overview</Link>
+            <h1>Join the <em>Society.</em></h1>
           </div>
           <ul className="membership-apply-facts" aria-label="Before you begin">
             <li><CalendarCheck/><span><strong>Calendar-year membership</strong>Paid terms end on 31 December.</span></li>
@@ -198,6 +199,6 @@ export default async function MembershipApplication({ searchParams }: { searchPa
         <p>The Society’s new website application journey is not currently enabled. MemberMojo remains available for applications and renewals.</p>
         <a className="button dark" href={MEMBERMOJO_MEMBERSHIP_URL}>Continue to MemberMojo <ArrowRight/></a>
       </section>}
-    </main>
+    </div>
   </PageShell>;
 }

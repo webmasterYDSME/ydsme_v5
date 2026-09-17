@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
-import { UserRound } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { switchPortalAccount } from "@/lib/actions/auth";
 import { getCurrentUser } from "@/lib/auth";
 import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/features";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import styles from "../../signin/signin.module.css";
 
 function safeNext(value: string | undefined) {
   return value?.startsWith("/") && !value.startsWith("//") ? value : "/account";
@@ -14,14 +17,17 @@ export default async function SwitchAccount({ searchParams }: { searchParams: Pr
   const destination = safeNext(next);
   if (!currentUser) redirect(`/signin?next=${encodeURIComponent(destination)}`);
 
-  return <main className="simple-auth"><div>
-    <span className="membership-result-icon"><UserRound aria-hidden="true"/></span>
-    <p className="eyebrow dark">Membership account</p>
-    <h1>Use the account for this membership.</h1>
-    <p>Another Society account is already open in this browser. Sign out of it before requesting a secure sign-in link for the email address that received the membership message.</p>
-    <form action={switchPortalAccount}>
+  return <main className={`auth-page ${styles.signin}`}><section className="auth-panel" aria-labelledby="switch-account-title"><div>
+    <Link href="/" className="back-link">← Return to the public website</Link>
+    <Link href="/" className="auth-brand auth-brand-mobile">
+      <Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={72} height={72}/>
+      <span>York Model Engineers</span>
+    </Link>
+    <h1 id="switch-account-title" className={styles.heading}>Use another account.</h1>
+    <p className="auth-primary-help">You’re already signed in to a Society account. Sign out to use the email address that received your membership message.</p>
+    <form action={switchPortalAccount} className="auth-form">
       <input type="hidden" name="next" value={destination}/>
-      <button className="button dark" type="submit">Use another account</button>
+      <PendingSubmitButton className="button dark" pendingLabel="Signing out…">Sign out and continue</PendingSubmitButton>
     </form>
-  </div></main>;
+  </div></section></main>;
 }

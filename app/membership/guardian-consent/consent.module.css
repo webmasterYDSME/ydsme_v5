@@ -1,0 +1,64 @@
+.consent:global(.membership-consent-page) {
+  min-height: 0;
+  padding: 56px var(--public-content-inline) 80px;
+  background: var(--paper);
+}
+
+.consent :global(.membership-consent-card) {
+  width: 100%;
+  max-width: var(--public-confirmation-max);
+  padding: 40px;
+  background: #fffdfa;
+  box-shadow: 0 12px 36px rgba(35, 49, 42, .06);
+}
+
+.consent :global(.membership-apply-back) {
+  display: flex;
+  width: fit-content;
+  min-height: 44px;
+  margin-bottom: 24px;
+}
+
+.consent :global(.membership-consent-icon) {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 0 24px;
+  padding: 16px;
+  border-radius: 50%;
+  background: #e4ebe1;
+  color: var(--deep);
+}
+
+.consent :global(.membership-consent-card h1) {
+  margin: 12px 0 24px;
+  font-size: clamp(38px, 4.5vw, 58px);
+  font-weight: 500;
+  line-height: 1.02;
+}
+
+.consent :global(.membership-consent-card > p:not(.eyebrow)) {
+  max-width: 55ch;
+  margin-bottom: 0;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.consent :global(.membership-consent-card form) {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #d1c8b7;
+}
+
+.consent :global(.button) {
+  min-height: 52px;
+  white-space: normal;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .consent:global(.membership-consent-page) { padding-block: 32px 56px; }
+  .consent :global(.membership-consent-card) { padding: 28px 24px; }
+  .consent :global(.membership-consent-card h1) { font-size: 40px; }
+  .consent :global(.button) { width: 100%; padding-inline: 16px; }
+}

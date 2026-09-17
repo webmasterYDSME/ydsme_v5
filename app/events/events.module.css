@@ -1,0 +1,99 @@
+.events {
+  --event-section-space: clamp(56px, 6vw, 96px);
+  --event-column-gap: clamp(32px, 4vw, 64px);
+}
+
+.events :global(.section),
+.events :global(.member-event-teasers),
+.events :global(.member-banner) {
+  padding: var(--event-section-space) var(--public-content-inline);
+}
+.events :global(.events-opening) { display: block; min-height: 0; }
+.events :global(.events-feature) {
+  display: block;
+  min-height: 0;
+  padding-top: 164px;
+  padding-bottom: 64px;
+}
+.events :global(.events-feature-heading) { margin-bottom: 32px; }
+.events :global(.events-feature-layout) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: var(--event-column-gap);
+  align-items: center;
+}
+.events :global(.events-feature-layout > .public-event-artwork) {
+  width: 100%;
+  max-width: none;
+  align-self: center;
+}
+.events :global(.events-feature-copy) { display: block; }
+.events :global(.events-feature-copy h1) {
+  font-size: clamp(40px, 4.2vw, 64px);
+  line-height: 1.02;
+  margin: 0 0 28px;
+}
+.events :global(.public-event-facts) { gap: 18px; margin-bottom: 24px; }
+.events :global(.public-event-facts dd) { min-width: 0; overflow-wrap: anywhere; }
+.events :global(.public-event-facts dt) { flex: 0 0 24px; }
+.events :global(.public-event-facts small) { font-size: 13px; }
+.events :global(.events-feature-copy .public-event-actions) { margin-top: 24px; padding-top: 0; gap: 12px; }
+.events :global(.public-event-status) { margin-bottom: 0; }
+
+.events :global(.events-about) {
+  grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+  gap: var(--event-column-gap);
+  align-items: start;
+}
+.events :global(.events-about > .event-description),
+.events :global(.public-event-expanded-description),
+.events :global(.public-event-detail-description p) { max-width: var(--public-reading-max); font-size: 16px; line-height: 1.75; overflow-wrap: anywhere; }
+.events :global(.events-about h2),
+.events :global(.public-event-list h2),
+.events :global(.events-empty h2),
+.events :global(.member-event-heading h2),
+.events :global(.member-banner h2) { font-size: clamp(44px, 5.2vw, 72px); line-height: .98; }
+.events :global(.public-event-card) { padding-block: 28px; gap: 32px; }
+.events :global(.public-event-card h3) { font-size: 36px; line-height: 1.08; }
+.events :global(.public-event-list > header) { margin-bottom: 32px; }
+.events :global(.public-event-date),
+.events :global(.public-event-card .public-event-status) { font-size: 14px; }
+.events :global(.public-event-card .public-event-meta .public-event-audience) { font-size: 11px; }
+.events :global(.public-event-details-toggle) { font-size: 13px; }
+.events :global(.member-event-heading) { gap: var(--event-column-gap); }
+.events :global(.member-event-heading > p) { font-size: 16px; }
+.events :global(.member-event-grid) { gap: 24px; }
+.events :global(.member-event-grid-1) { margin-inline: 0; }
+.events :global(.member-event-card h3) { overflow-wrap: anywhere; }
+.events :global(.member-event-card-copy > p:not(.member-event-label):not(.member-event-date)) { font-size: 15px; }
+
+.events :global(.public-event-detail) { padding-top: 48px; }
+.events :global(.public-event-detail .public-event-facts dt) { color: var(--rust); }
+.events :global(.public-event-detail-description) { max-width: none; margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--line); }
+.events :global(.public-event-detail-description h2) { font-size: clamp(36px, 4vw, 48px); }
+
+/* An empty timetable keeps the same compact introduction as visitor information. */
+.events :global(.inner-hero) { height: auto; min-height: 560px; padding: 180px var(--public-content-inline) 72px; }
+.events :global(.inner-copy) { position: relative; inset: auto; }
+.events :global(.inner-hero h1) { font-size: clamp(48px, 6.5vw, 92px); line-height: .94; }
+
+@media (max-width: 900px) {
+  .events :global(.events-feature) { padding-top: 124px; padding-bottom: 48px; }
+  .events :global(.events-feature-layout),
+  .events :global(.events-about),
+  .events :global(.member-event-heading) { grid-template-columns: minmax(0, 1fr); }
+  .events :global(.events-feature-copy h1) { font-size: clamp(38px, 6vw, 52px); }
+  .events :global(.public-event-detail) { padding-top: 32px; }
+}
+
+@media (max-width: 600px) {
+  .events :global(.events-feature) { padding-top: 112px; }
+  .events :global(.events-feature-heading) { flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
+  .events :global(.public-event-card) { gap: 18px; padding-block: 24px; }
+  .events :global(.public-event-card h3) { font-size: 28px; }
+  .events :global(.public-event-card .public-event-date) { font-size: 12px; }
+  .events :global(.public-event-detail-description) { margin-top: 40px; padding-top: 32px; }
+  .events :global(.inner-hero) { min-height: 0; padding-block: 140px 56px; }
+  .events :global(.inner-hero h1) { font-size: clamp(42px, 10vw, 58px); }
+  .events :global(.vertical-label) { display: none; }
+}

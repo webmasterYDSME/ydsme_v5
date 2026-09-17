@@ -1,6 +1,7 @@
 "use client";
 
 import "./train.css";
+import frameStyles from "./PublicFrame.module.css";
 
 import {ReactNode, useEffect, useRef, useState} from "react";
 import Link from "next/link";
@@ -188,16 +189,16 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
     window.addEventListener("keydown",closeOnEscape);
     return()=>{document.documentElement.classList.remove("nav-open");window.removeEventListener("keydown",closeOnEscape);};
   },[open]);
-  return <>
+  return <div className={frameStyles.frame}>
     <a className="skip-link" href="#main-content">Skip to main content</a>
-    <header className={headerTheme === "light" ? "site-header site-header-light" : "site-header"}>
+    <header className={`${headerTheme === "light" ? "site-header site-header-light" : "site-header"} ${frameStyles.header}`}>
       <Link href="/" className="brand"><span className="brand-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={76} height={76} /></span><span className="brand-wordmark"><span className="brand-name">York Model</span><strong>Engineers</strong></span></Link>
       <nav id="primary-navigation" aria-label="Primary navigation" className={open?"main-nav open":"main-nav"}><Link className={path==="/"?"home-mobile active":"home-mobile"} href="/" onClick={()=>setOpen(false)}>Home</Link>{headerNav.map(([label,href])=><Link key={href} className={path===href?"active":""} href={href} onClick={()=>setOpen(false)}>{label}</Link>)}<Link className="login-mobile" href={memberHref} onClick={()=>setOpen(false)}>{memberLabel} <ArrowUpRight size={15}/></Link></nav>
       <Link className="member-login" href={memberHref}>{memberLabel} <ArrowUpRight size={15}/></Link>
       <button className="menu-button" type="button" onClick={()=>setOpen(!open)} aria-controls="primary-navigation" aria-expanded={open} aria-label={open?"Close navigation":"Open navigation"}>{open?<X/>:<Menu/>}</button>
     </header>
     <main id="main-content">{children}</main>
-    <footer className="site-footer">
+    <footer className={`site-footer ${frameStyles.footer}`}>
       <div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={92} height={92} quality={55} /></span><div><h2>Made by hand.<br/><em>Moved by steam.</em></h2><p>Miniature railways and model engineering in York since 1929.</p></div></div>
       <section className="footer-visit" aria-labelledby="footer-visit-title"><h3 id="footer-visit-title">Visit</h3><address><a className="footer-address-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)"><MapPin aria-hidden="true"/><span><AddressLines address={siteConfig.clubAddress}/></span><ArrowUpRight aria-hidden="true"/></a></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</section>
       <nav className="footer-navigation" aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{footerNav.map(([label,href])=><Link key={href} href={href}>{label}</Link>)}</nav>
@@ -211,10 +212,10 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
         <div className="footer-meta"><p className="footer-copyright">© {new Date().getFullYear()} {siteConfig.shortName}</p><p className="footer-credit">Website by <a href="https://nomen.hunkymonkey.net" target="_blank" rel="author noreferrer">Nomen A</a></p></div>
       </div>
     </footer>
-  </>;
+  </div>;
 }
 
-export function InnerHero({kicker,title,copy,image,imageAlt,imagePosition,imageTone="standard"}:{kicker:string;title:ReactNode;copy:string;image:string;imageAlt:string;imagePosition?:string;imageTone?:"standard"|"bright"}) {
+export function InnerHero({kicker,title,copy,image,imageAlt,imagePosition,imageTone="standard",children}:{kicker:string;title:ReactNode;copy:string;image:string;imageAlt:string;imagePosition?:string;imageTone?:"standard"|"bright";children?:ReactNode}) {
   const photoClassName = imageTone === "bright" ? "inner-photo inner-photo-bright" : "inner-photo";
-  return <section className="inner-hero" aria-labelledby="inner-hero-title"><div className={photoClassName}><Image src={image} alt={imageAlt} fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" style={imagePosition ? {objectPosition:imagePosition} : undefined} /></div><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1 id="inner-hero-title">{title}</h1><p>{copy}</p></div><div className="vertical-label" aria-hidden="true">YORK · ENGLAND · EST 1929</div></section>;
+  return <section className="inner-hero" aria-labelledby="inner-hero-title"><div className={photoClassName}><Image src={image} alt={imageAlt} fill loading="eager" fetchPriority="low" quality={35} sizes="100vw" style={imagePosition ? {objectPosition:imagePosition} : undefined} /></div><div className="inner-copy"><p className="eyebrow">{kicker}</p><h1 id="inner-hero-title">{title}</h1><p>{copy}</p>{children}</div><div className="vertical-label" aria-hidden="true">YORK · ENGLAND · EST 1929</div></section>;
 }

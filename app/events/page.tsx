@@ -15,6 +15,7 @@ import {
   type EventRecord,
 } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
+import styles from "./events.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
@@ -52,7 +53,7 @@ export default async function Events() {
   const more = events.slice(1, 5);
 
 
-  return <PageShell>
+  return <PageShell><div className={styles.events}>
     {featured ? <div className="events-opening">
       <section className="section events-feature" id={`event-${featured.id}`} aria-labelledby="featured-event-title">
         <div className="events-feature-heading"><p className="eyebrow">The public running board</p><span>Next public event</span></div>
@@ -111,5 +112,5 @@ export default async function Events() {
     </section> : null}
 
     <section className="member-banner"><p className="eyebrow">Beyond the public timetable</p><h2>More days at the track.<br/><em>More ways to take part.</em></h2><Link href="/membership" className="button brass">Explore membership <ArrowRight size={17}/></Link></section>
-  </PageShell>;
+  </div></PageShell>;
 }

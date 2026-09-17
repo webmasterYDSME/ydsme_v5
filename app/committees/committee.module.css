@@ -1,32 +1,30 @@
 .roster {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 72px 40px 100px;
+  padding: clamp(40px, 5vw, 72px) var(--public-content-inline) clamp(56px, 6vw, 96px);
 }
 .intro {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 32px;
-  margin-bottom: 38px;
+  gap: 48px;
+  margin-bottom: 48px;
 }
 .intro h1 {
   margin: 0;
-  font: 500 clamp(36px, 4vw, 54px)/1.05 var(--font-display);
+  font: 500 clamp(44px, 5.5vw, 72px)/1.02 var(--font-display);
   letter-spacing: -.025em;
 }
 .intro h1 em { color: var(--rust); }
 .intro > p {
-  max-width: 340px;
+  max-width: 38ch;
   margin: 0 0 4px;
   color: #626a62;
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1.75;
 }
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px;
+  gap: 32px;
   align-items: stretch;
 }
 .grid > div { min-width: 0; }
@@ -41,7 +39,7 @@
 .portrait {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
   background: #e5e8df;
   border-bottom: 1px solid #d9d5c9;
@@ -81,7 +79,7 @@
   padding-top: 14px;
   border-top: 1px solid #e6e2d7;
   color: #516352;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.6;
   text-decoration: none;
 }
@@ -103,15 +101,13 @@
 }
 .empty { padding: 40px 24px; background: #e9e9de; text-align: center; color: #59665b; }
 @media(max-width:960px) {
-  .roster { padding: 56px 28px 72px; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-  .intro { align-items: flex-start; }
-  .intro > p { max-width: 280px; }
+  .intro { flex-direction: column; align-items: flex-start; gap: 24px; }
+  .intro > p { max-width: 60ch; }
 }
 @media(max-width:600px) {
-  .roster { padding: 40px 22px 56px; }
-  .intro { display: block; margin-bottom: 28px; }
-  .intro > p { max-width: none; margin-top: 20px; }
-  .grid { grid-template-columns: minmax(0, 380px); justify-content: center; }
+  .intro { margin-bottom: 32px; }
+  .intro > p { max-width: none; }
+  .grid { grid-template-columns: minmax(0, 1fr); }
   .details { padding: 20px; }
 }

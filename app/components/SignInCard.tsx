@@ -22,7 +22,7 @@ export function SignInCard({ next, initialMode }: { next: string; initialMode?: 
     <div className="auth-flip-shell">
       <div className={isFlipped ? "auth-flip-card is-flipped" : "auth-flip-card"}>
         <section className="auth-flip-face auth-flip-front" aria-hidden={isFlipped} inert={isFlipped}>
-          <p className="auth-primary-help">We’ll send a secure, one-time sign-in link to your inbox.</p>
+          <p className="auth-primary-help">Enter the email address you use for your membership. We’ll email you a link. Click it to sign in. No password needed.</p>
           <form action={sendMagicLink} className="auth-form auth-card-form">
             <input type="hidden" name="next" value={next} />
             <div className="auth-field">
@@ -30,7 +30,7 @@ export function SignInCard({ next, initialMode }: { next: string; initialMode?: 
               <SubmitOnEnterInput id="magic-link-email" name="email" type="email" autoComplete="email" enterKeyHint="go" placeholder="you@example.org" required />
             </div>
             <CaptchaField />
-            <PendingSubmitButton className="button dark" pendingLabel="Sending link…"><Mail aria-hidden="true" />Send secure sign-in link</PendingSubmitButton>
+            <PendingSubmitButton className="button dark" pendingLabel="Sending email…"><Mail aria-hidden="true" />Email me a sign-in link</PendingSubmitButton>
           </form>
           <div className="auth-method-switches">
             <button type="button" onClick={() => showBack("password")}><KeyRound />Sign in with email and password</button>
@@ -38,17 +38,12 @@ export function SignInCard({ next, initialMode }: { next: string; initialMode?: 
         </section>
 
         <section className="auth-flip-face auth-flip-back" aria-hidden={!isFlipped} inert={!isFlipped}>
-          <button className="auth-flip-return" type="button" onClick={() => backMode === "password-reset" ? showBack("password") : setIsFlipped(false)}>
-            <ArrowLeft /> {backMode === "password-reset" ? "Back to password sign in" : "Back to sign-in link"}
-          </button>
-          <div className="auth-back-heading">
-            <KeyRound aria-hidden="true" />
+          {backMode === "password-reset" ? <div className="auth-back-heading">
             <div>
-              <p className="eyebrow dark">{backMode === "password" ? "Password access" : "Account recovery"}</p>
-              <h3>{backMode === "password" ? "Sign in with password." : "Reset your password."}</h3>
-              <p>{backMode === "password" ? "Use your member email address and password." : "We’ll email instructions for choosing a new password."}</p>
+              <h3>Reset your password.</h3>
+              <p>We’ll email instructions for choosing a new password.</p>
             </div>
-          </div>
+          </div> : null}
           {backMode === "password" ? (
             <>
               <form action={signInWithPassword} className="auth-form auth-card-form auth-back-form">
@@ -56,17 +51,18 @@ export function SignInCard({ next, initialMode }: { next: string; initialMode?: 
                 <label>Email address<input name="email" type="email" autoComplete="email" enterKeyHint="next" required /></label>
                 <div className="auth-field">
                   <label htmlFor="login-password">Password</label>
-                  <SubmitOnEnterPassword id="login-password" name="password" autoComplete="current-password" enterKeyHint="go" minLength={6} required />
+                  <SubmitOnEnterPassword id="login-password" name="password" autoComplete="current-password" enterKeyHint="go" minLength={6} allowReveal required />
+                  <button className="auth-forgot-password" type="button" onClick={() => showBack("password-reset")}>Forgotten your password?</button>
                 </div>
                 <CaptchaField />
                 <PendingSubmitButton className="button dark auth-secondary-submit" pendingLabel="Signing in…">Sign in securely <KeyRound aria-hidden="true" /></PendingSubmitButton>
               </form>
               <div className="auth-method-switches">
-                <button type="button" onClick={() => showBack("password-reset")}><KeyRound />Forgotten your password?</button>
+                <button type="button" onClick={() => setIsFlipped(false)}><ArrowLeft />Back to sign-in link</button>
               </div>
             </>
           ) : (
-            <form action={sendPasswordReset} className="auth-form auth-card-form auth-back-form">
+            <><form action={sendPasswordReset} className="auth-form auth-card-form auth-back-form">
               <label htmlFor="alternative-email">Email address</label>
               <input id="alternative-email" name="email" type="email" autoComplete="email" placeholder="you@example.org" required />
               <CaptchaField />
@@ -74,6 +70,7 @@ export function SignInCard({ next, initialMode }: { next: string; initialMode?: 
                 <KeyRound aria-hidden="true" />Send reset instructions
               </PendingSubmitButton>
             </form>
+            <div className="auth-method-switches"><button type="button" onClick={() => showBack("password")}><ArrowLeft />Back to password sign in</button></div></>
           )}
         </section>
       </div>

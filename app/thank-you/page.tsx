@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { PageShell } from "../components/PageShell";
 import { publicPageMetadata } from "@/lib/seo";
+import styles from "./thanks.module.css";
 
 export const metadata: Metadata = {
   ...publicPageMetadata({
@@ -15,19 +16,19 @@ export const metadata: Metadata = {
 
 export default function DonationThankYou() {
   return (
-    <PageShell>
-      <main className="donation-thanks">
-        <div>
+    <PageShell headerTheme="light">
+      <div className={`donation-thanks ${styles.thanks}`}>
+        <section aria-labelledby="donation-thanks-title">
           <span className="donation-thanks-icon" aria-hidden="true"><CircleCheck /></span>
           <p className="eyebrow dark"><HeartHandshake aria-hidden="true" /> Thank you</p>
-          <h1>Your kindness<br /><em>keeps us moving.</em></h1>
-          <p>Your donation has been submitted securely. It will help the Society care for the railway, grounds and the future of model engineering in York.</p>
+          <h1 id="donation-thanks-title">Your kindness<br /><em>keeps us moving.</em></h1>
+          <p>Your donation has been received. It will help the Society care for the railway, grounds and the future of model engineering in York.</p>
           <div className="button-row">
             <Link className="button dark" href="/">Return home</Link>
             <Link className="button outline" href="/events">See upcoming events</Link>
           </div>
-        </div>
-      </main>
+        </section>
+      </div>
     </PageShell>
   );
 }

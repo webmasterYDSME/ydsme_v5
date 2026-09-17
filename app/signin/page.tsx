@@ -5,6 +5,7 @@ import { MailCheck, ShieldCheck } from "lucide-react";
 import { SignInCard } from "@/app/components/SignInCard";
 import { getCurrentUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import styles from "./signin.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function SignIn({ searchParams }: Props) {
     }
   }
   return (
-    <main className="auth-page">
+    <main className={`auth-page ${styles.signin}`}>
       <section className="auth-art">
         <Link href="/" className="auth-brand">
           <Image src="/ydsme-logo-detailed-gold-lions.png" alt="York Model Engineers" width={104} height={104} />
@@ -45,12 +46,13 @@ export default async function SignIn({ searchParams }: Props) {
 
       <section className="auth-panel">
         <div>
+          <Link href="/" className="back-link">← Return to the public website</Link>
           <Link href="/" className="auth-brand auth-brand-mobile">
             <Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={72} height={72} />
             <span>York Model Engineers</span>
           </Link>
-          <p className="eyebrow dark">{isMagicLinkSent ? "Sign-in link requested" : isPasswordResetSent ? "Password reset requested" : "Member login"}</p>
-          <h2>{isEmailSent ? "Check your email." : "Welcome back."}</h2>
+          {isEmailSent ? <p className="eyebrow dark">{isMagicLinkSent ? "Sign-in link requested" : "Password reset requested"}</p> : null}
+          <h1 className={styles.heading}>{isEmailSent ? "Check your email." : "Welcome back."}</h1>
           {query.notice === "account-switched" ? <p className="form-message success">The other account has been signed out. Use the email address that received the membership message.</p> : null}
           {query.error ? <p className="form-message error" role="alert">{query.error}</p> : null}
 
@@ -58,8 +60,8 @@ export default async function SignIn({ searchParams }: Props) {
             <div className="auth-link-confirmation" role="status" aria-live="polite">
               <span className="auth-link-confirmation-icon" aria-hidden="true"><MailCheck /></span>
               <div>
-                <h3>{isMagicLinkSent ? "A secure sign-in link is on its way." : "Password reset instructions are on their way."}</h3>
-                <p>{isMagicLinkSent ? "If that email belongs to an active member account, we’ve sent a secure sign-in link. Open the link to continue to the members’ area." : "If that email belongs to an active member account, we’ve sent instructions for choosing a new password. Open the link in the email to continue."}</p>
+                <h3>{isMagicLinkSent ? "Look for an email from the Society." : "Password reset instructions are on their way."}</h3>
+                <p>{isMagicLinkSent ? "If the email address you entered matches an active membership, you’ll receive an email from us. Open it and click the sign-in link. You won’t need a password." : "If that email belongs to an active member account, we’ve sent instructions for choosing a new password. Open the link in the email to continue."}</p>
                 <p className="auth-link-confirmation-note">It may take a minute to arrive. Please check your spam or junk folder too.</p>
               </div>
               <Link href={isPasswordResetSent ? "/signin?method=password-reset" : "/signin"} className="button outline">Try another email</Link>
@@ -68,7 +70,6 @@ export default async function SignIn({ searchParams }: Props) {
             <SignInCard next={query.next || "/dashboard"} initialMode={initialMode} />
           )}
 
-          <Link href="/" className="back-link">← Return to the public website</Link>
         </div>
       </section>
     </main>

@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* Usable content widths, excluding the outer gutters. The legacy page tokens
+   remain in place until those sections have been individually reviewed. */
+:root {
+  --public-content-max: 80rem;
+  --public-content-gutter: 20px;
+  --public-content-inline: max(var(--public-content-gutter), calc((100% - var(--public-content-max)) / 2));
+  --public-reading-max: 65ch;
+  --public-workspace-max: 62.5rem;
+  --public-form-max: 35rem;
+  --public-confirmation-max: 42.5rem;
+}
+@media (min-width: 701px) {
+  :root { --public-content-gutter: 32px; }
+}
+@media (min-width: 1024px) {
+  :root { --public-content-gutter: 48px; }
+}
+
 :root{--ink:#101814;--forest:#18382d;--deep:#09120f;--brass:#d5a84b;--cream:#eee9dc;--paper:#f6f2e8;--rust:#9a4431;--line:rgba(16,24,20,.17);--public-page-max:1600px;--public-page-gutter:clamp(20px,8vw,128px);--public-page-inline:max(var(--public-page-gutter),calc((100vw - var(--public-page-max))/2 + var(--public-page-gutter)))}
 *{box-sizing:border-box}html{overflow-x:clip}body{margin:0;max-width:100%;background:var(--paper);color:var(--ink);font-family:var(--font-sans),sans-serif;overflow-x:clip}a{color:inherit;text-decoration:none}h1,h2,h3,p{margin-top:0}button{font:inherit}main{min-width:0}.reveal{will-change:transform,opacity}.skip-link{position:fixed;z-index:100;top:12px;left:12px;padding:12px 16px;background:var(--brass);color:var(--deep);font-weight:700;transform:translateY(-180%);transition:transform .2s}.skip-link:focus{transform:none}
 .site-header{height:104px;position:absolute;z-index:20;top:0;left:0;width:100%;display:flex;align-items:center;padding:0 4vw;color:white;border-bottom:1px solid rgba(255,255,255,.22)}
@@ -751,5 +769,3 @@ select:not([multiple])[size="1"]:dir(rtl){background-position:left 14px center!i
 .membership-apply-intro h1{margin-inline:auto;text-align:center}
 .membership-apply-heading-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}.membership-apply-intro .membership-apply-heading-row .membership-apply-back{margin:0}.membership-apply-heading-row h1{grid-column:2}
 @media(max-width:760px){.membership-apply-heading-row{grid-template-columns:1fr;gap:16px}.membership-apply-heading-row h1{grid-column:auto}.membership-apply-intro .membership-apply-heading-row .membership-apply-back{justify-self:start}}
-
-@media(max-width:760px){.membership-apply-heading-row{display:block!important}.membership-apply-heading-row .membership-apply-back{display:flex!important;margin-bottom:12px!important}.membership-apply-heading-row h1{display:block;max-width:none!important;font-size:clamp(36px,11vw,46px)!important;white-space:nowrap}}

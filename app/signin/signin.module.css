@@ -1,0 +1,36 @@
+.signin:global(.auth-page) { display: block; background: var(--paper); }
+.signin :global(.auth-art) { display: none; }
+.signin :global(.auth-panel) { min-height: 100svh; padding: 48px var(--public-content-inline) 64px; display: grid; place-items: start center; background: url('/images/signin-tracks.svg') center / cover no-repeat, radial-gradient(ellipse at top left, #e8ece2 0, transparent 52%), radial-gradient(ellipse at bottom right, #f0e6cf 0, transparent 48%), var(--paper); overflow: visible; }
+.signin :global(.auth-panel)::before { display: none; }
+.signin :global(.auth-panel > div) { width: 100%; max-width: var(--public-form-max); padding: 40px; border: 1px solid #d1c8b7; background: #fffdfa; box-shadow: 0 12px 36px rgba(35,49,42,.06); }
+.signin :global(.auth-brand-mobile) { display: flex; justify-content: center; max-width: 100%; width: auto; gap: 16px; margin-bottom: 32px; color: var(--forest); font-size: 12px; line-height: 1.6; text-align: center; }
+.signin :global(.auth-brand-mobile img) { flex: 0 0 64px; width: 64px; height: 64px; object-fit: contain; }
+.heading { margin: 0 0 24px; color: var(--deep); font: 500 clamp(40px,4.5vw,56px)/1.02 var(--font-display); }
+.signin :global(.auth-panel > div):has(:global(.is-flipped #alternative-email)) .heading { display: none; }
+.signin :global(.auth-back-heading) { display: block; }
+.signin :global(.auth-back-heading h3) { font-size: clamp(40px,4.5vw,56px); line-height: 1.02; }
+.signin :global(.auth-primary-help) { font-size: 16px; line-height: 1.75; }
+.signin :global(.auth-form) { gap: 20px; }
+.signin :global(.auth-form input) { min-height: 52px; font-size: 16px; }
+.signin :global(.auth-forgot-password) { justify-self: end; min-height: 36px; padding: 8px 10px; border: 0; border-radius: 3px; background: #f4ead6; color: #873d28; font: 600 12px/1.5 var(--font-sans); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.signin :global(.auth-forgot-password:hover) { background: #ecddbd; }
+.signin :global(.auth-forgot-password:focus-visible) { outline: 2px solid var(--rust); outline-offset: 3px; }
+.signin :global(.button) { min-height: 52px; white-space: normal; text-align: center; }
+.signin :global(.auth-flip-card), .signin :global(.auth-flip-card.is-flipped) { transform: none; }
+.signin :global(.auth-flip-face) { transform: none; transition: none; }
+.signin :global(.auth-flip-face[aria-hidden="true"]) { display: none; }
+.signin :global(.auth-back-heading) { grid-template-columns: 44px minmax(0,1fr); gap: 16px; }
+.signin :global(.auth-back-heading > svg) { width: 44px; height: 44px; padding: 11px; }
+.signin :global(.auth-back-heading h3) { font-size: 34px; line-height: 1.1; }
+.signin :global(.auth-back-heading > div > p:last-child) { font-size: 15px; line-height: 1.7; }
+.signin :global(.back-link) { display: inline-flex; align-items: center; min-height: 44px; margin: 0 0 24px; font-size: 13px; line-height: 1.6; }
+.signin :global(.auth-link-confirmation) { grid-template-columns: 1fr; padding: 24px; gap: 20px; box-shadow: none; }
+.signin :global(.auth-link-confirmation p) { font-size: 15px; line-height: 1.75; }
+@media (max-width: 600px) {
+  .signin :global(.auth-panel) { padding-block: 24px 40px; background-size: auto 100%, auto, auto, auto; background-blend-mode: soft-light, normal, normal, normal; }
+  .signin :global(.auth-panel > div) { padding: 28px 24px; }
+  .signin :global(.auth-brand-mobile) { gap: 12px; font-size: 10px; }
+  .signin :global(.auth-brand-mobile img) { flex-basis: 52px; width: 52px; height: 52px; }
+  .signin :global(.auth-back-heading) { grid-template-columns: 1fr; }
+  .signin :global(.auth-link-confirmation) { padding: 20px 16px; }
+}

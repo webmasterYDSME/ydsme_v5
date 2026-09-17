@@ -2,9 +2,11 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Database } from "@/lib/supabase/database";
+import styles from "../../signin/signin.module.css";
 
 const supabase = createBrowserClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,10 +48,18 @@ export default function AcceptInvitation() {
     return () => { active = false; };
   }, [router]);
 
-  return <main className="simple-auth"><div>
-    <p className="eyebrow dark">Member invitation</p>
-    <h1>{error ? "This invitation cannot be used." : "Opening your account…"}</h1>
-    <p className={error ? "form-message error" : undefined}>{error || "Please wait while the secure invitation is confirmed."}</p>
-    {error ? <Link className="button dark" href="/signin">Request a secure sign-in link</Link> : null}
-  </div></main>;
+  return <main className={`auth-page ${styles.signin}`}>
+    <section className="auth-panel" aria-labelledby="invitation-title">
+      <div>
+        <Link href="/" className="back-link">← Return to the public website</Link>
+        <Link href="/" className="auth-brand auth-brand-mobile">
+          <Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={72} height={72}/>
+          <span>York Model Engineers</span>
+        </Link>
+        <h1 id="invitation-title" className={styles.heading}>{error ? "This invitation cannot be used." : "Opening your account…"}</h1>
+        <p className={error ? "form-message error" : "auth-primary-help"} role={error ? "alert" : "status"}>{error || "Please wait while we check your invitation."}</p>
+        {error ? <Link className="button dark" href="/signin">Sign in by email</Link> : null}
+      </div>
+    </section>
+  </main>;
 }

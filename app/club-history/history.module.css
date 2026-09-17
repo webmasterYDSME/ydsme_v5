@@ -1,0 +1,45 @@
+.history { --history-space: clamp(56px, 6vw, 96px); }
+.history :global(.inner-hero) { display: flex; align-items: center; height: auto; min-height: 620px; padding: 180px var(--public-content-inline) 72px; }
+.history :global(.inner-copy) { position: relative; inset: auto; width: 100%; max-width: 900px; }
+.history :global(.inner-hero h1) { font-size: clamp(52px, 6.5vw, 92px); line-height: .94; }
+.history :global(.inner-copy > p:not(.eyebrow)) { max-width: 52ch; font-size: 18px; line-height: 1.65; }
+.history :global(.history-lead),
+.history :global(.history-archive),
+.history :global(.history-note) { padding: var(--history-space) var(--public-content-inline); }
+.history :global(.history-lead) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(32px, 4vw, 64px); }
+.history :global(.history-image) { min-height: 0; aspect-ratio: 4 / 3; }
+.history :global(.history-lead h2),
+.history :global(.history-archive h2) { font-size: clamp(40px, 4.5vw, 64px); line-height: 1.02; }
+.history :global(.history-lead p:not(.eyebrow)),
+.history :global(.timeline-item p),
+.history :global(.history-archive p:not(.eyebrow)) { max-width: var(--public-reading-max); font-size: 17px; line-height: 1.75; }
+.history :global(.timeline) { padding: var(--history-space) max(var(--public-content-gutter), calc((100% - var(--public-workspace-max)) / 2)); }
+.history :global(.timeline-line) { display: none; }
+.history :global(.timeline-item) { grid-template-columns: 120px 20px minmax(0, 1fr); gap: 32px; min-height: 0; padding-bottom: 56px; }
+.history :global(.timeline > .reveal:last-child .timeline-item) { padding-bottom: 0; }
+.history :global(.timeline-year) { font-size: 52px; line-height: 1; writing-mode: horizontal-tb; }
+.history :global(.timeline-dot) { position: relative; inset: auto; margin: 16px 0 0; }
+.history :global(.timeline-item)::before { content: ""; position: absolute; left: 159px; top: 16px; bottom: -16px; width: 1px; background: #a79e8d; }
+.history :global(.timeline > .reveal:last-child .timeline-item)::before { display: none; }
+.history :global(.timeline-item > div:last-child) { grid-column: 3; max-width: none; padding-top: 0; }
+.history :global(.timeline-item h3) { font-size: clamp(30px, 3vw, 40px); line-height: 1.1; }
+.history :global(.timeline-item p) { margin-bottom: 0; }
+.history :global(.history-archive) { grid-template-columns: minmax(0, .6fr) minmax(0, 1fr); gap: clamp(32px, 5vw, 80px); }
+.history :global(.history-note > p) { max-width: 24ch; margin: 20px auto 24px; font-size: clamp(38px, 4.5vw, 60px); line-height: 1.08; }
+.history :global(.history-note small) { display: block; max-width: 65ch; margin-inline: auto; font-size: 14px; line-height: 1.7; }
+@media (max-width: 800px) {
+  .history :global(.inner-hero) { min-height: 560px; padding-block: 150px 56px; }
+  .history :global(.history-lead), .history :global(.history-archive) { grid-template-columns: 1fr; gap: 32px; }
+  .history :global(.timeline-item) { grid-template-columns: 76px 16px minmax(0, 1fr); gap: 16px; padding-bottom: 40px; }
+  .history :global(.timeline-year) { font-size: 34px; }
+  .history :global(.timeline-dot) { margin-top: 9px; }
+  .history :global(.timeline-item)::before { left: 99px; top: 9px; bottom: -9px; }
+}
+@media (max-width: 480px) {
+  .history :global(.timeline-item) { grid-template-columns: 16px minmax(0, 1fr); gap: 8px 20px; }
+  .history :global(.timeline-year) { grid-column: 2; text-align: left; }
+  .history :global(.timeline-dot) { position: absolute; top: 0; left: 0; }
+  .history :global(.timeline-item > div:last-child) { grid-column: 2; }
+  .history :global(.timeline-item)::before { left: 7px; }
+  .history :global(.history-archive .button) { width: 100%; padding-inline: 16px; white-space: normal; }
+}

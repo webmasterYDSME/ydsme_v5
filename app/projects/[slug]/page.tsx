@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import styles from "./detail.module.css";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -48,11 +49,11 @@ export default async function PublicProjectPage({ params }: { params: Promise<{ 
   if (!project) notFound();
 
   return <PageShell headerTheme="light">
-    <article className="public-project-detail">
+    <article className={`public-project-detail ${styles.detail}`}>
       <header className="public-project-hero">
         <div className="public-project-hero-image">
           {project.cover_image_url
-            ? <Image src={project.cover_image_url} alt="" fill loading="eager" sizes="(max-width: 860px) 100vw, 52vw" quality={55}/>
+            ? <Image src={project.cover_image_url} alt="" fill loading="eager" sizes="(max-width: 900px) 100vw, (max-width: 1376px) 50vw, 608px" quality={55}/>
             : <span><Hammer aria-hidden="true"/></span>}
         </div>
         <div className="public-project-hero-copy">
@@ -74,7 +75,7 @@ export default async function PublicProjectPage({ params }: { params: Promise<{ 
               <h3>{update.title}</h3>
               <p>{update.body}</p>
               {update.photos.length ? <div className={`public-project-photo-grid photos-${Math.min(update.photos.length, 3)}`}>
-                {update.photos.map((photo) => photo.image_url ? <figure key={photo.id}><Image src={photo.image_url} alt={photo.caption || `Project photograph for ${update.title}`} fill sizes="(max-width: 720px) 100vw, 33vw" quality={55}/>{photo.caption ? <figcaption>{photo.caption}</figcaption> : null}</figure> : null)}
+                {update.photos.map((photo) => photo.image_url ? <figure key={photo.id}><Image src={photo.image_url} alt={photo.caption || `Project photograph for ${update.title}`} fill sizes={update.photos.length === 1 ? "(max-width: 1376px) 100vw, 1192px" : update.photos.length === 2 ? "(max-width: 600px) 100vw, (max-width: 1376px) 50vw, 588px" : "(max-width: 600px) 100vw, (max-width: 1376px) 33vw, 387px"} quality={55}/>{photo.caption ? <figcaption>{photo.caption}</figcaption> : null}</figure> : null)}
               </div> : null}
             </div>
           </article>)}
