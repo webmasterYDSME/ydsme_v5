@@ -9,6 +9,7 @@ import {
   membershipRenewalAt,
   proratedMembershipFee,
 } from "../lib/membership-rules.ts";
+import { readMembershipAdminSource } from "./membership-admin-source.mjs";
 
 const eligibilityPlans = [
   { id: "junior", slug: "junior", minimum_age: 14, maximum_age: 17 },
@@ -103,7 +104,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
     readFile(new URL("app/membership/verify/route.ts", root), "utf8"),
     readFile(new URL("app/membership/checkout/page.tsx", root), "utf8"),
     readFile(new URL("app/membership/apply/page.tsx", root), "utf8"),
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
   ]);
   assert.match(membership, /class MembershipCheckoutUnavailableError/);
   assert.match(membership, /membership\.application-payment-unavailable/);
@@ -122,17 +123,18 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(checkoutRoute, /getApplicationCheckoutSummaryFromToken/);
   assert.match(checkoutRoute, /continueApplicationCheckout/);
   assert.match(applicationPage, /"payment-unavailable"[\s\S]*Application safely saved/);
-  assert.match(officerPage, /Online payments need attention/);
-  assert.match(officerPage, /Online payments are not fully set up/);
-  assert.match(officerPage, /Online payments need attention \(\{checkoutProblemCount\}\)/);
-  assert.match(officerPage, /title=\{checkoutProblemCount \? "Online payments need attention" : "Online payments are ready"\}/);
-  assert.match(officerPage, /Online payments are ready/);
-  assert.match(officerPage, /membership\.application-payment-attention-officer/);
+  // Payment problems are Inbox tasks: setup gaps, failed checkouts and unrecorded confirmations all appear there.
+  const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");
+  assert.match(inbox, /Online payments are not fully set up/);
+  assert.match(inbox, /membership\.application-payment-attention-officer/);
+  assert.match(inbox, /Payment page could not be opened/);
+  assert.match(inbox, /Confirmed payment could not be recorded/);
+  assert.match(officerPage, /Online payments and email are working/);
 });
 
 test("keeps annual fees prominent while hiding rarely changed membership rules", async () => {
   const [officerPage, actions] = await Promise.all([
-    readFile(new URL("../app/admin/memberships/page.tsx", import.meta.url), "utf8"),
+    readMembershipAdminSource(),
     readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8"),
   ]);
   assert.match(officerPage, /Membership types and annual fees/);
@@ -155,7 +157,7 @@ test("carries unchanged annual fees forward and delays future Stripe price chang
     readFile(new URL("lib/membership.ts", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
     readFile(new URL("app/api/stripe/webhook/route.ts", root), "utf8"),
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
   ]);
   assert.match(migration, /ensure_membership_plan_price/);
   assert.match(migration, /carried_forward_from_id/);
@@ -182,11 +184,12 @@ test("shows a single paid membership amount because partial payments are unsuppo
 test("keeps officer contact and renewal work safe and understandable", async () => {
   const root = new URL("../", import.meta.url);
   const [officerPage, renewalForm, actions] = await Promise.all([
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
     readFile(new URL("app/admin/memberships/OfficerRenewalPaymentForm.tsx", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
   ]);
-  assert.match(officerPage, /const manualContactTasks = Array\.from\(new Map/);
+  const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");
+  assert.match(inbox, /function onePerMember[\s\S]*Array\.from\(new Map/);
   assert.match(officerPage, /Mark all updates as contacted/);
   assert.match(officerPage, /Each person appears once/);
   assert.match(renewalForm, /Amount to record/);
@@ -253,6 +256,7 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(applicationWizard, /value="bank_transfer"/);
   assert.match(applicationWizard, /value="cheque"/);
   assert.match(guardianPage, /I confirm my consent/);
-  assert.match(settingsPage, /section: "payment-settings"/);
+  assert.match(settingsPage, /tab: "payment"/);
+  assert.match(settingsPage, /\/admin\/memberships\/setup/);
   assert.doesNotMatch(applicationWizard, /bank_account_number/);
 });

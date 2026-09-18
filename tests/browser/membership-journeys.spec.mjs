@@ -72,6 +72,16 @@ test.describe("membership public, member and officer journeys", () => {
     await page.waitForURL((url) => !url.pathname.startsWith("/signin"));
   }
 
+  /** Opens one Inbox task's side panel from its row and returns the panel. */
+  async function openInboxTask(page, kind, text) {
+    await page.goto(`/admin/memberships?kind=${kind}`);
+    const row = page.locator("article").filter({ hasText: text }).first();
+    await row.getByRole("link").click();
+    const panel = page.getByRole("dialog");
+    await expect(panel).toBeVisible();
+    return panel;
+  }
+
   async function submitApplication(page, details) {
     await page.goto("/membership/apply");
     const form = page.locator("form.membership-application-form");
@@ -343,18 +353,16 @@ test.describe("membership public, member and officer journeys", () => {
       expect(verified.email_verified_at).toBeTruthy();
     }
 
-    await signIn(page, officerEmail, "/admin/memberships?section=applications#applications");
+    await signIn(page, officerEmail, "/admin/memberships?kind=payment");
     for (const applicant of [
-      { email: studentEmail, expectedSlug: "student", reference: "JOURNEY-STUDENT-CASH-001" },
-      { email: concessionEmail, expectedSlug: "concession", reference: "JOURNEY-CONCESSION-CASH-001" },
+      { name: `${fixtureNamePrefix} Student Applicant`, email: studentEmail, expectedSlug: "student", reference: "JOURNEY-STUDENT-CASH-001" },
+      { name: `${fixtureNamePrefix} Concession Applicant`, email: concessionEmail, expectedSlug: "concession", reference: "JOURNEY-CONCESSION-CASH-001" },
     ]) {
-      let article = page.locator("#applications .membership-queue-list article").filter({ hasText: applicant.email }).first();
-      await article.locator("details > summary").click();
-      await article.getByRole("button", { name: "Approve application" }).click();
+      let panel = await openInboxTask(page, "payment", applicant.name);
+      await panel.getByRole("button", { name: "Approve application" }).click();
       await page.waitForURL(/notice=application-approved/);
-      article = page.locator("#applications .membership-queue-list article").filter({ hasText: applicant.email }).first();
-      await article.locator("details > summary").click();
-      const paymentForm = article.locator("form").filter({ hasText: "Mark paid and activate" });
+      panel = await openInboxTask(page, "payment", applicant.name);
+      const paymentForm = panel.locator("form").filter({ hasText: "Mark paid and activate" });
       await paymentForm.locator('input[name="payment_reference"]').fill(applicant.reference);
       await paymentForm.getByRole("button", { name: "Mark paid and activate" }).click();
       await page.waitForURL(/notice=offline-payment-confirmed/);
@@ -381,15 +389,14 @@ test.describe("membership public, member and officer journeys", () => {
         `${applicant.expectedSlug} payment is missing`,
       );
       expect(payment).toMatchObject({ method: "cash", status: "paid", offline_reference: applicant.reference });
-      await page.goto("/admin/memberships?section=applications#applications");
     }
   });
 
   test("membership officer page fits desktop, tablet and phone widths", async ({ page }) => {
     await signIn(page, officerEmail, "/admin/memberships");
-    await expect(page.getByRole("heading", { name: "Tasks requiring attention", exact: true })).toBeVisible();
-    await expect(page.getByText("Paid memberships to verify", { exact: true }).first()).toBeVisible();
-    await expect(page.locator("#applications details").first()).not.toHaveAttribute("open", "");
+    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Filter tasks" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     for (const width of [1440, 1100, 820, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.reload();
@@ -397,11 +404,11 @@ test.describe("membership public, member and officer journeys", () => {
       const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(horizontalOverflow, `Page overflowed at ${width}px`).toBeLessThanOrEqual(1);
     }
-    await page.goto("/admin/memberships?section=add-member#add-member");
+    await page.goto("/admin/memberships/members?add=member");
     for (const width of [1440, 1100, 820, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.reload();
-      const form = page.locator("form.membership-manual-create-form");
+      const form = page.getByRole("dialog").locator("form.membership-manual-create-form");
       await form.locator('[data-date-picker-name="date_of_birth"]').fill("12/05/1985");
       await expect(form.getByText(initialFee, { exact: true })).toBeVisible();
       const chargeBox = await form.locator(".membership-manual-charge").boundingBox();
@@ -412,15 +419,14 @@ test.describe("membership public, member and officer journeys", () => {
   test("officer approves and clears a cheque without activating on receipt alone", async ({ page }) => {
     await signIn(page, officerEmail, "/admin/memberships");
     await expect(page.getByRole("heading", { name: "Manage memberships", exact: true })).toBeVisible();
-    let article = page.locator(".membership-queue-list article").filter({ hasText: juniorEmail }).first();
-    await article.locator("details > summary").click();
-    let form = article.locator("form").filter({ hasText: "Approve application" });
+    const juniorName = `${fixtureNamePrefix} Junior Applicant`;
+    let panel = await openInboxTask(page, "payment", juniorName);
+    let form = panel.locator("form").filter({ hasText: "Approve application" });
     await form.getByRole("button", { name: "Approve application" }).click();
     await page.waitForURL(/notice=application-approved/);
 
-    article = page.locator(".membership-queue-list article").filter({ hasText: juniorEmail }).first();
-    await article.locator("details > summary").click();
-    form = article.locator("form").filter({ hasText: "Mark cheque as received" });
+    panel = await openInboxTask(page, "payment", juniorName);
+    form = panel.locator("form").filter({ hasText: "Mark cheque as received" });
     await form.locator('input[name="payment_reference"]').fill("JOURNEY-CHEQUE-001");
     await form.getByRole("button", { name: "Mark cheque as received" }).click();
     await page.waitForURL(/notice=offline-payment-received/);
@@ -431,9 +437,8 @@ test.describe("membership public, member and officer journeys", () => {
     expect(application.status).toBe("awaiting_cheque");
     expect(application.converted_member_id).toBeNull();
 
-    article = page.locator(".membership-queue-list article").filter({ hasText: juniorEmail }).first();
-    await article.locator("details > summary").click();
-    form = article.locator("form").filter({ hasText: "Mark paid and activate" });
+    panel = await openInboxTask(page, "payment", juniorName);
+    form = panel.locator("form").filter({ hasText: "Mark paid and activate" });
     await form.locator('input[name="payment_reference"]').fill("JOURNEY-CHEQUE-001");
     await form.locator('input[name="cleared"]').check();
     await form.getByRole("button", { name: "Mark paid and activate" }).click();
@@ -466,8 +471,8 @@ test.describe("membership public, member and officer journeys", () => {
   });
 
   test("officer creates paid and pending memberships and the linked member sees their account", async ({ page }) => {
-    await signIn(page, officerEmail, "/admin/memberships?section=add-member#add-member");
-    let form = page.locator("form.membership-manual-create-form");
+    await signIn(page, officerEmail, "/admin/memberships/members?add=member");
+    let form = page.getByRole("dialog").locator("form.membership-manual-create-form");
     await form.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Linked Member`);
     await form.locator('input[name="date_of_birth"]').fill("1985-05-12");
     await expect(form.getByText(initialFee, { exact: true })).toBeVisible();
@@ -488,8 +493,9 @@ test.describe("membership public, member and officer journeys", () => {
     expect(linkedMember.portal_invitation_status).toBe("blocked_shared");
     expect(linkedMember.effective_state).toBe("active");
 
-    await page.goto(`/admin/memberships?member=${linkedMember.id}&section=member-history#member-history`);
-    const portalForm = page.locator("#member-history form").filter({ hasText: "Assign or invite website login" });
+    await page.goto(`/admin/memberships/members/${linkedMember.id}`);
+    await page.getByText("Assign or invite a website login", { exact: true }).click();
+    const portalForm = page.locator("form").filter({ hasText: "Assign or invite website login" });
     await portalForm.locator('input[name="login_email"]').fill("journey.member@example.test");
     await portalForm.locator('textarea[name="reason"]').fill("Confirmed this existing website account belongs to the named member.");
     await portalForm.getByRole("button", { name: "Assign or invite website login" }).click();
@@ -512,8 +518,8 @@ test.describe("membership public, member and officer journeys", () => {
       recipient_user_id: linkedMember.auth_user_id,
     });
 
-    await page.goto("/admin/memberships?section=add-member#add-member");
-    form = page.locator("form.membership-manual-create-form");
+    await page.goto("/admin/memberships/members?add=member");
+    form = page.getByRole("dialog").locator("form.membership-manual-create-form");
     await form.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Pending Bank`);
     await form.locator('input[name="date_of_birth"]').fill("1975-02-14");
     await form.locator('input[name="contact_number"]').fill("01904 000001");
@@ -531,10 +537,8 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(pendingTerm).toMatchObject({ status: "scheduled", expected_payment_method: "bank_transfer" });
 
-    await page.goto("/admin/memberships?section=pending-payments#pending-payments");
-    const article = page.locator(".membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Pending Bank` }).first();
-    await article.locator("details > summary").click();
-    form = article.locator("form").filter({ hasText: "Mark paid and activate" });
+    const bankPanel = await openInboxTask(page, "payment", `${fixtureNamePrefix} Pending Bank`);
+    form = bankPanel.locator("form").filter({ hasText: "Mark paid and activate" });
     await form.locator('input[name="payment_reference"]').fill("JOURNEY-BANK-001");
     await form.getByRole("button", { name: "Mark paid and activate" }).click();
     await page.waitForURL(/notice=offline-renewal-confirmed/);
@@ -544,7 +548,7 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(pendingMember.effective_state).toBe("active");
 
-    await page.goto("/admin/memberships?section=renewals#renewals");
+    await page.goto("/admin/memberships/renewals");
     const renewalForm = page.locator("form.membership-cash-renewal-form");
     await renewalForm.locator('select[name="member_id"]').selectOption(linkedMember.id);
     await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue(String(billingYear + 1));
@@ -603,7 +607,7 @@ test.describe("membership public, member and officer journeys", () => {
   test("officer handles a reversed bank payment and records the membership decision", async ({ page }) => {
     const member = await databaseRow(admin.from("members").select("id")
       .eq("full_name", `${fixtureNamePrefix} Pending Bank`).single(), "Bank member missing");
-    await signIn(page, officerEmail, `/admin/memberships?member=${member.id}&section=member-history`);
+    await signIn(page, officerEmail, `/admin/memberships/members/${member.id}`);
     await page.getByText("Report a returned or reversed payment", { exact: true }).click();
     const form = page.locator("form").filter({ has: page.getByRole("button", { name: "Send payment for checking" }) });
     await form.locator('textarea[name="reason"]').fill("Bank transfer reversed after initial confirmation.");
@@ -611,20 +615,18 @@ test.describe("membership public, member and officer journeys", () => {
     await expect(page).toHaveURL(/notice=offline-payment-review-created/);
     const review = await databaseRow(admin.from("members").select("effective_state").eq("id", member.id).single(), "Review member missing");
     expect(review.effective_state).toBe("payment_review");
-    await page.goto("/admin/memberships?section=payment-reviews");
-    const article = page.locator("#payment-reviews article").filter({ hasText: `${fixtureNamePrefix} Pending Bank` });
-    await article.locator('select[name="resolution"]').selectOption("lapse");
-    await article.locator('textarea[name="reason"]').fill("Confirmed payment returned; member declined a replacement payment.");
-    await article.getByRole("button", { name: "Save decision" }).click();
+    const reviewPanel = await openInboxTask(page, "problem", `${fixtureNamePrefix} Pending Bank`);
+    await reviewPanel.locator('select[name="resolution"]').selectOption("lapse");
+    await reviewPanel.locator('textarea[name="reason"]').fill("Confirmed payment returned; member declined a replacement payment.");
+    await reviewPanel.getByRole("button", { name: "Save decision" }).click();
     await expect(page).toHaveURL(/notice=payment-review-resolved/);
     const resolved = await databaseRow(admin.from("members").select("effective_state").eq("id", member.id).single(), "Resolved member missing");
     expect(resolved.effective_state).toBe("lapsed");
   });
 
   test("honorary creation has no payment and produces a manual-contact task", async ({ page }) => {
-    await signIn(page, officerEmail, "/admin/memberships?section=honorary#honorary");
-    const section = page.locator("#honorary");
-    const form = section.locator("form").filter({ hasText: "Add a new honorary member" });
+    await signIn(page, officerEmail, "/admin/memberships/members?add=honorary");
+    const form = page.getByRole("dialog").locator("form").filter({ hasText: "Add honorary member" });
     await form.locator('input[name="full_name"]').fill(`${fixtureNamePrefix} Honorary`);
     await form.locator('input[name="contact_number"]').fill("01904 000002");
     await form.locator('input[name="effective_from"]').fill(new Date().toISOString().slice(0, 10));
@@ -643,11 +645,10 @@ test.describe("membership public, member and officer journeys", () => {
         .eq("kind", "membership.manual-contact-officer").is("read_at", null).limit(1).single(),
       "Honorary manual-contact task was not created",
     );
-    await page.goto("/admin/memberships?section=manual-contact#manual-contact");
-    const honoraryTasks = page.locator("#manual-contact .membership-queue-list article").filter({ hasText: `${fixtureNamePrefix} Honorary` });
-    await expect(honoraryTasks).toHaveCount(1);
-    const taskArticle = honoraryTasks.first();
-    const taskForm = taskArticle.locator("form").filter({ hasText: "Mark all updates as contacted" });
+    await page.goto("/admin/memberships?kind=contact");
+    await expect(page.locator("article").filter({ hasText: `${fixtureNamePrefix} Honorary` })).toHaveCount(1);
+    const taskPanel = await openInboxTask(page, "contact", `${fixtureNamePrefix} Honorary`);
+    const taskForm = taskPanel.locator("form").filter({ hasText: "Mark all updates as contacted" });
     await taskForm.locator('textarea[name="reason"]').fill("Telephoned the member and confirmed the designation.");
     await taskForm.getByRole("button", { name: "Mark all updates as contacted" }).click();
     await page.waitForURL(/notice=manual-contact-completed/);

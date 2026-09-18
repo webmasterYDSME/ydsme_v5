@@ -856,7 +856,7 @@ test("enables the complete membership platform with one flag and otherwise falls
   }
   assert.match(switchAccount, /membershipBillingEnabled/);
   assert.match(settings, /query.tab === "membership"/);
-  assert.match(settings, /section: "payment-settings"/);
+  assert.match(settings, /tab: "payment"[\s\S]*?\/admin\/memberships\/setup/);
   assert.match(settings, /requireCapability\("settings.manage"\)/);
   assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!membershipAdministrationEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
