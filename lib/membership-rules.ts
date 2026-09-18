@@ -52,3 +52,95 @@ export function proratedMembershipFee(annualPence: number, onDate = new Date()) 
 export function membershipRenewalAt(membershipYear: number) {
   return new Date(Date.UTC(membershipYear + 1, 0, 1, 0, 0, 0));
 }
+
+export type RenewalMember = {
+  id: string;
+  current_plan_id: string | null;
+  effective_state: string;
+  honorary_memberships: Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
+};
+
+export type RenewalPrice = { plan_id: string; membership_year: number; amount_pence: number };
+export type RenewalTransition = { member_id: string; membership_year: number; status: string; to_plan_id: string | null };
+export type RenewalTerm = { member_id: string; membership_year: number; status: string; amount_due_pence: number; amount_paid_pence: number; source: string };
+
+export type RenewalChoice = {
+  member_id: string;
+  membership_year: number;
+  amount_pence: number | null;
+  note: string;
+};
+
+/** Members whose membership can be renewed by an officer: never suspended, archived or currently honorary. */
+export function renewableMembers<T extends RenewalMember>(members: T[]): T[] {
+  return members.filter((member) => {
+    if (!member.current_plan_id || ["suspended", "archived"].includes(member.effective_state)) return false;
+    if (member.effective_state !== "honorary") return true;
+    return Boolean(member.honorary_memberships?.some((item) => item.revoked_effective_on));
+  });
+}
+
+/**
+ * The amount an officer should record for each renewable member and membership year, or the reason
+ * no payment can be recorded. This mirrors the checks the recording action repeats on the server.
+ * `prices` must be ordered newest membership year first, so an earlier fee carries forward.
+ */
+export function buildRenewalChoices(input: {
+  members: RenewalMember[];
+  prices: RenewalPrice[];
+  transitions: RenewalTransition[];
+  terms: RenewalTerm[];
+  currentYear: number;
+  formatMoney: (pence: number) => string;
+}): RenewalChoice[] {
+  const { members, prices, transitions, terms, currentYear, formatMoney } = input;
+  return renewableMembers(members).flatMap((member) => [currentYear, currentYear + 1].map((membershipYear): RenewalChoice => {
+    const honoraryRows = member.honorary_memberships;
+    const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+      && item.effective_from <= `${membershipYear}-12-31`
+      && (!item.revoked_effective_on || item.revoked_effective_on > `${membershipYear}-01-01`)) ?? null;
+    const honoraryTransition = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
+      && item.revoked_effective_on?.startsWith(`${membershipYear}-`) && item.replacement_plan_id) ?? null;
+    if (honoraryForYear && !honoraryTransition) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "Honorary membership covers this year, so no payment should be recorded.",
+    };
+    const transition = transitions.find((item) => item.member_id === member.id && item.membership_year === membershipYear);
+    if (transition?.status === "awaiting_student_review") return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "The Student membership request must be decided before payment is recorded.",
+    };
+    const planId = honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id;
+    const price = prices.find((item) => item.plan_id === planId && item.membership_year === membershipYear)
+      ?? prices.find((item) => item.plan_id === planId && item.membership_year < membershipYear);
+    if (!price) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: `No annual fee is available for ${membershipYear}.`,
+    };
+    const term = terms.find((item) => item.member_id === member.id && item.membership_year === membershipYear);
+    if (term?.status === "paid" && term.amount_paid_pence >= term.amount_due_pence) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: `This member's ${membershipYear} membership is already paid.`,
+    };
+    if (term?.status === "payment_review") return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: null,
+      note: "Resolve the existing payment review before recording another payment.",
+    };
+    if (term?.status === "scheduled" && term.amount_paid_pence === 0 && ["officer", "application"].includes(term.source)) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: term.amount_due_pence,
+      note: "This is the amount already due for the pending membership term.",
+    };
+    if (honoraryTransition?.revoked_effective_on && !honoraryTransition.revoked_effective_on.endsWith("-01-01")) {
+      const transitionDate = new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`);
+      return {
+        member_id: member.id, membership_year: membershipYear,
+        amount_pence: proratedMembershipFee(price.amount_pence, transitionDate),
+        note: `Reduced from the ${formatMoney(price.amount_pence)} annual fee from the date honorary membership ends.`,
+      };
+    }
+    return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: price.amount_pence,
+      note: `Full annual fee for ${membershipYear}.`,
+    };
+  }));
+}
