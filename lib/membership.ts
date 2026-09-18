@@ -450,8 +450,8 @@ async function recordApplicationCheckoutProblem(
       title: isConfigurationProblem ? "Online payment setup needed" : "Online payment could not be started",
       body: officerBody,
       action_href: isConfigurationProblem
-        ? "/admin/memberships?section=plans#plans"
-        : "/admin/memberships?section=online-payment-problems#online-payment-problems",
+        ? "/admin/memberships/setup?tab=fees"
+        : "/admin/memberships?kind=problem",
       email_status: "cancelled",
       deduplication_key: `membership-checkout-${reason}-${application.id}-${recipientUserId}`,
     })), { onConflict: "deduplication_key", ignoreDuplicates: true });
@@ -507,7 +507,7 @@ export async function createApplicationCheckout(applicationId: string, resumeHre
       kind: "membership.plan-reassignment-required",
       title: "Membership type needs reassignment",
       body: `${checkoutApplication.full_name}'s eligibility changed before payment. Choose the correct membership type before issuing another payment link.`,
-      action_href: "/admin/memberships?section=applications#applications",
+      action_href: "/admin/memberships?kind=payment",
       email_status: "cancelled",
       deduplication_key: `membership-plan-reassignment-${checkoutApplication.id}-${paymentAge}`,
     });
