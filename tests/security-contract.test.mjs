@@ -201,11 +201,11 @@ test("separates member-register viewing, status management and role administrati
     read("lib/auth.ts"),
     read("app/admin/[section]/page.tsx"),
     read("lib/actions/content.ts"),
-    read("app/components/PortalNavigation.tsx"),
+    read("lib/portal-nav.ts"),
   ]);
   assert.match(auth, /committee: new Set\([\s\S]*"members\.view"/);
   assert.match(adminPage, /section === "workshops" \? "workshops\.manage" : "members\.view"/);
-  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: administrator \? "People" : "Member register"/);
+  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: "Website accounts"/);
   assert.match(adminPage, /const administrator = session\.role === "administrator"/);
   assert.match(adminPage, /const canManageMemberStatus = administrator \|\| session\.membershipOfficer/);
   assert.match(adminPage, /administrator && member.membership_status === "active" && <PeopleEditorDialog/);

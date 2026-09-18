@@ -1,0 +1,114 @@
+/* The dashboard sidebar. Wide by default, an icon rail when collapsed, and a top bar with a left drawer on tablets and phones. */
+
+.sidebar{position:sticky;top:0;z-index:40;width:288px;height:100svh;padding:22px 16px 16px;display:flex;flex-direction:column;gap:14px;background:var(--deep);color:#fff}
+.top{display:flex;align-items:center;gap:10px;padding:0 4px}
+.brand{min-width:0;flex:1;display:flex;align-items:center;gap:12px;text-transform:uppercase;font-size:11.5px;line-height:1.35;letter-spacing:.09em}
+.brand img{width:46px;height:46px;flex:none}
+.iconButton,.collapseButton{width:40px;height:40px;flex:none;display:grid;place-items:center;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:transparent;color:rgba(255,255,255,.88);cursor:pointer}
+.iconButton:hover,.collapseButton:hover{background:rgba(255,255,255,.1);color:#fff}
+.iconButton svg,.collapseButton svg{width:18px;height:18px}
+.topActions{display:none}
+
+.panel{min-height:0;flex:1;display:flex;flex-direction:column;gap:14px}
+.drawerHead{display:none}
+.search{width:100%;min-height:44px;padding:0 12px;display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.22);border-radius:8px;background:rgba(255,255,255,.04);color:rgba(255,255,255,.82);font:500 14px var(--font-sans);text-align:left;cursor:pointer}
+.search:hover{background:rgba(255,255,255,.1);color:#fff}
+.search svg{width:18px;height:18px;flex:none}
+
+.nav{min-height:0;flex:1;margin:0 -6px;padding:0 6px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;overscroll-behavior:contain}
+.section{margin-top:10px;display:flex;flex-direction:column;gap:2px}
+.sectionLabel{margin:0;padding:8px 12px 4px;color:rgba(255,255,255,.68);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.link{position:relative;min-height:42px;padding:0 12px;display:flex;align-items:center;gap:12px;border-radius:6px;color:rgba(255,255,255,.86);font-size:14px;font-weight:600;transition:background .15s,color .15s}
+.link svg{width:19px;height:19px;flex:none;color:var(--brass)}
+.link:hover{background:rgba(255,255,255,.08);color:#fff}
+.linkOn{background:var(--forest);color:#fff;box-shadow:inset 3px 0 0 var(--brass)}
+.count{min-width:24px;margin-left:auto;padding:2px 8px;border-radius:20px;background:var(--brass);color:var(--deep);font-size:11px;font-weight:800;line-height:1.4;text-align:center}
+.srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.footer{position:relative;padding-top:12px;border-top:1px solid rgba(255,255,255,.16)}
+.accountButton{width:100%;padding:8px;display:flex;align-items:center;gap:12px;border:0;border-radius:8px;background:transparent;color:#fff;text-align:left;cursor:pointer}
+.accountButton:hover{background:rgba(255,255,255,.08)}
+.avatar{width:40px;height:40px;flex:none;display:grid;place-items:center;border:1px solid var(--brass);border-radius:50%;background:var(--forest);color:var(--brass);font-size:14px;font-weight:700}
+.accountText{min-width:0;flex:1}
+.accountText strong,.accountText small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.accountText strong{font-size:14px}
+.accountText small{color:rgba(255,255,255,.72);font-size:12px}
+.accountChevron{width:16px;height:16px;flex:none;color:rgba(255,255,255,.65)}
+.pop{position:absolute;left:0;right:0;bottom:calc(100% + 8px);z-index:5;padding:8px;display:grid;gap:2px;border-radius:10px;background:#fffdf8;color:var(--ink);box-shadow:0 12px 40px rgba(0,0,0,.45)}
+.pop form{display:grid}
+.popItem{width:100%;min-height:44px;padding:0 12px;display:flex;align-items:center;justify-content:flex-start;gap:10px;border:0;border-radius:6px;background:transparent;color:var(--ink);font:600 14px var(--font-sans);text-align:left;cursor:pointer}
+.popItem:hover{background:#f1ecdd}
+.popItem svg{width:18px;height:18px;flex:none;color:var(--forest)}
+.mobileAccount{display:none}
+.scrim{display:none}
+
+.link:focus-visible,.search:focus-visible,.iconButton:focus-visible,.collapseButton:focus-visible,.accountButton:focus-visible,.popItem:focus-visible,.menuButton:focus-visible,.brand:focus-visible,.result:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* Collapsed to an icon rail (wide screens only). Labels stay in the page for screen readers. */
+@media(min-width:1025px){
+  .rail{width:80px;padding-inline:12px}
+  .rail .top{flex-direction:column;padding:0}
+  .rail .brand{flex:none}
+  .rail .brandText,.rail .sectionLabel{display:none}
+  .rail .search,.rail .link{justify-content:center;padding:0}
+  .rail .label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .rail .nav{overflow:visible}
+  .rail .section{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.16)}
+  .rail .count{position:absolute;top:5px;right:9px;min-width:0;width:11px;height:11px;padding:0;box-sizing:content-box;border:2px solid var(--deep);font-size:0}
+  .rail .link:hover::after,.rail .link:focus-visible::after,.rail .search:hover::after,.rail .search:focus-visible::after{content:attr(data-tip);position:absolute;left:calc(100% + 14px);top:50%;z-index:60;padding:7px 11px;border-radius:6px;background:var(--ink);color:#fff;font-size:13px;font-weight:600;white-space:nowrap;box-shadow:0 6px 20px rgba(0,0,0,.35);transform:translateY(-50%);pointer-events:none}
+  .rail .search{position:relative}
+  .rail .accountButton{justify-content:center;padding:6px}
+  .rail .accountText,.rail .accountChevron{display:none}
+  .rail .pop{left:calc(100% + 8px);right:auto;bottom:0;width:230px}
+}
+@media(min-width:1025px) and (max-width:1200px){
+  .sidebar:not(.rail){width:264px}
+}
+
+/* Tablets and phones: a top bar, and the navigation slides in from the left. */
+@media(max-width:1024px){
+  .sidebar{width:auto;height:68px;padding:0 16px;flex-direction:row;align-items:center;gap:10px;box-shadow:0 3px 18px rgba(4,9,7,.2)}
+  .top{flex:1;padding:0}
+  .brand img{width:40px;height:40px}
+  .collapseButton{display:none}
+  .topActions{display:flex;align-items:center;gap:10px}
+  .menuButton{position:relative;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.28);border-radius:8px;background:transparent;color:#fff;font:700 14px var(--font-sans);cursor:pointer}
+  .menuButton svg{width:18px;height:18px;color:var(--brass)}
+  .menuBadge{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;padding:0 6px;display:grid;place-items:center;border:2px solid var(--deep);border-radius:11px;background:var(--brass);color:var(--deep);font-size:11px;font-weight:800}
+  .panel{position:fixed;top:0;bottom:0;left:0;z-index:2;width:min(326px,88vw);padding:16px;gap:12px;overflow-y:auto;overscroll-behavior:contain;background:var(--deep);box-shadow:12px 0 40px rgba(0,0,0,.35);transform:translateX(-104%);visibility:hidden;transition:transform .22s ease,visibility .22s}
+  .open .panel{transform:none;visibility:visible}
+  .scrim{position:fixed;inset:0;z-index:1;border:0;padding:0;background:rgba(4,9,7,.55);cursor:pointer;opacity:0;visibility:hidden;transition:opacity .22s ease,visibility .22s}
+  .scrimOn{display:block;opacity:1;visibility:visible}
+  .drawerHead{display:flex;align-items:center;justify-content:space-between;padding:0 4px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .desktopOnly{display:none}
+  .nav{flex:none;overflow:visible}
+  .link{min-height:48px}
+  .footer{margin-top:auto}
+  .desktopAccount{display:none}
+  .mobileAccount{display:grid;gap:2px}
+  .mobileAccount form{display:grid}
+  .mobileAccount .accountRow{padding:4px 8px 10px;display:flex;align-items:center;gap:12px}
+  .mobileAccount .popItem{min-height:48px;color:rgba(255,255,255,.86)}
+  .mobileAccount .popItem:hover{background:rgba(255,255,255,.08);color:#fff}
+  .mobileAccount .popItem svg{color:var(--brass)}
+}
+@media(prefers-reduced-motion:reduce){
+  .panel,.scrim{transition:none}
+}
+
+/* Search dialog. */
+.palette{width:min(600px,calc(100vw - 32px));max-height:min(560px,calc(100svh - 120px));margin:88px auto auto;padding:0;border:0;border-radius:12px;background:#fffdf8;color:var(--ink);box-shadow:0 24px 70px rgba(0,0,0,.4);overflow:hidden}
+.palette::backdrop{background:rgba(9,18,15,.5)}
+.paletteBody{max-height:inherit;display:flex;flex-direction:column}
+.paletteInput{padding:8px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(16,24,20,.14)}
+.paletteInput:focus-within{box-shadow:inset 0 -2px 0 var(--forest)}
+.paletteInput svg{width:20px;height:20px;flex:none;color:#56625b}
+.paletteInput input{min-width:0;min-height:48px;flex:1;border:0;outline:0;background:transparent;font:400 17px var(--font-sans);color:var(--ink)}
+.paletteClose{min-height:36px;padding:0 12px;border:1px solid #c9c3b4;border-radius:6px;background:#fff;color:var(--ink);font:700 12px var(--font-sans);cursor:pointer}
+.paletteClose:hover{background:#f1ecdd}
+.paletteResults{overflow-y:auto;padding:4px 8px 10px}
+.resultHeading{margin:0;padding:12px 8px 4px;color:#56625b;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+.result{min-height:46px;padding:6px 12px;display:flex;align-items:center;gap:12px;border-radius:8px;color:var(--ink);font-size:15px;font-weight:600}
+.result:hover{background:#f1ecdd}
+.result small{margin-left:auto;color:#56625b;font-size:12px;font-weight:500;text-align:right}
+.paletteNote{margin:0;padding:14px 12px;color:#56625b;font-size:14px}

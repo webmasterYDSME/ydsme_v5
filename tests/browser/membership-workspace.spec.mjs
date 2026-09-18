@@ -21,6 +21,29 @@ test("membership workspace shows one job per screen and keeps old links working"
     await signIn.locator('[name="password"]').fill(password);
     await signIn.getByRole("button", { name:/Sign in securely/ }).click();
     await page.waitForURL("**/admin/memberships");
+    const sidebar = page.getByRole("complementary", {name:"Portal sidebar"});
+    const sidebarNav = sidebar.getByRole("navigation", {name:"Main"});
+    for (const group of ["Membership and money", "Website", "Members\u2019 area", "Administration"]) {
+      await expect(sidebarNav.getByRole("group", {name:group})).toBeVisible();
+    }
+    await expect(sidebarNav.getByRole("link", {name:/^Memberships/})).toHaveAttribute("aria-current", "page");
+    await expect(sidebarNav.getByRole("link", {name:"Website accounts"})).toBeVisible();
+    // The collapsed state is remembered across a reload.
+    await sidebar.getByRole("button", {name:"Collapse sidebar"}).click();
+    await page.reload();
+    await expect(sidebar.getByRole("button", {name:"Expand sidebar"})).toBeVisible();
+    await expect(sidebarNav.getByRole("link", {name:/^Memberships/})).toBeVisible();
+    await sidebar.getByRole("button", {name:"Expand sidebar"}).click();
+    await sidebar.getByRole("button", {name:"Search pages and members"}).click();
+    const search = page.getByRole("dialog", {name:"Search"});
+    await search.getByRole("searchbox").fill("visitor");
+    await search.getByRole("link", {name:"Visitor bookings"}).click();
+    await expect(page).toHaveURL(/\/admin\/bookings/);
+    await sidebar.getByRole("button", {name:/^Account menu/}).click();
+    await expect(page.getByRole("link", {name:"Account", exact:true})).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("link", {name:"Account", exact:true})).toHaveCount(0);
+    await page.goto("/admin/memberships");
     const tabs = page.getByRole("navigation", {name:"Membership workspace"});
     await expect(tabs.getByRole("link")).toHaveCount(4);
     await expect(page.getByRole("heading",{name:"Inbox",exact:true})).toBeVisible();
@@ -74,6 +97,12 @@ test("membership workspace shows one job per screen and keeps old links working"
     await page.goto("/admin/memberships");
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     await expect(page.getByRole("link",{name:"Add membership",exact:true})).toBeVisible();
+    await page.getByRole("button", {name:/^Menu/}).click();
+    const drawer = page.getByRole("dialog", {name:"Navigation menu"});
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("link", {name:"Website accounts"}).click();
+    await expect(page).toHaveURL(/\/admin\/members/);
+    await expect(page.getByRole("dialog", {name:"Navigation menu"})).toHaveCount(0);
   } finally {
     await admin.auth.admin.deleteUser(id);
   }
