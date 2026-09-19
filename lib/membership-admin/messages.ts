@@ -19,8 +19,34 @@ const messages: Record<string, string> = {
   "newsletter-consent-evidence-required": "Say how the newsletter consent was given.",
   "newsletter-consent-date-invalid": "The date the newsletter consent was given cannot be in the future.",
   "phone-invalid": "Enter a phone number with 7–15 digits. Spaces, brackets, hyphens and a leading + are allowed.",
+  "member-unavailable": "That member could not be found. Reload the page and try again.",
+  "contact-change-failed": "The correspondence details could not be changed. Check them and try again.",
+  "officer-history-unavailable": "Your officer record could not be checked, so nothing was changed. Try again, or sign out and in.",
+  "eligibility-correction-failed": "The date of birth could not be saved. Check it and try again.",
+  "portal-login-in-use": "That login email already belongs to another member.",
+  "portal-login-check-failed": "The login email could not be checked, so nothing was changed. Try again.",
+  "portal-invitation-failed": "The invitation could not be sent. Check the email address and try again.",
+  "portal-link-failed": "The login could not be linked to this member. Try again.",
+  "portal-notice-failed": "The login was linked, but the member’s notice could not be created.",
+  "portal-login-unavailable": "This member has no personal website login to remove.",
+  "portal-login-remove-failed": "The website access could not be removed. Try again.",
+  "offline-payment-review-failed": "The payment could not be sent for checking. Try again.",
   "officer-member-create-failed": "The membership could not be added. Check the details and try again.",
 };
+
+const notices: Record<string, string> = {
+  "honorary-scheduled": "Honorary membership recorded.",
+  "honorary-transition-scheduled": "The change from honorary membership is scheduled.",
+  "eligibility-corrected": "Date of birth corrected.",
+  "contact-verification-sent": "Saved. A confirmation email has been sent to the new address, which is used once it is confirmed.",
+  "contact-cleared": "Correspondence email removed.",
+  "portal-login-assigned": "Website login assigned. The member is invited to set it up.",
+  "portal-login-removed": "Personal website access removed.",
+  "offline-payment-review-created": "The payment has been sent for checking. Follow it up under Problems in the Inbox.",
+};
+
+/** The friendly message for a notice code, or null when there is no specific wording for it. */
+export const membershipNoticeMessage = (code: string | null | undefined) => (code ? notices[code] ?? null : null);
 
 /** The friendly message for an error code, or null when there is no specific wording for it. */
 export const membershipErrorMessage = (code: string | null | undefined) => (code ? messages[code] ?? null : null);

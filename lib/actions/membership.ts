@@ -996,15 +996,17 @@ export async function retryMembershipNotification(formData: FormData) {
 export async function requestMemberContactChange(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const role = z.enum(["self", "guardian", "shared_household"]).parse(formData.get("contact_role"));
   const emailValue = String(formData.get("contact_email") || "").trim().toLowerCase();
   const admin = createServiceClient();
   const { data: member } = await admin.from("members").select("id,full_name,contact_email,contact_role")
     .eq("id", memberId).maybeSingle();
-  if (!member) redirect("/admin/memberships?error=member-unavailable");
+  if (!member) redirect(`${record}&error=member-unavailable`);
   const { data: actorId } = await admin.rpc("ensure_administrative_actor", { p_auth_user_id: user.id });
-  if (!actorId) redirect("/admin/memberships?error=officer-history-unavailable");
+  if (!actorId) redirect(`${record}&error=officer-history-unavailable`);
   if (!emailValue) {
     await admin.from("membership_contact_change_requests").update({ status: "cancelled", updated_at: new Date().toISOString() })
       .eq("member_id", memberId).eq("contact_kind", "correspondence").eq("status", "pending");
@@ -1013,7 +1015,7 @@ export async function requestMemberContactChange(formData: FormData) {
       portal_invitation_status: member.contact_email ? "not_requested" : undefined,
       updated_at: new Date().toISOString(),
     }).eq("id", memberId);
-    if (error) redirect("/admin/memberships?error=contact-change-failed");
+    if (error) redirect(`${record}&error=contact-change-failed`);
     await writeAudit({
       actorUserId: user.id, actorRole: "committee", action: "membership.contact-cleared",
       entityType: "member", entityId: memberId,
@@ -1021,7 +1023,7 @@ export async function requestMemberContactChange(formData: FormData) {
       after: { contact_email: null, contact_role: role, reason },
     });
     revalidatePath("/admin/memberships");
-    redirect(`/admin/memberships?member=${memberId}&section=member-history#member-history`);
+    redirect(`${record}&notice=contact-cleared`);
   }
   const email = z.email().max(254).parse(emailValue);
   const token = membershipToken();
@@ -1038,7 +1040,7 @@ export async function requestMemberContactChange(formData: FormData) {
     requested_by_actor_id: actorId,
     reason,
   }).select("id").single();
-  if (error || !request) redirect("/admin/memberships?error=contact-change-failed");
+  if (error || !request) redirect(`${record}&error=contact-change-failed`);
   await admin.from("membership_notifications").insert({
     member_id: memberId, recipient_email: email,
     kind: "membership.contact-change-verification",
@@ -1049,7 +1051,7 @@ export async function requestMemberContactChange(formData: FormData) {
     deduplication_key: `membership-contact-change-${request.id}`,
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=contact-verification-sent#member-history`);
+  redirect(`${record}&notice=contact-verification-sent`);
 }
 
 export async function requestOwnMembershipContactChange(formData: FormData) {
@@ -1132,24 +1134,26 @@ export async function confirmMembershipContactChange(formData: FormData) {
 export async function assignMemberPortalLogin(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const email = z.email().max(254).parse(String(formData.get("login_email") || "").trim().toLowerCase());
   const admin = createServiceClient();
   const { data: member } = await admin.from("members").select("id,full_name,auth_user_id")
     .eq("id", memberId).maybeSingle();
-  if (!member) redirect("/admin/memberships?error=member-unavailable");
+  if (!member) redirect(`${record}&error=member-unavailable`);
   const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", email).maybeSingle();
-  if (profileError) redirect("/admin/memberships?error=portal-login-check-failed");
+  if (profileError) redirect(`${record}&error=portal-login-check-failed`);
   let authUserId = profile?.id ?? null;
   if (authUserId) {
     const { data: owner } = await admin.from("members").select("id").eq("auth_user_id", authUserId).neq("id", memberId).maybeSingle();
-    if (owner) redirect("/admin/memberships?error=portal-login-in-use");
+    if (owner) redirect(`${record}&error=portal-login-in-use`);
   } else {
     const { data: invitation, error } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: member.full_name, membership_active: true },
       redirectTo: `${getTrustedAppOrigin()}/auth/invite?next=/account`,
     });
-    if (error || !invitation.user) redirect("/admin/memberships?error=portal-invitation-failed");
+    if (error || !invitation.user) redirect(`${record}&error=portal-invitation-failed`);
     authUserId = invitation.user.id;
   }
   const { error: linkError } = await admin.from("members").update({
@@ -1157,7 +1161,7 @@ export async function assignMemberPortalLogin(formData: FormData) {
     portal_invitation_status: profile ? "linked" : "sent",
     updated_at: new Date().toISOString(),
   }).eq("id", memberId);
-  if (linkError) redirect("/admin/memberships?error=portal-link-failed");
+  if (linkError) redirect(`${record}&error=portal-link-failed`);
   await admin.from("membership_notifications").update({
     recipient_user_id: authUserId, updated_at: new Date().toISOString(),
   }).eq("member_id", memberId).eq("portal_visible", true).is("recipient_user_id", null);
@@ -1173,7 +1177,7 @@ export async function assignMemberPortalLogin(formData: FormData) {
       portal_visible: true,
       deduplication_key: `membership-portal-access-ready-${memberId}-${authUserId}`,
     });
-    if (noticeError && noticeError.code !== "23505") redirect("/admin/memberships?error=portal-notice-failed");
+    if (noticeError && noticeError.code !== "23505") redirect(`${record}&error=portal-notice-failed`);
     await admin.rpc("request_membership_notification_delivery");
   } else {
     // The Supabase invitation is already the combined activation/account email.
@@ -1186,27 +1190,29 @@ export async function assignMemberPortalLogin(formData: FormData) {
     before: { auth_user_id: member.auth_user_id }, after: { auth_user_id: authUserId, login_email: email, reason },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=portal-login-assigned#member-history`);
+  redirect(`${record}&notice=portal-login-assigned`);
 }
 
 export async function removeMemberPortalLogin(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: member } = await admin.from("members").select("auth_user_id").eq("id", memberId).maybeSingle();
-  if (!member?.auth_user_id) redirect("/admin/memberships?error=portal-login-unavailable");
+  if (!member?.auth_user_id) redirect(`${record}&error=portal-login-unavailable`);
   const { error } = await admin.from("members").update({
     auth_user_id: null, portal_invitation_status: "not_requested", updated_at: new Date().toISOString(),
   }).eq("id", memberId).eq("auth_user_id", member.auth_user_id);
-  if (error) redirect("/admin/memberships?error=portal-login-remove-failed");
+  if (error) redirect(`${record}&error=portal-login-remove-failed`);
   await writeAudit({
     actorUserId: user.id, actorRole: "committee", action: "membership.portal-login-removed",
     entityType: "member", entityId: memberId,
     before: { auth_user_id: member.auth_user_id }, after: { auth_user_id: null, reason },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=portal-login-removed#member-history`);
+  redirect(`${record}&notice=portal-login-removed`);
 }
 
 export async function resolveMembershipPaymentReview(formData: FormData) {
@@ -1313,21 +1319,23 @@ export async function resolveHonoraryPaymentConflict(formData: FormData) {
 export async function correctMemberEligibility(formData: FormData) {
   const { user, role } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const dateOfBirth = z.iso.date().parse(formData.get("date_of_birth"));
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: before } = await admin.from("members").select("date_of_birth").eq("id", memberId).maybeSingle();
-  if (!before) redirect("/admin/memberships?error=member-unavailable");
+  if (!before) redirect(`${record}&error=member-unavailable`);
   const { error } = await admin.from("members").update({ date_of_birth: dateOfBirth, updated_at: new Date().toISOString() })
     .eq("id", memberId);
-  if (error) redirect("/admin/memberships?error=eligibility-correction-failed");
+  if (error) redirect(`${record}&error=eligibility-correction-failed`);
   await writeAudit({
     actorUserId: user.id, actorRole: role, action: "membership.eligibility-corrected",
     entityType: "member", entityId: memberId, summary: reason,
     before: { date_of_birth: before.date_of_birth }, after: { date_of_birth: dateOfBirth },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&notice=eligibility-corrected`);
+  redirect(`${record}&notice=eligibility-corrected`);
 }
 
 export async function saveMembershipPaymentSettings(formData: FormData) {

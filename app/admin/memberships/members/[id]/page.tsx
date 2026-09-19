@@ -1,18 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CreditCard, PoundSterling } from "lucide-react";
-import {
-  assignMemberPortalLogin,
-  correctMemberEligibility,
-  removeMemberPortalLogin,
-  reportOfflineMembershipPaymentFailure,
-  requestMemberContactChange,
-} from "@/lib/actions/membership";
 import { requireCapability } from "@/lib/auth";
-import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { newsletterConsentSources } from "@/lib/membership-admin/officer-member";
-import { dateLabel, memberStateName, money, paymentMethodName } from "@/lib/membership-admin/format";
+import { ageOn, dateLabel, londonToday, memberStateName, money, paymentMethodName, timestampDateLabel } from "@/lib/membership-admin/format";
 import { loadMemberRecord } from "@/lib/membership-admin/records";
+import { MemberBirthdatePanel, MemberContactPanel, MemberLoginPanel, PaymentProblemPanel } from "../../_components/MemberRecordPanels";
 import { MemberHonoraryPanel } from "../../_components/MemberHonoraryPanel";
 import { MemberPaymentPanel } from "../../_components/MemberPaymentPanel";
 import { MembershipFlash } from "../../_components/MembershipFlash";
@@ -22,6 +15,13 @@ export const dynamic = "force-dynamic";
 
 type Query = Record<string, string | string[] | undefined>;
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+const capitalise = (text: string) => text.charAt(0).toLocaleUpperCase("en-GB") + text.slice(1);
+const invitationLabels: Record<string, string> = {
+  sent: "Sent, not yet used",
+  linked: "Linked to an existing login",
+  blocked_shared: "Blocked: the email already has a login",
+  declined: "Declined",
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 
 /** Whether the member gets the newsletter and, for officer-recorded consent, how and when it was given. */
@@ -43,12 +43,19 @@ export default async function MembershipRecord({ params, searchParams }: { param
   const { member, plan, plans, terms, honorary, payments, choices, renewable, currentYear } = record;
 
   const base = `/admin/memberships/members/${id}`;
+  const today = londonToday();
+  const age = ageOn(member.date_of_birth, today);
+  const birthLabel = member.date_of_birth ? `${dateLabel(member.date_of_birth)}${age === null ? "" : ` · ${age}yo`}` : "Not recorded";
+  const invitation = member.auth_user_id ? null : invitationLabels[member.portal_invitation_status ?? ""] ?? null;
   const initials = String(member.full_name).split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase()).join("");
   const paidTerms = terms.filter((term) => term.status === "paid");
   const paidUntil = paidTerms.reduce<string | null>((latest, term) => (!latest || term.ends_on > latest ? term.ends_on : latest), null);
   const openHonorary = honorary.find((item) => ["scheduled", "active"].includes(item.status) && !item.revoked_effective_on) ?? null;
   const anyHonorary = honorary.some((item) => ["scheduled", "active"].includes(item.status));
   const panel = one(query.panel);
+  const problemPayment = panel === "payment-issue"
+    ? payments.find((payment) => payment.id === one(query.payment) && payment.method !== "stripe" && payment.status === "paid") ?? null : null;
+  const problemYear = terms.find((term) => term.id === problemPayment?.term_id)?.membership_year ?? currentYear;
   const honoraryPanel = panel === "honorary" && !anyHonorary ? "grant" : panel === "end-honorary" && openHonorary ? "end" : null;
   const requestedYear = Number(one(query.year));
   const defaultYear = choices.find((choice) => choice.membership_year === currentYear)?.amount_pence === null ? currentYear + 1 : currentYear;
@@ -82,18 +89,29 @@ export default async function MembershipRecord({ params, searchParams }: { param
         <p className={styles.lead}>Every membership year, what was due, and how it was paid.</p>
         <div className={styles.termList}>
           {terms.map((term) => <div className={styles.term} key={term.id}>
-            <div className={styles.termHead}><strong>{term.membership_year} · {memberStateName(term.status)}</strong><span className={`${styles.pill} ${term.status === "paid" ? styles.pillOk : styles.pillMute}`}>{term.amount_paid_pence === term.amount_due_pence ? money(term.amount_paid_pence) : `${money(term.amount_paid_pence)} paid of ${money(term.amount_due_pence)}`}</span></div>
+            <div className={styles.termHead}>
+              <span className={styles.termTitle}><strong>{term.membership_year}</strong><span className={`${styles.pill} ${term.status === "paid" ? styles.pillOk : styles.pillMute}`}>{memberStateName(term.status)}</span></span>
+              <span className={styles.termAmount}>{term.amount_paid_pence === term.amount_due_pence ? money(term.amount_paid_pence) : `${money(term.amount_paid_pence)} of ${money(term.amount_due_pence)}`}</span>
+            </div>
             <small>{dateLabel(term.starts_on)} to {dateLabel(term.ends_on)}</small>
             {payments.filter((payment) => payment.term_id === term.id).map((payment) => {
               const by = actor(payment);
-              return <div key={payment.id}>
-                <p>{paymentMethodName(payment.method)} · {payment.status.replaceAll("_", " ")} · {money(payment.amount_pence)}{payment.refunded_pence ? ` · ${money(payment.refunded_pence)} refunded` : ""}{payment.offline_reference ? ` · reference ${payment.offline_reference}` : ""}{by ? ` · recorded by ${by.display_name} (${by.reference_code})` : ""}</p>
-                {payment.method !== "stripe" && payment.status === "paid" ? <details className={styles.technical}><summary>Report a returned or reversed payment</summary><form action={reportOfflineMembershipPaymentFailure} className="stack-form"><input type="hidden" name="payment_id" value={payment.id}/><label>What happened?<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="danger-button" pendingLabel="Saving…">Send payment for checking</PendingSubmitButton></form></details> : null}
+              const details = [
+                capitalise(payment.status.replaceAll("_", " ")),
+                timestampDateLabel(payment.received_at ?? payment.created_at),
+                payment.offline_reference ? `reference ${payment.offline_reference}` : null,
+                payment.refunded_pence ? `${money(payment.refunded_pence)} refunded` : null,
+                by ? `recorded by ${by.display_name} (${by.reference_code})` : null,
+              ].filter(Boolean).join(" · ");
+              return <div className={styles.paymentLine} key={payment.id}>
+                <div><strong>{capitalise(paymentMethodName(payment.method))} · {money(payment.amount_pence)}</strong><small>{details}</small></div>
+                {payment.method !== "stripe" && payment.status === "paid"
+                  ? <Link className={styles.cardLink} href={`${base}?panel=payment-issue&payment=${payment.id}`} prefetch={false} scroll={false}>Report a problem</Link> : null}
               </div>;
             })}
           </div>)}
           {honorary.map((item) => <div className={styles.term} key={item.id}>
-            <div className={styles.termHead}><strong>Lifetime honorary · {item.status}</strong></div>
+            <div className={styles.termHead}><span className={styles.termTitle}><strong>Lifetime honorary</strong><span className={`${styles.pill} ${styles.pillRequest}`}>{capitalise(item.status)}</span></span></div>
             <small>Starts {dateLabel(item.effective_from)}{item.revoked_effective_on ? ` · changes ${dateLabel(item.revoked_effective_on)}` : ""}</small>
             <p>{item.reason}{item.revocation_reason ? ` · ${item.revocation_reason}` : ""}</p>
           </div>)}
@@ -103,40 +121,35 @@ export default async function MembershipRecord({ params, searchParams }: { param
 
       <div className={styles.stack}>
         <section className={styles.card}>
-          <h2>Contact</h2>
+          <div className={styles.cardHead}><h2>Contact</h2><Link className={styles.cardLink} href={`${base}?panel=contact`} prefetch={false} scroll={false}>Change</Link></div>
           <dl className={`${styles.facts} ${styles.cardGap}`}>
-            <div><dt>Email</dt><dd>{member.contact_email || "None"}</dd></div>
-            {member.contact_email ? <div><dt>Confirmed</dt><dd>{member.contact_email_verified_at ? "Yes" : "Not yet"}</dd></div> : null}
+            <div><dt>Email</dt><dd>{member.contact_email ? `${member.contact_email}${member.contact_email_verified_at ? "" : " (not confirmed)"}` : "None"}</dd></div>
+            {member.contact_role && member.contact_role !== "self" ? <div><dt>Address belongs to</dt><dd>{member.contact_role === "guardian" ? "A guardian" : "A shared household"}</dd></div> : null}
+            <div><dt>Telephone</dt><dd>{member.contact_number || "None"}</dd></div>
             <div><dt>Newsletter</dt><dd>{newsletterLabel(member)}</dd></div>
-            <div><dt>Whose address</dt><dd>{member.contact_role === "guardian" ? "Guardian correspondence" : member.contact_role === "shared_household" ? "Shared household" : "The member’s own"}</dd></div>
-            {member.contact_number ? <div><dt>Telephone</dt><dd>{member.contact_number}</dd></div> : null}
           </dl>
-          <details className={`${styles.technical} ${styles.cardGap}`}><summary>Change correspondence details</summary>
-            <form action={requestMemberContactChange} className="editor-form"><input type="hidden" name="member_id" value={id}/><p className="form-help">A changed email address is used only after the mailbox confirms it. Shared addresses are allowed.</p><label>Email address <em>Leave empty to remove</em><input type="email" name="contact_email" defaultValue={member.contact_email || ""}/></label><label>Whose address is this?<select name="contact_role" defaultValue={member.contact_role || "self"}><option value="self">The member’s own</option><option value="guardian">Guardian correspondence</option><option value="shared_household">Shared household correspondence</option></select></label><label>Reason for the change<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Sending confirmation…">Save and verify correspondence</PendingSubmitButton></form>
-          </details>
         </section>
 
         <section className={styles.card}>
-          <h2>Personal details</h2>
-          <dl className={`${styles.facts} ${styles.cardGap}`}><div><dt>Date of birth</dt><dd>{member.date_of_birth ? dateLabel(member.date_of_birth) : "Not recorded"}</dd></div></dl>
-          <details className={`${styles.technical} ${styles.cardGap}`}><summary>Correct the date of birth</summary>
-            <form action={correctMemberEligibility} className="editor-form"><input type="hidden" name="member_id" value={id}/><p className="form-help">Use this only when the saved date is wrong. The reason is kept in the member’s history.</p><label>Date of birth<input type="date" name="date_of_birth" defaultValue={member.date_of_birth || ""} required/></label><label>Reason for the change<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save corrected date</PendingSubmitButton></form>
-          </details>
+          <div className={styles.cardHead}><h2>Personal details</h2><Link className={styles.cardLink} href={`${base}?panel=dob`} prefetch={false} scroll={false}>Correct</Link></div>
+          <dl className={`${styles.facts} ${styles.cardGap}`}><div><dt>Date of birth</dt><dd>{birthLabel}</dd></div></dl>
         </section>
 
         <section className={styles.card}>
-          <h2>Website login</h2>
-          <p className={styles.lead}>{member.auth_user_id ? "This member has a personal website login." : "This member has no personal website login."} A shared contact address never gives one person access to another person’s membership; each member with website access needs a unique login email.</p>
-          <details className={`${styles.technical} ${styles.cardGap}`}><summary>{member.auth_user_id ? "Remove personal website access" : "Assign or invite a website login"}</summary>
-            {member.auth_user_id
-              ? <form action={removeMemberPortalLogin} className="stack-form"><input type="hidden" name="member_id" value={id}/><label>Reason for removing access<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="danger-button" pendingLabel="Removing…">Remove personal website access</PendingSubmitButton></form>
-              : <form action={assignMemberPortalLogin} className="stack-form"><input type="hidden" name="member_id" value={id}/><label>Unique login email<input type="email" name="login_email" required/></label><label>Reason for assigning this login<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Assigning…">Assign or invite website login</PendingSubmitButton></form>}
-          </details>
+          <div className={styles.cardHead}><h2>Website login</h2><Link className={styles.cardLink} href={`${base}?panel=login`} prefetch={false} scroll={false}>{member.auth_user_id ? "Remove" : "Assign"}</Link></div>
+          <dl className={`${styles.facts} ${styles.cardGap}`}>
+            <div><dt>Personal login</dt><dd>{member.auth_user_id ? "Yes" : "None"}</dd></div>
+            {invitation ? <div><dt>Invitation</dt><dd>{invitation}</dd></div> : null}
+          </dl>
         </section>
       </div>
     </div>
 
     {honoraryPanel ? <MemberHonoraryPanel mode={honoraryPanel} memberId={id} name={member.full_name} planName={plan?.name ?? null} honorary={openHonorary ? { id: openHonorary.id, effective_from: openHonorary.effective_from } : null} plans={plans} closeHref={base}/> : null}
+    {panel === "contact" ? <MemberContactPanel memberId={id} name={member.full_name} email={member.contact_email} role={member.contact_role} closeHref={base}/> : null}
+    {panel === "dob" ? <MemberBirthdatePanel memberId={id} name={member.full_name} dateOfBirth={member.date_of_birth} today={today} closeHref={base}/> : null}
+    {panel === "login" ? <MemberLoginPanel memberId={id} name={member.full_name} hasLogin={Boolean(member.auth_user_id)} closeHref={base}/> : null}
+    {problemPayment ? <PaymentProblemPanel paymentId={problemPayment.id} name={member.full_name} year={problemYear} method={problemPayment.method} amountPence={problemPayment.amount_pence} reference={problemPayment.offline_reference ?? null} closeHref={base}/> : null}
     {panel === "payment" ? <MemberPaymentPanel memberId={id} name={member.full_name} planName={plan?.name ?? null} renewable={renewable} choices={choices} currentYear={currentYear} year={year}
       closeHref={base} yearHref={(option) => `${base}?panel=payment&year=${option}`}/> : null}
   </>;

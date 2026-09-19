@@ -106,6 +106,15 @@
 .term p { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .term small { color: #56625b; }
 .cardGap { margin-top: 14px; }
+.cardHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.cardHead > h2 { margin: 0; font: 500 28px/1.12 var(--font-display); }
+.cardLink { flex: none; font-size: 13px; font-weight: 700; color: var(--forest); text-decoration: underline; text-underline-offset: 4px; }
+.cardLink:hover { color: var(--ink); }
+.termTitle { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.termAmount { font-size: 15px; font-weight: 700; }
+.paymentLine { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 6px; background: #f7f4ec; }
+.paymentLine strong { display: block; font-size: 14px; }
+.paymentLine small { display: block; margin-top: 2px; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
 .technical > form { margin-top: 12px; }
 
 /* Renewals and setup */
