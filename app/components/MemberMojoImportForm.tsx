@@ -38,7 +38,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
       <div className="member-import-apply-scope"><strong>This will:</strong><ul>
         <li>Add {plural(preview.totals.add, "new person", "new people")} and mark them as full members for {preview.year}, paid through MemberMojo.</li>
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
-        <li>Fill in each person's title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
+        <li>Fill in each person’s title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
       </ul><strong>This will not:</strong><ul>
         <li>Remove or change anyone who is not in this file.</li>
