@@ -4,6 +4,8 @@ import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { money, timestampDateLabel, waitingLabel } from "@/lib/membership-admin/format";
 import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
+import { countRetentionWaitingForSwitch } from "@/lib/membership-admin/retention";
+import { londonDateParts } from "@/lib/membership-rules";
 import { DUPLICATE_PAYMENT_REASON, isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
 
 type Admin = ReturnType<typeof createServiceClient>;
@@ -79,6 +81,16 @@ async function staleDailyRun(admin: Admin): Promise<string | null> {
   const { data, error } = await admin.from("membership_daily_runs").select("completed_at").order("run_date", { ascending: false }).limit(1).maybeSingle();
   if (error || !data?.completed_at) return null;
   return Date.now() - new Date(data.completed_at).getTime() > 3 * 24 * 60 * 60 * 1000 ? data.completed_at : null;
+}
+
+/** The renewal year whose scheduled reminders should be going out about now but have no open campaign behind them, if any. */
+async function unopenedRenewalYear(admin: Admin): Promise<number | null> {
+  const { year, month, day } = londonDateParts(new Date());
+  if (!((month === 11 && day >= 20) || month === 12 || month <= 2)) return null;
+  const target = month >= 11 ? year + 1 : year;
+  const { data, error } = await admin.from("membership_renewal_campaigns").select("open").eq("membership_year", target).maybeSingle();
+  if (error) return null;
+  return data?.open ? null : target;
 }
 
 function sources(admin: Admin) {
@@ -244,9 +256,11 @@ export const countInboxTasks = cache(async (): Promise<number> => {
   ]);
   const ready = configuration();
   const stale = await staleDailyRun(admin);
+  const unopened = await unopenedRenewalYear(admin);
+  const retentionWaiting = await countRetentionWaitingForSwitch();
   return applications + renewals + verifications + students + contact + reviews + conflicts + checkoutNotices + memberReviewCount
     + attempts + webhooks + commands + emailFailures + deliveryEvents + refunds
-    + Number(!ready.payments) + Number(!ready.email) + Number(Boolean(stale));
+    + Number(!ready.payments) + Number(!ready.email) + Number(Boolean(stale)) + Number(unopened !== null) + Number(retentionWaiting > 0);
 });
 
 export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
@@ -316,6 +330,10 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
   const ready = configuration();
   const staleRun = await staleDailyRun(admin);
   if (staleRun) add({ key: "notice.daily-run-stale", type: "notice", kind: "problem", name: "Daily membership updates have stopped", summary: `They last ran on ${timestampDateLabel(staleRun)}. Members are not being moved to grace or lapsed until they run again.`, since: staleRun, cta: "See details", memberId: null, area: "Setup", title: "Daily membership updates have stopped", body: `The daily job that moves members into their grace period and then lapses them last ran on ${timestampDateLabel(staleRun)}. Ask the website administrator to check it. When it runs again it catches up on the days it missed.`, technical: null, href: null, hrefLabel: null });
+  const unopenedYear = await unopenedRenewalYear(admin);
+  if (unopenedYear !== null) add({ key: "notice.renewals-not-open", type: "notice", kind: "problem", name: `Renewals for ${unopenedYear} are not open`, summary: "Members are not being sent their renewal reminders until renewals are opened.", since: null, cta: "See details", memberId: null, area: "Setup", title: `Renewals for ${unopenedYear} are not open`, body: `Members are not being sent their renewal reminders (1 December, 1 January, 1 February and 22 February) because renewals for ${unopenedYear} have not been opened. Open them on the Renewals tab and the reminders go out on the next of those dates.`, technical: null, href: "/admin/memberships/renewals", hrefLabel: "Open Renewals" });
+  const retentionWaiting = await countRetentionWaitingForSwitch();
+  if (retentionWaiting > 0) add({ key: "notice.retention-waiting", type: "notice", kind: "problem", name: "Old member records are past their date", summary: `${retentionWaiting} former ${retentionWaiting === 1 ? "member is" : "members are"} due for warning or removal. Check the list, then switch it on.`, since: null, cta: "See details", memberId: null, area: "Setup", title: "Old member records are past their date", body: `${retentionWaiting} former ${retentionWaiting === 1 ? "member is" : "members are"} past the date their details should be removed under the Privacy Policy. Nothing happens until an administrator has checked the list and switched on automatic removal.`, technical: null, href: "/admin/memberships/setup?tab=retention", hrefLabel: "Check the list" });
   if (!ready.payments) add({ key: "notice.payments-setup", type: "notice", kind: "problem", name: "Online payments are not fully set up", summary: "Ask the website administrator to finish the payment setup before accepting online payments.", since: null, cta: "See details", memberId: null, area: "Setup", title: "Online payments are not fully set up", body: "Ask the website administrator to finish the payment setup before accepting online membership payments.", technical: null, href: null, hrefLabel: null });
   if (!ready.email) add({ key: "notice.email-setup", type: "notice", kind: "problem", name: "Membership emails are not fully set up", summary: "Ask the website administrator to finish the email setup before launch.", since: null, cta: "See details", memberId: null, area: "Setup", title: "Membership emails are not fully set up", body: "Ask the website administrator to finish the email setup before launch.", technical: null, href: null, hrefLabel: null });
 

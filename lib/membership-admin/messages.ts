@@ -19,6 +19,8 @@ const messages: Record<string, string> = {
   "newsletter-consent-evidence-required": "Say how the newsletter consent was given.",
   "newsletter-consent-date-invalid": "The date the newsletter consent was given cannot be in the future.",
   "phone-invalid": "Enter a phone number with 7–15 digits. Spaces, brackets, hyphens and a leading + are allowed.",
+  "retention-confirm-required": "Tick the box to say you have checked the list, then switch it on.",
+  "retention-switch-failed": "The setting could not be changed. Try again.",
   "member-unavailable": "That member could not be found. Reload the page and try again.",
   "contact-change-failed": "The correspondence details could not be changed. Check them and try again.",
   "officer-history-unavailable": "Your officer record could not be checked, so nothing was changed. Try again, or sign out and in.",
@@ -112,6 +114,8 @@ const notices: Record<string, string> = {
   "delivery-problem-cleared": "Marked as dealt with.",
   "unapplied-payment-cleared": "Marked as dealt with.",
   "review-notice-cleared": "Marked as dealt with.",
+  "retention-on": "Automatic removal is switched on. Warnings go out from the next daily run, and details are removed a month after the warning.",
+  "retention-off": "Automatic removal is switched off. Nobody else will be warned or removed until it is switched on again.",
   "offline-payment-review-created": "The payment has been sent for checking. Follow it up under Problems in the Inbox.",
 };
 

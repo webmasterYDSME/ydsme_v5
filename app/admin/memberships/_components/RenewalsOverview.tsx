@@ -39,7 +39,7 @@ export function RenewalsOverview({ year, years, yearHref, open, summary, lastRem
     {!billingOn ? <p className={`${styles.panelNote} ${styles.cardGap}`}>Online renewals are switched off, so renewals cannot be opened.</p> : null}
     {open && summary.waitingWithoutEmail ? <p className={`${styles.panelNote} ${styles.cardGap}`}>{plural(summary.waitingWithoutEmail, "waiting member")} {summary.waitingWithoutEmail === 1 ? "has" : "have"} no email address, so {summary.waitingWithoutEmail === 1 ? "needs" : "need"} contacting another way.</p> : null}
     <div className={`${styles.actionRow} ${styles.cardGap}`}>
-      <p className={styles.panelNote}>{open ? (lastReminderAt ? `Last reminder sent ${timestampDateLabel(lastReminderAt)}.` : "No reminder sent yet.") : ""}</p>
+      <p className={styles.panelNote}>{open ? `${lastReminderAt ? `Last reminder sent ${timestampDateLabel(lastReminderAt)}.` : "No reminder sent yet."} Reminders also go out by themselves on 1 December, 1 January, 1 February and 22 February, to invited members who are still active or in their grace period and have not paid.` : ""}</p>
       <div className={styles.buttonPair}>
         {open && summary.toInvite > 0
           ? <form action={openRenewalCampaign}>
