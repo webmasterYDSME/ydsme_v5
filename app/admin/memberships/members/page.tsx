@@ -49,7 +49,7 @@ export default async function MembershipMembers({ searchParams }: { searchParams
   };
 
   return <>
-    <MembershipFlash query={query}/>
+    <MembershipFlash/>
     <p className={styles.tabNote}>Search the register, open someone’s record, or add a person who joined offline.</p>
     <form className={styles.search} method="get">
       {group.key !== "all" ? <input type="hidden" name="status" value={group.key}/> : null}

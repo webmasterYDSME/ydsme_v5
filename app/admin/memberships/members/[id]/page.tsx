@@ -63,7 +63,7 @@ export default async function MembershipRecord({ params, searchParams }: { param
   const actor = (payment: { administrative_actors?: unknown }) => (Array.isArray(payment.administrative_actors) ? payment.administrative_actors[0] : payment.administrative_actors) as { display_name: string; reference_code: string } | null;
 
   return <>
-    <MembershipFlash query={query}/>
+    <MembershipFlash/>
     <Link className={styles.backLink} href="/admin/memberships/members"><ArrowLeft aria-hidden="true"/>Back to members</Link>
     <section className={styles.profile}>
       <span className={styles.avatar} aria-hidden="true">{initials}</span>

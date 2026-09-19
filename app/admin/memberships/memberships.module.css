@@ -258,3 +258,17 @@
 .buttonPair { display: flex; flex-wrap: wrap; gap: 10px; }
 .stickyActions { position: sticky; bottom: 0; z-index: 2; margin: 0 -30px -34px; padding: 12px 30px 16px; background: #fffdf8; border-top: 1px solid rgba(16,24,20,.12); justify-content: flex-end; }
 @media (max-width: 720px) { .stickyActions { margin-inline: -18px; padding-inline: 18px; } }
+
+/* The result of the last change: floats at the top of the screen so it is seen at any scroll position. */
+.toastLayer { position: fixed; inset: 16px 16px auto; z-index: 90; display: flex; justify-content: center; pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 12px; width: min(560px, 100%); padding: 14px 12px 14px 16px; border-radius: 8px; color: #fff; box-shadow: 0 14px 40px rgba(9,18,15,.28); animation: toastIn .28s ease-out both; }
+.toast > svg { width: 22px; height: 22px; flex: 0 0 auto; margin-top: 1px; }
+.toast p { margin: 0; flex: 1; min-width: 0; font-size: 15px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.toast p small { display: block; margin-top: 2px; opacity: .75; font-size: 12px; }
+.toast button { flex: 0 0 auto; display: grid; place-items: center; width: 32px; height: 32px; margin: -4px 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; opacity: .8; }
+.toast button:hover, .toast button:focus-visible { opacity: 1; background: rgba(255,255,255,.16); }
+.toast button svg { width: 18px; height: 18px; }
+.toastSuccess { background: var(--forest); border-left: 5px solid #6fbf87; }
+.toastError { background: #7d2c1e; border-left: 5px solid #f0a08c; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }

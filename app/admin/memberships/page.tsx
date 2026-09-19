@@ -44,7 +44,7 @@ export default async function MembershipInbox({ searchParams }: { searchParams: 
   const setupProblems = tasks.some((task) => task.type === "notice" && ["Online payments", "Email", "Setup"].includes(task.area));
 
   return <>
-    <MembershipFlash query={query}/>
+    <MembershipFlash/>
     <p className={`${styles.tabNote} ${styles.hideOnPhone}`}>Everything that needs an action from membership officer, oldest first.</p>
     <div className={styles.filterBar}>
       <nav className={styles.chips} aria-label="Filter tasks">

@@ -59,7 +59,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
   const panelRow = rows.find((row) => row.id === one(query.member)) ?? null;
 
   return <>
-    <MembershipFlash query={query}/>
+    <MembershipFlash/>
     <p className={styles.tabNote}>Open the yearly renewals, remind members who have not paid, record cash, bank and cheque payments, and keep the annual fees.</p>
     <div className={styles.stack}>
       <RenewalsOverview

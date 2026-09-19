@@ -448,3 +448,21 @@ test("officers can clear refund and email delivery problems", async () => {
   assert.match(panel, /resolveMembershipDeliveryProblem/);
   assert.match(panel, />Mark as refunded</);
 });
+
+test("the result message floats on screen and every notice has its own wording", async () => {
+  const toast = readFileSync(new URL("../app/admin/memberships/_components/FlashToast.tsx", import.meta.url), "utf8");
+  // A success fades, an error waits to be closed, and closing removes the codes from the address.
+  assert.match(toast, /SUCCESS_MS/);
+  assert.match(toast, /role=\{isError \? "alert" : "status"\}/);
+  assert.match(toast, /searchParams\.delete\("notice"\)/);
+  // Wording that used to sit in the old banner now lives with the other messages.
+  const { membershipNoticeMessage } = await import("../lib/membership-admin/messages.ts");
+  assert.equal(membershipNoticeMessage("membership-payment-settings-saved"), "Payment details saved.");
+  assert.match(membershipNoticeMessage("price-unchanged"), /No fee change was needed/);
+  // Every notice the membership screens can redirect with has specific wording, not the generic fallback.
+  const actions = readFileSync(new URL("../lib/actions/membership.ts", import.meta.url), "utf8");
+  const skip = new Set(["offline-payment-"]);
+  for (const [, code] of actions.matchAll(/\/admin\/memberships[^"`]*[?&]notice=([a-z0-9-]+)/g)) {
+    if (!skip.has(code)) assert.ok(membershipNoticeMessage(code), `no wording for notice ${code}`);
+  }
+});

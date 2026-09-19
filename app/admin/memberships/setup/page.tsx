@@ -35,7 +35,7 @@ export default async function MembershipSetup({ searchParams }: { searchParams: 
   const tab = tabs.find((item) => item.key === requested)?.key ?? "payment";
 
   return <>
-    <MembershipFlash query={query}/>
+    <MembershipFlash/>
     <p className={styles.tabNote}>The treasurer’s payment details, bookkeeping reports, and the one-time MemberMojo import. Membership types and fees are on the Renewals tab.</p>
     <div className={styles.setupLayout}>
       <nav className={styles.subnav} aria-label="Setup sections">
