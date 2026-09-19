@@ -41,7 +41,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
         <li>Add {plural(preview.totals.add, "new person", "new people")}{preview.totals.honorary ? `, of whom ${preview.totals.honorary} become lifetime honorary members (no fee),` : ""} and mark the rest as full members for {preview.year}, paid through MemberMojo.</li>
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
         <li>Fill in each person’s title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
-        <li>Subscribe {plural(preview.totals.newsletter, "new person", "new people")} to the newsletter: everyone with an email address (not Juniors) who has not unsubscribed from MemberMojo's group emails. The club treats that as their agreement. Existing members are not changed, and each record shows where the consent came from.</li>
+        <li>Subscribe {plural(preview.totals.newsletter, "new person", "new people")} to the newsletter: everyone with an email address (not Juniors) who has not unsubscribed from MemberMojo’s group emails. The club treats that as their agreement. Existing members are not changed, and each record shows where the consent came from.</li>
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
       </ul><strong>This will not:</strong><ul>
         <li>Remove or change anyone who is not in this file.</li>
