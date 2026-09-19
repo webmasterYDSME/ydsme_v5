@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, CircleAlert, X } from "lucide-react";
 import { membershipErrorMessage, membershipNoticeMessage } from "@/lib/membership-admin/messages";
 import styles from "../memberships.module.css";
@@ -25,16 +25,23 @@ export function FlashToast() {
   const pathname = usePathname();
   const error = params.get("error");
   const notice = params.get("notice");
+  const router = useRouter();
   const hovering = useRef(false);
+  const showing = error ? `error:${error}` : notice ? `notice:${notice}` : null;
+  // The message being closed. Closing hides it straight away, whatever the address does next.
+  const [closed, setClosed] = useState<string | null>(null);
 
   const dismiss = useCallback(() => {
+    setClosed(showing);
     const url = new URL(window.location.href);
     url.searchParams.delete("error");
     url.searchParams.delete("notice");
-    window.history.replaceState(window.history.state, "", `${pathname}${url.search}${url.hash}`);
-  }, [pathname]);
+    router.replace(`${pathname}${url.search}${url.hash}`, { scroll: false });
+  }, [pathname, router, showing]);
 
-  const showing = error ? `error:${error}` : notice ? `notice:${notice}` : null;
+  // Once the address has been cleared, the next message may be the same one and must show again.
+  if (!showing && closed !== null) setClosed(null);
+
   useEffect(() => {
     if (!showing || showing.startsWith("error:")) return;
     let timer: ReturnType<typeof setTimeout>;
@@ -43,7 +50,7 @@ export function FlashToast() {
     return () => clearTimeout(timer);
   }, [showing, dismiss]);
 
-  if (!error && !notice) return null;
+  if ((!error && !notice) || closed === showing) return null;
   const isError = Boolean(error);
   return <div className={styles.toastLayer}>
     <div

@@ -478,7 +478,17 @@ export async function confirmOfflineMembership(formData: FormData) {
     p_received_on: receivedOn,
   });
   const memberId = data?.[0]?.member_id;
-  if (error || !memberId) redirect("/admin/memberships?error=offline-payment-confirmation-failed");
+  if (error || !memberId) {
+    // The database says exactly why it refused; keep that in the server log and give the officer the plain reason.
+    console.error("Offline membership could not be activated", error);
+    const reason = error?.message ?? "";
+    const code = reason.includes("membership_possible_duplicate") ? "offline-payment-duplicate"
+      : reason.includes("membership_guardian_not_verified") ? "offline-payment-guardian"
+      : reason.includes("membership_payment_amount_invalid") ? "offline-payment-amount"
+      : reason.includes("membership_price_unavailable") ? "price-unavailable"
+      : "offline-payment-confirmation-failed";
+    redirect(`/admin/memberships?error=${code}`);
+  }
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=offline-payment-confirmed");
