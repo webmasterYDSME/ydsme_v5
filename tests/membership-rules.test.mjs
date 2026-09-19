@@ -9,6 +9,8 @@ import {
   membershipRenewalAt,
   proratedMembershipFee,
 } from "../lib/membership-rules.ts";
+import { readMembershipAdminSource } from "./membership-admin-source.mjs";
+import { readAccountSource } from "./account-source.mjs";
 
 const eligibilityPlans = [
   { id: "junior", slug: "junior", minimum_age: 14, maximum_age: 17 },
@@ -35,7 +37,9 @@ test("rounds prorated fees to the nearest penny and gives December to the follow
 
 test("calculates exact age boundaries without local-time drift", () => {
   assert.equal(ageOn("2008-08-20", new Date("2026-08-20T00:00:00Z")), 18);
-  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T23:59:59Z")), 17);
+  // Ages follow the London date, so the last second of 20 August in London (22:59:59 UTC in summer) is still the 20th.
+  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T22:59:59Z")), 17);
+  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T23:00:00Z")), 18);
   assert.equal(ageOn("1946-08-20", new Date("2026-08-20T12:00:00Z")), 80);
 });
 
@@ -103,7 +107,7 @@ test("keeps applications safe when online Checkout cannot be created", async () 
     readFile(new URL("app/membership/verify/route.ts", root), "utf8"),
     readFile(new URL("app/membership/checkout/page.tsx", root), "utf8"),
     readFile(new URL("app/membership/apply/page.tsx", root), "utf8"),
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
   ]);
   assert.match(membership, /class MembershipCheckoutUnavailableError/);
   assert.match(membership, /membership\.application-payment-unavailable/);
@@ -122,30 +126,29 @@ test("keeps applications safe when online Checkout cannot be created", async () 
   assert.match(checkoutRoute, /getApplicationCheckoutSummaryFromToken/);
   assert.match(checkoutRoute, /continueApplicationCheckout/);
   assert.match(applicationPage, /"payment-unavailable"[\s\S]*Application safely saved/);
-  assert.match(officerPage, /Online payments need attention/);
-  assert.match(officerPage, /Online payments are not fully set up/);
-  assert.match(officerPage, /Online payments need attention \(\{checkoutProblemCount\}\)/);
-  assert.match(officerPage, /title=\{checkoutProblemCount \? "Online payments need attention" : "Online payments are ready"\}/);
-  assert.match(officerPage, /Online payments are ready/);
-  assert.match(officerPage, /membership\.application-payment-attention-officer/);
+  // Payment problems are Inbox tasks: setup gaps, failed checkouts and unrecorded confirmations all appear there.
+  const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");
+  assert.match(inbox, /Online payments are not fully set up/);
+  assert.match(inbox, /membership\.application-payment-attention-officer/);
+  assert.match(inbox, /Payment page could not be opened/);
+  assert.match(inbox, /Confirmed payment could not be recorded/);
+  assert.match(officerPage, /Online payments and email are working/);
 });
 
 test("keeps annual fees prominent while hiding rarely changed membership rules", async () => {
   const [officerPage, actions] = await Promise.all([
-    readFile(new URL("../app/admin/memberships/page.tsx", import.meta.url), "utf8"),
+    readMembershipAdminSource(),
     readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(officerPage, /Membership types and annual fees/);
-  assert.match(officerPage, /current fee continues automatically each year/);
-  assert.match(officerPage, /Save fee change/);
-  assert.match(officerPage, /<details className="membership-plan-settings">/);
-  assert.match(officerPage, /Edit membership details/);
-  assert.match(officerPage, /Save membership details/);
+  assert.match(officerPage, /Membership types and fees/);
+  assert.match(officerPage, /A fee carries on from year to year/);
+  assert.match(officerPage, /Save fee/);
+  assert.match(officerPage, /Edit type/);
+  assert.match(officerPage, /Save membership type/);
   assert.doesNotMatch(officerPage, /Save new annual fee/);
-  assert.doesNotMatch(officerPage, /Save membership type/);
-  assert.match(actions, /section=plans&notice=price-saved#plans/);
-  assert.match(actions, /section=plans&notice=plan-updated#plans/);
-  assert.match(actions, /section=plans&error=price-save-failed#plans/);
+  assert.match(actions, /renewals\?notice=price-saved/);
+  assert.match(actions, /renewals\?notice=plan-updated/);
+  assert.match(actions, /renewals\?error=price-save-failed/);
 });
 
 test("carries unchanged annual fees forward and delays future Stripe price changes", async () => {
@@ -155,7 +158,7 @@ test("carries unchanged annual fees forward and delays future Stripe price chang
     readFile(new URL("lib/membership.ts", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
     readFile(new URL("app/api/stripe/webhook/route.ts", root), "utf8"),
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
   ]);
   assert.match(migration, /ensure_membership_plan_price/);
   assert.match(migration, /carried_forward_from_id/);
@@ -169,25 +172,26 @@ test("carries unchanged annual fees forward and delays future Stripe price chang
   assert.match(actions, /notice=price-unchanged/);
   assert.match(webhook, /ensureMembershipPlanPrice\(pricedMember\.current_plan_id, invoiceYear \+ 1\)/);
   assert.match(webhook, /proration_behavior: "none"/);
-  assert.match(officerPage, /Use this only when the amount changes/);
-  assert.match(officerPage, /Continued/);
+  assert.match(officerPage, /Change it only when the amount changes/);
+  assert.match(officerPage, /carried on/);
 });
 
 test("shows a single paid membership amount because partial payments are unsupported", async () => {
-  const accountPage = await readFile(new URL("../app/account/page.tsx", import.meta.url), "utf8");
-  assert.match(accountPage, /<dt>Paid<\/dt><dd>\{money\(membership\.term\.amount_paid_pence\)\}<\/dd>/);
+  const accountPage = await readAccountSource();
+  assert.match(accountPage, /<dt>Paid<\/dt><dd>\{money\(term\.amount_paid_pence\)\}<\/dd>/);
   assert.match(accountPage, /term\.amount_paid_pence !== term\.amount_due_pence/);
 });
 
 test("keeps officer contact and renewal work safe and understandable", async () => {
   const root = new URL("../", import.meta.url);
   const [officerPage, renewalForm, actions] = await Promise.all([
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
-    readFile(new URL("app/admin/memberships/OfficerRenewalPaymentForm.tsx", root), "utf8"),
+    readMembershipAdminSource(),
+    readFile(new URL("app/admin/memberships/_components/MemberPaymentPanel.tsx", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
   ]);
-  assert.match(officerPage, /const manualContactTasks = Array\.from\(new Map/);
-  assert.match(officerPage, /Mark all updates as contacted/);
+  const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");
+  assert.match(inbox, /function onePerMember[\s\S]*Array\.from\(new Map/);
+  assert.match(officerPage, /Mark as contacted/);
   assert.match(officerPage, /Each person appears once/);
   assert.match(renewalForm, /Amount to record/);
   assert.match(renewalForm, /No payment due/);
@@ -253,6 +257,19 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(applicationWizard, /value="bank_transfer"/);
   assert.match(applicationWizard, /value="cheque"/);
   assert.match(guardianPage, /I confirm my consent/);
-  assert.match(settingsPage, /section: "payment-settings"/);
+  assert.match(settingsPage, /tab: "payment"/);
+  assert.match(settingsPage, /\/admin\/memberships\/setup/);
   assert.doesNotMatch(applicationWizard, /bank_account_number/);
+});
+
+test("fees, billing years and ages follow the London date, as the database does, in the hour after midnight in summer", () => {
+  // 23:30 UTC on 31 May is 00:30 on 1 June in London, so June's fee applies.
+  const justAfterMidnightInLondon = new Date("2027-05-31T23:30:00Z");
+  assert.equal(proratedMembershipFee(1200, justAfterMidnightInLondon), 700);
+  assert.equal(proratedMembershipFee(1200, new Date("2027-05-31T22:30:00Z")), 800);
+  // In winter London and UTC are the same, so the year boundary is unchanged.
+  assert.equal(membershipBillingYear(new Date("2027-11-30T23:30:00Z")), 2027);
+  assert.equal(membershipBillingYear(new Date("2027-12-01T00:30:00Z")), 2028);
+  assert.equal(ageOn("2000-07-01", new Date("2027-06-30T23:30:00Z")), 27);
+  assert.equal(ageOn("2000-07-01", new Date("2027-06-30T22:30:00Z")), 26);
 });

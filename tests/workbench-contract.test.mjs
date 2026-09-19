@@ -44,15 +44,16 @@ test("keeps Workbench projects and photographs inside the active-member boundary
 });
 
 test("provides the complete member Workbench journey", async () => {
-  const [index, detail, create, dashboard, navigation, library, imageField, styles] = await Promise.all([
+  const [index, detail, create, dashboard, navigation, library, imageField, styles, navigationStyles] = await Promise.all([
     read("app/dashboard/workbench/page.tsx"),
     read("app/dashboard/workbench/[id]/page.tsx"),
     read("app/dashboard/workbench/new/page.tsx"),
     read("app/dashboard/page.tsx"),
-    read("app/components/PortalNavigation.tsx"),
+    Promise.all([read("lib/portal-nav.ts"), read("app/components/PortalNavigation.tsx")]).then((parts) => parts.join("\n")),
     read("app/dashboard/library/page.tsx"),
     read("app/components/ProjectImageUploadField.tsx"),
     read("app/globals.css"),
+    read("app/components/portal-navigation.module.css"),
   ]);
 
   assert.match(index, /Help wanted/);
@@ -72,7 +73,7 @@ test("provides the complete member Workbench journey", async () => {
   assert.match(library, /Committee minutes/);
   assert.match(library, /Society publications/);
   assert.match(library, /Member resources/);
-  assert.match(styles, /\.portal-nav-group/);
+  assert.match(navigationStyles, /\.sectionLabel/);
   assert.match(styles, /\.library-grid/);
   assert.match(styles, /\.workbench-project-card\{display:flex;flex-direction:column\}/);
   assert.match(styles, /\.workbench-project-card-body\{display:flex;flex:1;flex-direction:column\}/);

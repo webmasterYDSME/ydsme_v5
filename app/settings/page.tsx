@@ -17,10 +17,10 @@ export default async function Settings({
 }) {
   const query = await searchParams;
   if (query.tab === "membership" || query.notice === "membership-payment-settings-saved") {
-    const destination = new URLSearchParams({ section: "payment-settings" });
+    const destination = new URLSearchParams({ tab: "payment" });
     if (query.error) destination.set("error", query.error);
     if (query.notice) destination.set("notice", query.notice);
-    redirect(`/admin/memberships?${destination}`);
+    redirect(`/admin/memberships/setup?${destination}`);
   }
   await requireCapability("settings.manage");
   if (query.tab === "donations" || query.notice === "donations-saved") redirect("/admin/donations?view=appeals");

@@ -6,7 +6,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "next dev -p 3010",
+    "dev": "next dev -p 3010 --webpack",
     "build": "next build",
     "start": "next start",
     "supabase:start": "supabase start && node scripts/configure-local-supabase.mjs",

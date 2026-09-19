@@ -9,6 +9,7 @@ import { EditorDialog } from "./EditorDialog";
 import { SignedUploadField } from "./SignedUploadField";
 import { savePeople } from "@/lib/actions/people";
 import type { AppRole } from "@/lib/auth";
+import { nameFieldProps } from "@/app/components/nameField";
 
 export type PeopleAccount = { id: string; full_name: string | null; email: string; role: AppRole; officer: boolean };
 export type CommitteeListing = { id: number; name: string; title: string; email: string; file_url: string; user_id: string | null; is_public: boolean; position: number; updated_at: string };
@@ -85,7 +86,7 @@ function PeopleForm({ member, listing, accounts, actorId, membershipEnabled, req
           setSelectedId(event.target.value); setRole(account?.role || "committee"); setOfficer(account?.officer || false);
         }}><option value="">No account / vacant position</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.full_name || account.email}</option>)}</select></label>}
         {member && selected && <>
-          <label className="wide">Full name<input name="full_name" defaultValue={member.full_name || ""} minLength={2} maxLength={180} autoComplete="off" required/></label>
+          <label className="wide">Full name<input name="full_name" {...nameFieldProps} defaultValue={member.full_name || ""} minLength={2} maxLength={180} autoComplete="off" required/></label>
           <label className={role === "committee" ? "" : "wide"}>Website role<select aria-label="Website role" value={role} disabled={selected.id === actorId} onChange={event => { setRole(event.target.value as AppRole); if (event.target.value !== "committee") setOfficer(false); }}>
             <option value="member">Member</option><option value="committee">Committee</option><option value="administrator">Administrator</option>
           </select></label>

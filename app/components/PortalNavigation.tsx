@@ -4,153 +4,97 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen, CalendarDays, ChevronDown, Gauge, Globe2, Hammer, HandCoins,
-  History, Landmark, LogOut, Menu, Megaphone, Settings, TicketCheck, UserRound,
-  UsersRound, Wrench, X,
+  BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
+  LayoutDashboard, LogOut, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings,
+  TicketCheck, UserRound, Wrench, X, type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore, type ComponentType } from "react";
-import type { AppRole } from "@/lib/auth";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { PortalSearch } from "@/app/components/PortalSearch";
+import {
+  accountLink, attentionCount, initials, itemIsCurrent, navItems, portalSidebarCollapsed,
+  portalSidebarCookie, portalSidebarExpanded, type PortalIcon, type PortalNavItem, type PortalNavSection,
+} from "@/lib/portal-nav";
+import styles from "./portal-navigation.module.css";
 
-type PortalLink = {
-  href: string;
-  label: string;
-  icon: ComponentType;
-  activePaths?: string[];
-  count?: number;
-};
-
-type PortalGroup = {
-  id: string;
-  label: string;
-  icon: ComponentType;
-  links: PortalLink[];
+const icons: Record<PortalIcon, LucideIcon> = {
+  overview: LayoutDashboard,
+  workbench: Hammer,
+  library: BookOpen,
+  memberships: IdCard,
+  accounts: KeyRound,
+  donations: HandHeart,
+  announcements: Megaphone,
+  events: CalendarDays,
+  bookings: TicketCheck,
+  workshops: Wrench,
+  settings: Settings,
+  audit: History,
 };
 
 type PortalNavigationProps = {
-  role: AppRole;
+  sections: PortalNavSection[];
   name: string;
-  canViewContent: boolean;
-  administrator: boolean;
-  membershipOfficer: boolean;
-  membershipEnabled: boolean;
-  membershipTaskCount: number;
+  roleLabel: string;
+  initialCollapsed: boolean;
+  canSearchMembers: boolean;
 };
 
-const memberLinks: PortalLink[] = [
-  { href: "/dashboard/workbench", label: "Project workbench", icon: Hammer },
-  {
-    href: "/dashboard/library",
-    label: "Society library",
-    icon: BookOpen,
-    activePaths: ["/dashboard/minutes", "/dashboard/publications", "/dashboard/resources"],
-  },
-];
+const taskText = (count: number) => `${count} ${count === 1 ? "task needs" : "tasks need"} attention`;
+const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");
 
-const contentLinks: PortalLink[] = [
-  { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
-  { href: "/admin/events", label: "Events", icon: CalendarDays },
-  { href: "/admin/bookings", label: "Visitor bookings", icon: TicketCheck },
-  { href: "/admin/workshops", label: "Workshops", icon: Wrench },
-];
-
-const administratorLinks: PortalLink[] = [
-  { href: "/settings", label: "Site settings", icon: Settings },
-  { href: "/admin/audit", label: "Important changes", icon: History },
-];
-
-function pathMatches(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-function linkIsCurrent(pathname: string, link: PortalLink) {
-  return pathMatches(pathname, link.href) || Boolean(link.activePaths?.some((href) => pathMatches(pathname, href)));
-}
-
-const navigationStorageKey = "portal-navigation-groups";
-const navigationStorageEvent = "portal-navigation-groups-change";
-
-function subscribeToNavigationStorage(onStoreChange: () => void) {
-  window.addEventListener("storage", onStoreChange);
-  window.addEventListener(navigationStorageEvent, onStoreChange);
-  return () => {
-    window.removeEventListener("storage", onStoreChange);
-    window.removeEventListener(navigationStorageEvent, onStoreChange);
-  };
-}
-
-function getNavigationStorageSnapshot() {
-  return window.localStorage.getItem(navigationStorageKey) || "[]";
-}
-
-function getNavigationStorageServerSnapshot() {
-  return "[]";
-}
-
-export function PortalNavigation(props: PortalNavigationProps) {
+export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, canSearchMembers }: PortalNavigationProps) {
   const pathname = usePathname();
-  return <PortalNavigationForPath key={pathname} {...props} pathname={pathname}/>;
-}
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
+  // Each panel remembers the page it was opened on, so it closes by itself when the page changes.
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const [accountPath, setAccountPath] = useState<string | null>(null);
+  const [searchPath, setSearchPath] = useState<string | null>(null);
+  const menuOpen = menuPath === pathname;
+  const accountOpen = accountPath === pathname;
+  const searchOpen = searchPath === pathname;
 
-function PortalNavigationForPath({
-  role,
-  name,
-  canViewContent,
-  administrator,
-  membershipOfficer,
-  membershipEnabled,
-  membershipTaskCount,
-  pathname,
-}: PortalNavigationProps & { pathname: string }) {
-  const groups: PortalGroup[] = [
-    { id: "members", label: "For members", icon: UserRound, links: memberLinks },
-    ...(canViewContent ? [{ id: "website", label: "Website", icon: Globe2, links: contentLinks }] : []),
-    ...(role !== "member" ? [{
-      id: "membership",
-      label: "Membership and money",
-      icon: Landmark,
-      links: [
-        ...(membershipOfficer && membershipEnabled ? [{ href: "/admin/memberships", label: "Memberships", icon: UsersRound, count: membershipTaskCount }] : []),
-        { href: "/admin/members", label: administrator ? "People" : "Member register", icon: UsersRound, activePaths: ["/admin/people"] },
-        ...((membershipOfficer || administrator) ? [{ href: "/admin/donations", label: "Donations", icon: HandCoins }] : []),
-      ],
-    }] : []),
-  ];
-  const activeGroupId = groups.find((group) => group.links.some((link) => linkIsCurrent(pathname, link)))?.id;
-  const [open, setOpen] = useState(false);
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(activeGroupId ?? null);
-  const storedGroups = useSyncExternalStore(subscribeToNavigationStorage, getNavigationStorageSnapshot, getNavigationStorageServerSnapshot);
-  let rememberedGroups: string[] = [];
-  try {
-    const parsed = JSON.parse(storedGroups);
-    if (Array.isArray(parsed)) rememberedGroups = parsed.filter((value): value is string => typeof value === "string");
-  } catch {
-    rememberedGroups = [];
-  }
-  const visibleGroup = expandedGroup ?? rememberedGroups[0] ?? null;
   const menuButton = useRef<HTMLButtonElement>(null);
-  const navigationPanel = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const accountArea = useRef<HTMLDivElement>(null);
+  const accountButton = useRef<HTMLButtonElement>(null);
 
+  const items = navItems(sections);
+  const attention = attentionCount(sections);
+
+  // Ctrl+K or Cmd+K opens search from anywhere in the portal.
   useEffect(() => {
-    if (!open) return;
+    function openWithShortcut(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setMenuPath(null);
+        setAccountPath(null);
+        setSearchPath(pathname);
+      }
+    }
+    window.addEventListener("keydown", openWithShortcut);
+    return () => window.removeEventListener("keydown", openWithShortcut);
+  }, [pathname]);
 
+  // The phone drawer: lock page scroll, keep Tab inside it, close on Escape or when the screen becomes wide.
+  useEffect(() => {
+    if (!menuOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    navigationPanel.current?.querySelector<HTMLAnchorElement>("a")?.focus();
+    panel.current?.querySelector<HTMLElement>("a")?.focus();
 
-    function handleMenuKeyboard(event: KeyboardEvent) {
+    function handleKeyboard(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setOpen(false);
+        setMenuPath(null);
         menuButton.current?.focus();
         return;
       }
-
       if (event.key !== "Tab") return;
-      const panelControls = navigationPanel.current?.querySelectorAll<HTMLElement>("a, button:not(:disabled)");
-      const focusable = [menuButton.current, ...Array.from(panelControls ?? [])].filter((control): control is HTMLElement => control !== null);
-      const first = focusable[0];
-      const last = focusable.at(-1);
+      const controls = Array.from(panel.current?.querySelectorAll<HTMLElement>("a, button:not(:disabled)") ?? [])
+        .filter((control) => control.getClientRects().length > 0);
+      const first = controls[0];
+      const last = controls.at(-1);
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();
@@ -160,94 +104,132 @@ function PortalNavigationForPath({
       }
     }
 
-    const mobileNavigation = window.matchMedia("(max-width: 1024px)");
+    const tabletUp = window.matchMedia("(min-width: 1025px)");
     function closeAtDesktopWidth(event: MediaQueryListEvent) {
-      if (!event.matches) setOpen(false);
+      if (event.matches) setMenuPath(null);
     }
-
-    window.addEventListener("keydown", handleMenuKeyboard);
-    mobileNavigation.addEventListener("change", closeAtDesktopWidth);
+    window.addEventListener("keydown", handleKeyboard);
+    tabletUp.addEventListener("change", closeAtDesktopWidth);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleMenuKeyboard);
-      mobileNavigation.removeEventListener("change", closeAtDesktopWidth);
+      window.removeEventListener("keydown", handleKeyboard);
+      tabletUp.removeEventListener("change", closeAtDesktopWidth);
     };
-  }, [open]);
+  }, [menuOpen]);
 
-  function closeMenu() {
-    setOpen(false);
-  }
+  // The account menu closes when you press Escape or click anywhere outside it.
+  useEffect(() => {
+    if (!accountOpen) return;
+    function closeOutside(event: PointerEvent) {
+      if (!accountArea.current?.contains(event.target as Node)) setAccountPath(null);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setAccountPath(null);
+        accountButton.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [accountOpen]);
 
-  function closeMenuAndRestoreFocus() {
-    setOpen(false);
-    menuButton.current?.focus();
-  }
-
-  function toggleGroup(groupId: string) {
-    const next = visibleGroup === groupId ? null : groupId;
-    setExpandedGroup(next);
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsed(next);
+    setAccountPath(null);
     try {
-      window.localStorage.setItem(navigationStorageKey, JSON.stringify(next ? [next] : []));
-      window.dispatchEvent(new Event(navigationStorageEvent));
+      const secure = window.location.protocol === "https:" ? "; secure" : "";
+      document.cookie = `${portalSidebarCookie}=${next ? portalSidebarCollapsed : portalSidebarExpanded}; path=/; max-age=31536000; samesite=lax${secure}`;
     } catch {
-      // Navigation remains usable when browser storage is unavailable.
+      // The sidebar still works when cookies are blocked; the choice just is not remembered.
     }
   }
 
+  function openSearch() {
+    setMenuPath(null);
+    setAccountPath(null);
+    setSearchPath(pathname);
+  }
+
+  function renderLink(item: PortalNavItem) {
+    const current = itemIsCurrent(pathname, item);
+    const Icon = icons[item.icon];
+    return <Link key={item.key} href={item.href} prefetch={false} data-tip={item.label} aria-current={current ? "page" : undefined} className={cx(styles.link, current && styles.linkOn)}>
+      <Icon aria-hidden="true"/>
+      <span className={styles.label}>{item.label}</span>
+      {(item.count ?? 0) > 0 ? <span className={styles.count}><span className={styles.srOnly}>{taskText(item.count!)}</span><span aria-hidden="true">{item.count}</span></span> : null}
+    </Link>;
+  }
+
+  const signOutForm = <form action={signOut}>
+    <PendingSubmitButton className={styles.popItem} pendingLabel="Signing out…"><LogOut aria-hidden="true"/>Sign out</PendingSubmitButton>
+  </form>;
+
   return <>
-    <aside className={open ? "portal-sidebar is-open" : "portal-sidebar"}>
-      <div className="portal-sidebar-top">
-        <Link href="/" className="portal-brand" prefetch={false} onClick={closeMenu}>
+    <aside className={cx(styles.sidebar, collapsed && styles.rail, menuOpen && styles.open)} aria-label="Portal sidebar">
+      <button type="button" className={cx(styles.scrim, menuOpen && styles.scrimOn)} aria-label="Close navigation" tabIndex={-1} onClick={() => { setMenuPath(null); menuButton.current?.focus(); }}/>
+      <div className={styles.top}>
+        <Link href="/" className={styles.brand} prefetch={false}>
           <Image src="/ydsme-logo-detailed-gold-lions.png" alt="York Model Engineers" width={72} height={72}/>
-          <span>York Model<br/><b>Engineers</b></span>
+          <span className={styles.brandText}>York Model<br/><b>Engineers</b></span>
         </Link>
-        <button ref={menuButton} className="portal-menu-button" type="button" aria-controls="portal-navigation" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-          <span>{open ? "Close" : "Menu"}</span>
-          {open ? <X aria-hidden="true"/> : <Menu aria-hidden="true"/>}
+        <button type="button" className={styles.collapseButton} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} aria-expanded={!collapsed} aria-controls="portal-navigation" onClick={toggleCollapsed}>
+          {collapsed ? <PanelLeftOpen aria-hidden="true"/> : <PanelLeftClose aria-hidden="true"/>}
         </button>
+        <div className={styles.topActions}>
+          <button type="button" className={styles.iconButton} aria-label="Search" onClick={openSearch}><Search aria-hidden="true"/></button>
+          <button ref={menuButton} type="button" className={styles.menuButton} aria-controls="portal-navigation" aria-expanded={menuOpen} onClick={() => setMenuPath(menuOpen ? null : pathname)}>
+            <Menu aria-hidden="true"/>Menu
+            {attention > 0 ? <span className={styles.menuBadge}><span className={styles.srOnly}>{taskText(attention)}</span><span aria-hidden="true">{attention}</span></span> : null}
+          </button>
+        </div>
       </div>
-      <div ref={navigationPanel} id="portal-navigation" className="portal-navigation-panel" role={open ? "dialog" : undefined} aria-modal={open ? "true" : undefined} aria-label={open ? "Navigation menu" : undefined}>
-        <nav aria-label="Member navigation">
-          <Link href="/dashboard" prefetch={false} onClick={closeMenu} aria-current={pathname === "/dashboard" ? "page" : undefined} className={`portal-nav-overview${pathname === "/dashboard" ? " active" : ""}`}><Gauge/>Overview</Link>
-          {groups.map((group) => {
-            const expanded = visibleGroup === group.id;
-            const current = group.id === activeGroupId;
-            const taskCount = group.links.reduce((total, link) => total + (link.count ?? 0), 0);
-            const GroupIcon = group.icon;
-            return <section className={`portal-nav-group${current ? " has-active" : ""}`} key={group.id}>
-              <button type="button" className="portal-nav-group-toggle" aria-expanded={expanded} aria-controls={`portal-nav-${group.id}`} onClick={() => toggleGroup(group.id)}>
-                <GroupIcon aria-hidden="true"/>
-                <span>{group.label}</span>
-                {taskCount > 0 && !expanded ? <span className="portal-nav-count" aria-label={`${taskCount} ${taskCount === 1 ? "task needs" : "tasks need"} attention`}>{taskCount}</span> : null}
-                <ChevronDown className="portal-nav-chevron" aria-hidden="true"/>
-              </button>
-              <div id={`portal-nav-${group.id}`} className={`portal-nav-group-links${expanded ? " is-expanded" : ""}`}>
-                {group.links.map((link) => {
-                  const linkCurrent = linkIsCurrent(pathname, link);
-                  const Icon = link.icon;
-                  return <Link key={link.href} href={link.href} prefetch={false} onClick={closeMenu} aria-current={linkCurrent ? "page" : undefined} className={linkCurrent ? "active" : undefined}>
-                    <Icon aria-hidden="true"/>
-                    <span>{link.label}</span>
-                    {(link.count ?? 0) > 0 ? <span className="portal-nav-count" aria-label={`${link.count} ${link.count === 1 ? "task needs" : "tasks need"} attention`}>{link.count}</span> : null}
-                  </Link>;
-                })}
-              </div>
-            </section>;
-          })}
-          {administrator && administratorLinks.map((link) => {
-            const current = linkIsCurrent(pathname, link);
-            const Icon = link.icon;
-            return <Link key={link.href} href={link.href} prefetch={false} onClick={closeMenu} aria-current={current ? "page" : undefined} className={current ? "active" : undefined}><Icon aria-hidden="true"/><span>{link.label}</span></Link>;
-          })}
+
+      <div ref={panel} id="portal-navigation" className={styles.panel} role={menuOpen ? "dialog" : undefined} aria-modal={menuOpen ? "true" : undefined} aria-label={menuOpen ? "Navigation menu" : undefined}>
+        <div className={styles.drawerHead}>
+          <span>Menu</span>
+          <button type="button" className={styles.iconButton} aria-label="Close menu" onClick={() => { setMenuPath(null); menuButton.current?.focus(); }}><X aria-hidden="true"/></button>
+        </div>
+        <button type="button" className={cx(styles.search, styles.desktopOnly)} data-tip="Search" aria-keyshortcuts="Control+K Meta+K" onClick={openSearch}>
+          <Search aria-hidden="true"/>
+          <span className={styles.label}>{canSearchMembers ? "Search pages and members" : "Search pages"}</span>
+        </button>
+        <nav className={styles.nav} aria-label="Main">
+          {sections.map((section) => section.label === null
+            ? section.items.map(renderLink)
+            : <div key={section.id} className={styles.section} role="group" aria-labelledby={`portal-nav-${section.id}`}>
+              <p id={`portal-nav-${section.id}`} className={styles.sectionLabel}>{section.label}</p>
+              {section.items.map(renderLink)}
+            </div>)}
         </nav>
-        <div className="portal-account">
-          <span className="role-chip">{role}</span>
-          <strong>{name}</strong>
-          <Link href="/account" prefetch={false} onClick={closeMenu} aria-current={pathname === "/account" ? "page" : undefined} className={pathname === "/account" ? "active" : undefined}><UserRound/>Account</Link>
-          <form action={signOut}><PendingSubmitButton pendingLabel="Signing out…"><LogOut/>Sign out</PendingSubmitButton></form>
+
+        <div ref={accountArea} className={styles.footer}>
+          <div className={styles.desktopAccount}>
+            {accountOpen ? <div id="portal-account-menu" className={styles.pop}>
+              <Link href={accountLink.href} prefetch={false} className={styles.popItem} aria-current={pathname === accountLink.href ? "page" : undefined}><UserRound aria-hidden="true"/>{accountLink.label}</Link>
+              {signOutForm}
+            </div> : null}
+            <button ref={accountButton} type="button" className={styles.accountButton} aria-expanded={accountOpen} aria-controls={accountOpen ? "portal-account-menu" : undefined} aria-label={`Account menu for ${name}`} onClick={() => setAccountPath(accountOpen ? null : pathname)}>
+              <span className={styles.avatar} aria-hidden="true">{initials(name)}</span>
+              <span className={styles.accountText}><strong>{name}</strong><small>{roleLabel}</small></span>
+              <ChevronsUpDown className={styles.accountChevron} aria-hidden="true"/>
+            </button>
+          </div>
+          <div className={styles.mobileAccount}>
+            <div className={styles.accountRow}>
+              <span className={styles.avatar} aria-hidden="true">{initials(name)}</span>
+              <span className={styles.accountText}><strong>{name}</strong><small>{roleLabel}</small></span>
+            </div>
+            <Link href={accountLink.href} prefetch={false} className={styles.popItem} aria-current={pathname === accountLink.href ? "page" : undefined}><UserRound aria-hidden="true"/>{accountLink.label}</Link>
+            {signOutForm}
+          </div>
         </div>
       </div>
     </aside>
-    <button className={open ? "portal-nav-scrim is-visible" : "portal-nav-scrim"} type="button" aria-label="Close navigation" tabIndex={-1} onClick={closeMenuAndRestoreFocus}/>
+    {searchOpen ? <PortalSearch items={items} canSearchMembers={canSearchMembers} onClose={() => setSearchPath(null)}/> : null}
   </>;
 }

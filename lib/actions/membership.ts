@@ -1,6 +1,8 @@
 "use server";
 
 import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
+import { capitaliseName, dateLabel } from "@/lib/membership-admin/format";
+import { guardianConsentMethods, submittedValues, type HonoraryMemberState, type OfficerMemberState, type PossibleDuplicate } from "@/lib/membership-admin/officer-member";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -9,17 +11,21 @@ import {
   PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
   PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
 } from "@/lib/cache-tags";
-import { refreshMembershipApplicationPaymentLink } from "@/lib/membership";
+import { closeOpenMembershipCheckouts, refreshMembershipApplicationPaymentLink } from "@/lib/membership";
 import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
+import { normaliseAccountNumber, normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
+import { likeLiteral } from "@/lib/like-literal";
+import { assessAmountReceived } from "@/lib/membership-admin/amount";
+import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
   membershipAdministrationEnabled,
   membershipBillingEnabled,
-  membershipMode,
   membershipRecoveryEnabled,
 } from "@/lib/features";
 import {
+  ageOn,
   defaultMembershipPlan,
   eligibleMembershipPlans,
   membershipBillingYear,
@@ -54,7 +60,7 @@ const londonToday = () => new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date());
 const normalizeIdentityName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
-const postgrestLikeLiteral = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+const postgrestLikeLiteral = likeLiteral;
 const normalizeApplicationDate = (value: unknown) => {
   if (typeof value !== "string") return value;
   const match = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
@@ -87,11 +93,6 @@ export async function submitMembershipApplication(formData: FormData) {
   const verified = await getSignupVerification();
   if (!verified || verified.email !== applicationEmail || verified.full_name !== normalizeIdentityName(parsed.data.full_name)) redirect("/membership/apply?application=verification-required");
   if (!applicationEmail) redirect("/membership/apply?application=invalid");
-  if (membershipMode() === "live") {
-    const { count, error: blockerError } = await createServiceClient().from("membership_migration_reviews")
-      .select("id", { count: "exact", head: true }).eq("status", "pending");
-    if (blockerError || (count ?? 0) > 0) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  }
   if (!await consumeRateLimit("membership-application", 5, 60 * 60, applicationEmail)) {
     redirect("/membership/apply?application=received");
   }
@@ -230,13 +231,22 @@ export async function unsubscribeMembershipNewsletter(formData: FormData) {
   const token = z.string().min(20).max(1000).parse(formData.get("token"));
   const email = emailFromNewsletterUnsubscribeToken(token);
   if (!email) redirect("/membership/newsletter/unsubscribe?result=invalid");
-  const { error } = await createServiceClient().from("membership_email_suppressions").upsert({
-    normalized_email: email,
-    newsletter_suppressed: true,
-    transactional_suppressed: false,
-    reason: "The shared mailbox used the newsletter unsubscribe link.",
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "normalized_email" });
+  // Unsubscribing from the newsletter must not undo a block placed because emails to this address bounced
+  // or were reported, so an existing row only has its newsletter flag changed.
+  const admin = createServiceClient();
+  const { data: existing, error: lookupError } = await admin.from("membership_email_suppressions")
+    .select("normalized_email").eq("normalized_email", email).maybeSingle();
+  if (lookupError) redirect("/membership/newsletter/unsubscribe?result=invalid");
+  const { error } = existing
+    ? await admin.from("membership_email_suppressions")
+      .update({ newsletter_suppressed: true, updated_at: new Date().toISOString() }).eq("normalized_email", email)
+    : await admin.from("membership_email_suppressions").insert({
+      normalized_email: email,
+      newsletter_suppressed: true,
+      transactional_suppressed: false,
+      reason: "The shared mailbox used the newsletter unsubscribe link.",
+      updated_at: new Date().toISOString(),
+    });
   if (error) redirect("/membership/newsletter/unsubscribe?result=invalid");
   redirect("/membership/newsletter/unsubscribe?result=confirmed");
 }
@@ -313,7 +323,7 @@ export async function resendMembershipVerification(formData: FormData) {
   const admin = createServiceClient();
   const { data: applications } = await admin.from("membership_applications")
     .select("id,status,contact_email,full_name,guardian_email")
-    .ilike("contact_email", email.data)
+    .ilike("contact_email", likeLiteral(email.data))
     .in("status", ["email_verification_pending", "guardian_verification_pending"])
     .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(10);
   for (const application of applications ?? []) {
@@ -443,8 +453,29 @@ export async function recordOfflineApplicationPayment(formData: FormData) {
   redirect(`/admin/memberships?notice=offline-payment-${event}`);
 }
 
+/** Closes an application that is waiting for cash, a bank transfer or a cheque and is not going ahead (for example a repeat application). The applicant is not emailed. */
+export async function closeOfflineMembershipApplication(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const applicationId = idSchema.parse(formData.get("application_id"));
+  const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_applications")
+    .update({ status: "rejected", reviewed_by: user.id, reviewed_at: new Date().toISOString(), review_reason: reason })
+    .eq("id", applicationId).in("status", ["awaiting_cash", "awaiting_bank_transfer", "awaiting_cheque"]).select("id").maybeSingle();
+  if (error || !data) {
+    if (error) console.error("Application could not be closed", error);
+    redirect("/admin/memberships?error=application-unavailable");
+  }
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.application-closed",
+    entityType: "membership_application", entityId: applicationId, summary: reason,
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=application-closed");
+}
+
 export async function confirmOfflineMembership(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
+  const { user, role } = await requireCapability("memberships.manage");
   const applicationId = idSchema.parse(formData.get("application_id"));
   const paymentMethod = z.enum(["cash", "bank_transfer", "cheque"]).parse(formData.get("payment_method"));
   const reference = z.string().trim().min(2).max(120).parse(formData.get("payment_reference"));
@@ -467,6 +498,17 @@ export async function confirmOfflineMembership(formData: FormData) {
   const price = await ensureMembershipPlanPrice(application.requested_plan_id, year).catch(() => null);
   if (!price) redirect("/admin/memberships?error=price-unavailable");
   const amount = proratedMembershipFee(price.amount_pence, paymentDate);
+  const received = assessAmountReceived(formData.get("amount_received"), formData.get("amount_note"), amount);
+  if (received.kind === "invalid") redirect("/admin/memberships?error=amount-received-invalid");
+  if (received.kind === "over-needs-note") redirect("/admin/memberships?error=amount-difference-note");
+  if (received.kind === "short") {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.payment-short-reported",
+      entityType: "membership_application", entityId: applicationId,
+      summary: `Officer received £${(received.receivedPence / 100).toFixed(2)} against a fee of £${(amount / 100).toFixed(2)} (${reference}). Nothing was recorded.`,
+    });
+    redirect("/admin/memberships?error=amount-short");
+  }
   const { data, error } = await admin.rpc("activate_offline_membership_application", {
     p_application_id: applicationId,
     p_plan_price_id: price.id,
@@ -476,43 +518,85 @@ export async function confirmOfflineMembership(formData: FormData) {
     p_received_on: receivedOn,
   });
   const memberId = data?.[0]?.member_id;
-  if (error || !memberId) redirect("/admin/memberships?error=offline-payment-confirmation-failed");
+  if (error || !memberId) {
+    // The database says exactly why it refused; keep that in the server log and give the officer the plain reason.
+    console.error("Offline membership could not be activated", error);
+    const reason = error?.message ?? "";
+    const code = reason.includes("membership_possible_duplicate") ? "offline-payment-duplicate"
+      : reason.includes("membership_guardian_not_verified") ? "offline-payment-guardian"
+      : reason.includes("membership_payment_amount_invalid") ? "offline-payment-amount"
+      : reason.includes("membership_price_unavailable") ? "price-unavailable"
+      : "offline-payment-confirmation-failed";
+    redirect(`/admin/memberships?error=${code}`);
+  }
+  if (received.kind === "over") await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-extra-received",
+    entityType: "membership_application", entityId: applicationId,
+    summary: `Received £${(received.receivedPence / 100).toFixed(2)} against a fee of £${(amount / 100).toFixed(2)} (${reference}); extra £${(received.extraPence / 100).toFixed(2)}: ${received.note}`,
+  });
+  await closeOpenMembershipCheckouts({ applicationId });
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=offline-payment-confirmed");
 }
 
-export async function createOfficerManagedMembership(formData: FormData) {
+export async function createOfficerManagedMembership(previous: OfficerMemberState, formData: FormData): Promise<OfficerMemberState> {
   const { user } = await requireCapability("memberships.manage");
-  const parsed = z.object({
-    plan_id: z.string().uuid().optional(),
-    title: z.string().trim().max(10).default(""),
-    full_name: z.string().trim().min(2).max(180),
-    date_of_birth: z.iso.date(),
-    contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
-    contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
-    payment_method: z.enum(["cash", "bank_transfer", "cheque"]),
-    received_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
-    payment_reference: z.string().trim().max(120).optional().transform((value) => value || null),
-    guardian_name: z.string().trim().max(180).optional().transform((value) => value || null),
-    guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
-    guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
-    duplicate_override_reason: z.string().trim().max(500).optional().transform((value) => value || null),
-    address_line_one: z.string().trim().max(180).optional().transform((value) => value || null),
-    address_line_two: z.string().trim().max(180).optional().transform((value) => value || null),
-    city: z.string().trim().max(100).optional().transform((value) => value || null),
-    postcode: z.string().trim().max(20).optional().transform((value) => value || null),
-  }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/memberships?error=officer-member-details-invalid");
+  // A failed attempt returns the typed values to the open drawer instead of redirecting, so nothing has to be typed again.
+  const fail = (error: string): OfficerMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData), created: null });
+  let parsed;
+  try {
+    parsed = z.object({
+      plan_id: z.string().uuid().optional(),
+      title: z.string().trim().max(10).default(""),
+      full_name: z.string().trim().min(2).max(180).transform(capitaliseName),
+      date_of_birth: z.iso.date(),
+      contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
+      contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
+      payment_method: z.enum(["cash", "bank_transfer", "cheque"]),
+      received_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
+      payment_reference: z.string().trim().max(120).optional().transform((value) => value || null),
+      guardian_name: z.string().trim().max(180).optional().transform((value) => value ? capitaliseName(value) : null),
+      guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
+      guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
+      guardian_consent_method: z.enum(["paper_form", "in_person", "phone", "other"]).optional().catch(undefined),
+      guardian_consent_detail: z.string().trim().max(300).optional().transform((value) => value || null),
+      guardian_consent_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
+      newsletter_consent_source: z.enum(["paper_form", "in_person", "phone"]).optional().catch(undefined),
+      newsletter_consent_given_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
+      duplicate_override_reason: z.string().trim().max(500).optional().transform((value) => value || null),
+      address_line_one: z.string().trim().max(180).optional().transform((value) => value || null),
+      address_line_two: z.string().trim().max(180).optional().transform((value) => value || null),
+      city: z.string().trim().max(100).optional().transform((value) => value || null),
+      postcode: z.string().trim().max(20).optional().transform((value) => value || null),
+    }).safeParse(Object.fromEntries(formData));
+  } catch {
+    return fail("officer-member-details-invalid");
+  }
+  if (!parsed.success) return fail("officer-member-details-invalid");
+  if (!validMembershipPhone(parsed.data.contact_number ?? undefined)) return fail("phone-invalid");
+  const newsletter = formData.get("newsletter_opt_in") === "on";
+  if (newsletter && !parsed.data.contact_email) return fail("newsletter-email-required");
+  if (newsletter && !parsed.data.newsletter_consent_source) return fail("newsletter-consent-evidence-required");
+  if (newsletter && parsed.data.newsletter_consent_given_on && parsed.data.newsletter_consent_given_on > londonToday()) {
+    return fail("newsletter-consent-date-invalid");
+  }
+  // The guardian's consent is recorded as one plain sentence: how it was given, when, and any detail.
+  const guardianConsentNote = parsed.data.guardian_consent_method
+    ? [
+      `${guardianConsentMethods[parsed.data.guardian_consent_method]}${parsed.data.guardian_consent_on ? ` on ${dateLabel(parsed.data.guardian_consent_on)}` : ""}`,
+      parsed.data.guardian_consent_detail,
+    ].filter(Boolean).join(". ")
+    : parsed.data.guardian_consent_note;
   const paymentReceived = formData.get("payment_received") === "on";
   if (paymentReceived && (!parsed.data.received_on || !parsed.data.payment_reference)) {
-    redirect("/admin/memberships?error=offline-payment-evidence-required");
+    return fail("offline-payment-evidence-required");
   }
   if (parsed.data.payment_method === "cheque" && paymentReceived && formData.get("cleared") !== "on") {
-    redirect("/admin/memberships?error=cheque-clearance-required");
+    return fail("cheque-clearance-required");
   }
   if (parsed.data.received_on && parsed.data.received_on > londonToday()) {
-    redirect("/admin/memberships?error=future-payment-date");
+    return fail("future-payment-date");
   }
   const postalAddress = parsed.data.address_line_one || parsed.data.city || parsed.data.postcode ? {
     address_line_one: parsed.data.address_line_one,
@@ -533,11 +617,11 @@ export async function createOfficerManagedMembership(formData: FormData) {
   const selectedPlan = formData.get("student_declaration") === "on"
     ? studentPlan
     : defaultMembershipPlan(eligible.plans);
-  if (!selectedPlan) redirect("/admin/memberships?error=plan-age-mismatch");
+  if (!selectedPlan) return fail("plan-age-mismatch");
   try {
     await ensureMembershipPlanPrice(selectedPlan.id, membershipBillingYear(membershipDate));
   } catch {
-    redirect("/admin/memberships?error=price-unavailable");
+    return fail("price-unavailable");
   }
   const { data, error } = await admin.rpc("create_officer_managed_membership", {
     p_plan_id: selectedPlan.id,
@@ -554,20 +638,93 @@ export async function createOfficerManagedMembership(formData: FormData) {
     p_student_declaration: formData.get("student_declaration") === "on",
     p_guardian_name: parsed.data.guardian_name,
     p_guardian_email: parsed.data.guardian_email,
-    p_guardian_consent_note: parsed.data.guardian_consent_note,
+    p_guardian_consent_note: guardianConsentNote,
     p_duplicate_override_reason: parsed.data.duplicate_override_reason,
+    p_newsletter_opt_in: newsletter,
+    p_newsletter_consent_source: newsletter ? parsed.data.newsletter_consent_source : undefined,
+    p_newsletter_consent_given_on: newsletter ? parsed.data.newsletter_consent_given_on ?? londonToday() : undefined,
     p_actor_id: user.id,
   });
   const memberId = data?.[0]?.member_id;
   if (error || !memberId) {
     const reason = error?.message.includes("membership_possible_duplicate") ? "possible-duplicate"
       : error?.message.includes("membership_guardian_consent_required") ? "guardian-consent-required"
-        : error?.message.includes("membership_plan_age_mismatch") ? "plan-age-mismatch" : "officer-member-create-failed";
-    redirect(`/admin/memberships?error=${reason}`);
+        : error?.message.includes("membership_plan_age_mismatch") ? "plan-age-mismatch"
+          : error?.message.includes("membership_price_unavailable") ? "price-unavailable"
+            : error?.message.includes("membership_newsletter_email_required") ? "newsletter-email-required"
+              : error?.message.includes("membership_newsletter_consent_evidence_required") ? "newsletter-consent-evidence-required"
+                : error?.message.includes("membership_newsletter_consent_date_invalid") ? "newsletter-consent-date-invalid"
+                  : "officer-member-create-failed";
+    return fail(reason);
   }
   if (paymentReceived && parsed.data.contact_email) await ensureMemberPortalInvitation(memberId);
-  revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&notice=officer-member-created`);
+  const { data: term } = await admin.from("membership_terms").select("membership_year,amount_due_pence").eq("id", data![0].term_id).maybeSingle();
+  // The whole membership area shows this person now: the register, the Inbox and the counts.
+  revalidatePath("/admin/memberships", "layout");
+  return {
+    error: null,
+    attempt: previous.attempt,
+    values: {},
+    created: {
+      memberId,
+      name: parsed.data.full_name,
+      planName: selectedPlan.name,
+      year: term?.membership_year ?? membershipBillingYear(membershipDate),
+      amountPence: term?.amount_due_pence ?? 0,
+      paid: paymentReceived,
+      newsletter,
+    },
+  };
+}
+
+/**
+ * People already on the register who may be the person being added: the same email address, the same
+ * name and date of birth, or (only when asked, as a warning) just the same name.
+ */
+async function lookupPossibleDuplicates(name: string, dateOfBirth: string, email: string, includeNameOnly: boolean): Promise<PossibleDuplicate[]> {
+  const admin = createServiceClient();
+  const columns = "id,full_name,effective_state";
+  const titleCased = name.replace(/\S+/g, (word) => word.charAt(0).toLocaleUpperCase("en-GB") + word.slice(1).toLocaleLowerCase("en-GB"));
+  const [byEmail, byNameAndBirth, byName] = await Promise.all([
+    email ? admin.from("members").select(columns).ilike("contact_email", postgrestLikeLiteral(email)).neq("effective_state", "archived").limit(5) : null,
+    dateOfBirth ? admin.from("members").select(columns).eq("date_of_birth", dateOfBirth).neq("effective_state", "archived").limit(200) : null,
+    // Exact spellings only, never a pattern: a name-only match is a best-effort warning.
+    includeNameOnly && name ? admin.from("members").select(columns).in("full_name", [name, titleCased]).neq("effective_state", "archived").limit(10) : null,
+  ]);
+  const seen = new Set<string>();
+  const matches: PossibleDuplicate[] = [];
+  for (const [rows, matchedOn] of [[byEmail?.data, "email"], [byNameAndBirth?.data, "name and date of birth"], [byName?.data, "name"]] as const) {
+    for (const row of rows ?? []) {
+      if (seen.has(row.id)) continue;
+      // Names are compared here, not with a database pattern, so nothing typed can act as a wildcard.
+      if (matchedOn !== "email" && (!name || normalizeIdentityName(row.full_name) !== normalizeIdentityName(name))) continue;
+      seen.add(row.id);
+      matches.push({ id: row.id, name: row.full_name, state: row.effective_state, matchedOn });
+    }
+  }
+  return matches;
+}
+
+/** Looks for people already on the register who may be the person being added, before the form is submitted. */
+export async function findPossibleDuplicateMembers(input: { full_name: string; date_of_birth: string; contact_email: string; include_name_only?: boolean }): Promise<PossibleDuplicate[]> {
+  await requireCapability("memberships.manage");
+  const parsed = z.object({
+    full_name: z.string().trim().min(2).max(180).catch(""),
+    date_of_birth: z.iso.date().catch(""),
+    contact_email: z.email().max(254).catch(""),
+    include_name_only: z.boolean().catch(false),
+  }).safeParse(input);
+  if (!parsed.success) return [];
+  const { full_name: name, date_of_birth: dateOfBirth, contact_email: email, include_name_only: includeNameOnly } = parsed.data;
+  return lookupPossibleDuplicates(name, dateOfBirth, email, includeNameOnly);
+}
+
+/** What follows a granted honorary membership: provider commands and, when it has started, the portal invitation. */
+async function finishHonoraryGrant(memberId: string, effectiveFrom: string) {
+  await processMembershipProviderCommands(memberId);
+  if (effectiveFrom <= new Date().toISOString().slice(0, 10)) {
+    await ensureMemberPortalInvitation(memberId);
+  }
 }
 
 export async function grantHonoraryMembership(formData: FormData) {
@@ -578,36 +735,73 @@ export async function grantHonoraryMembership(formData: FormData) {
   const admin = createServiceClient();
   const { data: existingHonorary } = await admin.from("honorary_memberships").select("id").eq("member_id", memberId)
     .in("status", ["scheduled", "active"]).maybeSingle();
-  if (existingHonorary) redirect("/admin/memberships?error=honorary-already-exists");
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
+  if (existingHonorary) redirect(`${record}&error=honorary-already-exists`);
   const { data, error } = await admin.rpc("grant_lifetime_honorary_membership", {
     p_member_id: memberId, p_effective_from: effectiveFrom, p_reason: reason, p_actor_id: user.id,
   });
-  if (error || !data) redirect("/admin/memberships?error=honorary-grant-failed");
-  await processMembershipProviderCommands(memberId);
-  if (effectiveFrom <= new Date().toISOString().slice(0, 10)) {
-    await ensureMemberPortalInvitation(memberId);
-  }
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=honorary-scheduled");
+  if (error || !data) redirect(`${record}&error=honorary-grant-failed`);
+  await finishHonoraryGrant(memberId, effectiveFrom);
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${record}&notice=honorary-scheduled`);
 }
 
-export async function createHonoraryMember(formData: FormData) {
-  await requireCapability("memberships.manage");
-  const fullName = z.string().trim().min(2).max(180).parse(formData.get("full_name"));
-  const emailValue = String(formData.get("contact_email") || "").trim();
-  const email = emailValue ? z.string().email().max(254).parse(emailValue).toLowerCase() : null;
-  const contactNumber = z.string().trim().max(40).parse(String(formData.get("contact_number") || "")) || null;
-  const { data, error } = await createServiceClient().from("members").insert({
-    full_name: fullName, contact_email: email, contact_number: contactNumber,
-    preferred_contact_method: email ? "email" : contactNumber ? "telephone" : "officer",
+export async function createHonoraryMember(previous: HonoraryMemberState, formData: FormData): Promise<HonoraryMemberState> {
+  const { user, role } = await requireCapability("memberships.manage");
+  // A failed attempt goes back to the open drawer with what was typed, and nothing is left half-created.
+  const fail = (error: string): HonoraryMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData) });
+  const text = (name: string) => String(formData.get(name) ?? "").trim();
+  const fullName = z.string().min(2).max(180).transform(capitaliseName).safeParse(text("full_name"));
+  const email = text("contact_email") ? z.email().max(254).safeParse(text("contact_email")) : null;
+  const birth = text("date_of_birth") ? z.iso.date().safeParse(text("date_of_birth")) : null;
+  const effectiveFrom = z.iso.date().safeParse(text("effective_from"));
+  const reason = z.string().min(5).max(500).safeParse(text("reason"));
+  if (!fullName.success || (email && !email.success) || (birth && (!birth.success || birth.data > londonToday())) || !effectiveFrom.success || !reason.success) {
+    return fail("honorary-member-details-invalid");
+  }
+  if (!validMembershipPhone(text("contact_number"))) return fail("phone-invalid");
+  const contactEmail = email?.success ? email.data.toLowerCase() : null;
+  const contactNumber = text("contact_number") || null;
+  const dateOfBirth = birth?.success ? birth.data : null;
+
+  // The same rule as adding a regular member: the same email, or the same name and date of birth, needs a reason.
+  const matches = await lookupPossibleDuplicates(fullName.data, dateOfBirth ?? "", contactEmail ?? "", false);
+  const override = text("duplicate_override_reason").slice(0, 500);
+  if (matches.length && override.length < 5) return fail("possible-duplicate");
+
+  const admin = createServiceClient();
+  const { data: member, error } = await admin.from("members").insert({
+    full_name: fullName.data, contact_email: contactEmail, contact_number: contactNumber, date_of_birth: dateOfBirth,
+    preferred_contact_method: contactEmail ? "email" : contactNumber ? "telephone" : "officer",
     effective_state: "active", source: "officer",
   }).select("id").single();
-  if (error || !data) redirect("/admin/memberships?error=honorary-member-create-failed");
-  const forwarded = new FormData();
-  forwarded.set("member_id", data.id);
-  forwarded.set("effective_from", String(formData.get("effective_from") || ""));
-  forwarded.set("reason", String(formData.get("reason") || ""));
-  return grantHonoraryMembership(forwarded);
+  if (error || !member) return fail("honorary-member-create-failed");
+
+  let granted = false;
+  try {
+    const result = await admin.rpc("grant_lifetime_honorary_membership", {
+      p_member_id: member.id, p_effective_from: effectiveFrom.data, p_reason: reason.data, p_actor_id: user.id,
+    });
+    granted = !result.error && Boolean(result.data);
+  } catch {
+    granted = false;
+  }
+  if (!granted) {
+    // Take back the person just added so a failed grant does not leave a member with no membership.
+    await admin.from("members").delete().eq("id", member.id);
+    return fail("honorary-grant-failed");
+  }
+  if (matches.length) {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.honorary-duplicate-override",
+      entityType: "member", entityId: member.id, summary: override,
+      after: { matched: matches.map((match) => ({ member_id: match.id, matched_on: match.matchedOn })) },
+    });
+  }
+  await finishHonoraryGrant(member.id, effectiveFrom.data);
+  revalidatePath("/admin/memberships", "layout");
+  redirect("/admin/memberships?notice=honorary-scheduled");
 }
 
 export async function revokeHonoraryMembership(formData: FormData) {
@@ -616,13 +810,17 @@ export async function revokeHonoraryMembership(formData: FormData) {
   const effectiveOn = z.iso.date().parse(formData.get("effective_on"));
   const replacementPlanId = idSchema.parse(formData.get("replacement_plan_id"));
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
-  const { data, error } = await createServiceClient().rpc("revoke_lifetime_honorary_membership", {
+  const admin = createServiceClient();
+  const { data: honorary } = await admin.from("honorary_memberships").select("member_id").eq("id", honoraryId).maybeSingle();
+  // The officer is on this member's record, so results go back there.
+  const record = honorary?.member_id ? `/admin/memberships?member=${honorary.member_id}` : "/admin/memberships?";
+  const { data, error } = await admin.rpc("revoke_lifetime_honorary_membership", {
     p_honorary_id: honoraryId, p_effective_on: effectiveOn,
     p_replacement_plan_id: replacementPlanId, p_reason: reason, p_actor_id: user.id,
   });
-  if (error || !data) redirect("/admin/memberships?error=honorary-revoke-failed");
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=honorary-transition-scheduled");
+  if (error || !data) redirect(`${record}${honorary?.member_id ? "&" : ""}error=honorary-revoke-failed`);
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${record}${honorary?.member_id ? "&" : ""}notice=honorary-transition-scheduled`);
 }
 
 export async function toggleMembershipAutoRenew(formData: FormData) {
@@ -725,26 +923,31 @@ export async function reviewStudentMembershipRequest(formData: FormData) {
 }
 
 export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
+  const { user, role } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
   const paymentMethod = z.enum(["cash", "bank_transfer", "cheque"]).parse(formData.get("payment_method"));
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear() + 1)
     .parse(formData.get("membership_year"));
+  // Results go back to where the officer started: the Renewals list, or else the member's own record.
+  const back = formData.get("return_to") === "renewals" ? `/admin/memberships/renewals?year=${year}` : `/admin/memberships?member=${memberId}`;
   const reference = z.string().trim().min(2).max(120).parse(formData.get("payment_reference"));
   const receivedOn = z.iso.date().parse(formData.get("received_on"));
-  if (receivedOn > londonToday()) redirect("/admin/memberships?error=future-payment-date");
+  if (receivedOn > londonToday()) redirect(`${back}&error=future-payment-date`);
   if (paymentMethod === "cheque" && formData.get("cleared") !== "on") {
-    redirect("/admin/memberships?error=cheque-clearance-required");
+    redirect(`${back}&error=cheque-clearance-required`);
   }
   const admin = createServiceClient();
   const { data: member } = await admin.from("members")
     .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)")
     .eq("id", memberId).maybeSingle();
-  if (!member?.current_plan_id) redirect("/admin/memberships?error=offline-member-unavailable");
+  if (!member?.current_plan_id) redirect(`${back}&error=offline-member-unavailable`);
+  // Record any age change first, so the amount follows it even before renewals are opened.
+  const { error: ageChangeError } = await admin.rpc("ensure_membership_age_transition", { p_member_id: memberId, p_year: year });
+  if (ageChangeError) redirect(`${back}&error=price-unavailable`);
   const { data: transition } = await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", memberId).eq("membership_year", year)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
-  if (transition?.status === "awaiting_student_review") redirect("/admin/memberships?error=student-request-pending");
+  if (transition?.status === "awaiting_student_review") redirect(`${back}&error=student-request-pending`);
   const honoraryRows = member.honorary_memberships as Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
   const honoraryTransition = member.effective_state === "honorary"
     ? honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
@@ -753,21 +956,21 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
     && item.effective_from <= `${year}-12-31`
     && (!item.revoked_effective_on || item.revoked_effective_on > `${year}-01-01`)) ?? null;
-  if (honoraryForYear && !honoraryTransition) redirect("/admin/memberships?error=honorary-year-no-payment");
+  if (honoraryForYear && !honoraryTransition) redirect(`${back}&error=honorary-year-no-payment`);
   const price = await ensureMembershipPlanPrice(
     honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id,
     year,
   ).catch(() => null);
-  if (!price) redirect("/admin/memberships?error=price-unavailable");
+  if (!price) redirect(`${back}&error=price-unavailable`);
   const transitionDate = honoraryTransition?.revoked_effective_on
     ? new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`) : null;
   const { data: pendingInitialTerm } = await admin.from("membership_terms")
     .select("plan_price_id,status,source,amount_due_pence,amount_paid_pence")
     .eq("member_id", memberId).eq("membership_year", year).maybeSingle();
   if (pendingInitialTerm?.status === "paid" && pendingInitialTerm.amount_paid_pence >= pendingInitialTerm.amount_due_pence) {
-    redirect("/admin/memberships?error=membership-year-already-paid");
+    redirect(`${back}&error=membership-year-already-paid`);
   }
-  if (pendingInitialTerm?.status === "payment_review") redirect("/admin/memberships?error=payment-review-required");
+  if (pendingInitialTerm?.status === "payment_review") redirect(`${back}&error=payment-review-required`);
   const completesInitialTerm = pendingInitialTerm?.plan_price_id === price.id
     && pendingInitialTerm.status === "scheduled"
     && pendingInitialTerm.amount_paid_pence === 0
@@ -775,6 +978,17 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const amount = completesInitialTerm ? pendingInitialTerm.amount_due_pence
     : transitionDate && (transitionDate.getUTCMonth() !== 0 || transitionDate.getUTCDate() !== 1)
       ? proratedMembershipFee(price.amount_pence, transitionDate) : price.amount_pence;
+  const received = assessAmountReceived(formData.get("amount_received"), formData.get("amount_note"), amount);
+  if (received.kind === "invalid") redirect(`${back}&error=amount-received-invalid`);
+  if (received.kind === "over-needs-note") redirect(`${back}&error=amount-difference-note`);
+  if (received.kind === "short") {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.payment-short-reported",
+      entityType: "member", entityId: memberId,
+      summary: `Officer received £${(received.receivedPence / 100).toFixed(2)} against a ${year} fee of £${(amount / 100).toFixed(2)} (${reference}). Nothing was recorded.`,
+    });
+    redirect(`${back}&error=amount-short`);
+  }
   const { error } = await admin.rpc("activate_offline_membership_renewal", {
     p_member_id: memberId,
     p_plan_price_id: price.id,
@@ -785,12 +999,18 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     p_actor_id: user.id,
     p_payment_reference: reference,
   });
-  if (error) redirect("/admin/memberships?error=offline-renewal-failed");
+  if (error) redirect(`${back}&error=offline-renewal-failed`);
+  if (received.kind === "over") await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-extra-received",
+    entityType: "member", entityId: memberId,
+    summary: `Received £${(received.receivedPence / 100).toFixed(2)} against a ${year} fee of £${(amount / 100).toFixed(2)} (${reference}); extra £${(received.extraPence / 100).toFixed(2)}: ${received.note}`,
+  });
+  await closeOpenMembershipCheckouts({ memberId, membershipYear: year });
   await processMembershipProviderCommands(memberId);
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/account");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=offline-renewal-confirmed");
+  redirect(`${back}&notice=offline-renewal-confirmed`);
 }
 
 export async function markMembershipNotificationRead(formData: FormData) {
@@ -821,6 +1041,74 @@ export async function completeManualMembershipContact(formData: FormData) {
   });
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=manual-contact-completed");
+}
+
+/** Clears a "needs review" notice (possible duplicate member, Junior turning adult) once an officer has dealt with it. */
+export async function completeMembershipReviewNotice(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const notificationId = idSchema.parse(formData.get("notification_id"));
+  const admin = createServiceClient();
+  const { data: notification } = await admin.from("membership_notifications")
+    .select("id,member_id,kind").eq("id", notificationId).in("kind", MEMBER_REVIEW_KINDS).is("read_at", null).maybeSingle();
+  if (!notification?.member_id) redirect("/admin/memberships?error=review-notice-unavailable");
+  const { error } = await admin.from("membership_notifications").update({
+    read_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq("member_id", notification.member_id).eq("kind", notification.kind).is("read_at", null);
+  if (error) redirect("/admin/memberships?error=review-notice-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.review-notice-completed",
+    entityType: "member", entityId: notification.member_id, summary: "Officer marked a membership review notice as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=review-notice-cleared");
+}
+
+/** Records that a refund owed after a denied membership was handed back by hand (usually cash). */
+export async function recordDeniedMembershipRefund(formData: FormData) {
+  const { user } = await requireCapability("memberships.manage");
+  const applicationId = idSchema.parse(formData.get("application_id"));
+  const note = z.string().trim().min(5).max(400).parse(formData.get("note"));
+  const admin = createServiceClient();
+  const { error } = await admin.rpc("record_denied_membership_refund", { p_application_id: applicationId, p_actor: user.id, p_note: note });
+  if (error) {
+    console.error("Membership refund could not be recorded", error);
+    redirect("/admin/memberships?error=refund-unavailable");
+  }
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=refund-recorded");
+}
+
+/** Clears a bounce, complaint or stopped-delivery entry from the Problems list once the officer has dealt with it. */
+export async function resolveMembershipDeliveryProblem(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const eventId = idSchema.parse(formData.get("event_id"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_delivery_events")
+    .update({ resolved_at: new Date().toISOString() }).eq("id", eventId).is("resolved_at", null).select("id").maybeSingle();
+  if (error || !data) redirect("/admin/memberships?error=delivery-problem-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.delivery-problem-resolved",
+    entityType: "membership-delivery-event", entityId: eventId, summary: "Officer marked an email delivery problem as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=delivery-problem-cleared");
+}
+
+/** Clears a card payment that could not be applied to a membership once the officer has matched it or refunded it. */
+export async function resolveUnappliedMembershipPayment(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const attemptId = idSchema.parse(formData.get("attempt_id"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_checkout_attempts")
+    .update({ resolved_at: new Date().toISOString() }).eq("id", attemptId).eq("status", "payment_review").is("resolved_at", null)
+    .select("id").maybeSingle();
+  if (error || !data) redirect("/admin/memberships?error=unapplied-payment-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-not-applied-resolved",
+    entityType: "membership_checkout_attempt", entityId: attemptId, summary: "Officer marked a card payment that could not be applied as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=unapplied-payment-cleared");
 }
 
 export async function retryMembershipNotification(formData: FormData) {
@@ -854,15 +1142,17 @@ export async function retryMembershipNotification(formData: FormData) {
 export async function requestMemberContactChange(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const role = z.enum(["self", "guardian", "shared_household"]).parse(formData.get("contact_role"));
   const emailValue = String(formData.get("contact_email") || "").trim().toLowerCase();
   const admin = createServiceClient();
   const { data: member } = await admin.from("members").select("id,full_name,contact_email,contact_role")
     .eq("id", memberId).maybeSingle();
-  if (!member) redirect("/admin/memberships?error=member-unavailable");
+  if (!member) redirect(`${record}&error=member-unavailable`);
   const { data: actorId } = await admin.rpc("ensure_administrative_actor", { p_auth_user_id: user.id });
-  if (!actorId) redirect("/admin/memberships?error=officer-history-unavailable");
+  if (!actorId) redirect(`${record}&error=officer-history-unavailable`);
   if (!emailValue) {
     await admin.from("membership_contact_change_requests").update({ status: "cancelled", updated_at: new Date().toISOString() })
       .eq("member_id", memberId).eq("contact_kind", "correspondence").eq("status", "pending");
@@ -871,7 +1161,7 @@ export async function requestMemberContactChange(formData: FormData) {
       portal_invitation_status: member.contact_email ? "not_requested" : undefined,
       updated_at: new Date().toISOString(),
     }).eq("id", memberId);
-    if (error) redirect("/admin/memberships?error=contact-change-failed");
+    if (error) redirect(`${record}&error=contact-change-failed`);
     await writeAudit({
       actorUserId: user.id, actorRole: "committee", action: "membership.contact-cleared",
       entityType: "member", entityId: memberId,
@@ -879,7 +1169,7 @@ export async function requestMemberContactChange(formData: FormData) {
       after: { contact_email: null, contact_role: role, reason },
     });
     revalidatePath("/admin/memberships");
-    redirect(`/admin/memberships?member=${memberId}&section=member-history#member-history`);
+    redirect(`${record}&notice=contact-cleared`);
   }
   const email = z.email().max(254).parse(emailValue);
   const token = membershipToken();
@@ -896,7 +1186,7 @@ export async function requestMemberContactChange(formData: FormData) {
     requested_by_actor_id: actorId,
     reason,
   }).select("id").single();
-  if (error || !request) redirect("/admin/memberships?error=contact-change-failed");
+  if (error || !request) redirect(`${record}&error=contact-change-failed`);
   await admin.from("membership_notifications").insert({
     member_id: memberId, recipient_email: email,
     kind: "membership.contact-change-verification",
@@ -907,7 +1197,7 @@ export async function requestMemberContactChange(formData: FormData) {
     deduplication_key: `membership-contact-change-${request.id}`,
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=contact-verification-sent#member-history`);
+  redirect(`${record}&notice=contact-verification-sent`);
 }
 
 export async function requestOwnMembershipContactChange(formData: FormData) {
@@ -990,24 +1280,28 @@ export async function confirmMembershipContactChange(formData: FormData) {
 export async function assignMemberPortalLogin(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const email = z.email().max(254).parse(String(formData.get("login_email") || "").trim().toLowerCase());
   const admin = createServiceClient();
-  const { data: member } = await admin.from("members").select("id,full_name,auth_user_id")
+  const { data: member } = await admin.from("members").select("id,full_name,auth_user_id,date_of_birth")
     .eq("id", memberId).maybeSingle();
-  if (!member) redirect("/admin/memberships?error=member-unavailable");
-  const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", email).maybeSingle();
-  if (profileError) redirect("/admin/memberships?error=portal-login-check-failed");
+  if (!member) redirect(`${record}&error=member-unavailable`);
+  // Under-18s never get a login of their own: their guardian receives their emails and uses the guardian's own account.
+  if (member.date_of_birth && ageOn(member.date_of_birth) < 18) redirect(`${record}&error=portal-login-junior`);
+  const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", likeLiteral(email)).maybeSingle();
+  if (profileError) redirect(`${record}&error=portal-login-check-failed`);
   let authUserId = profile?.id ?? null;
   if (authUserId) {
     const { data: owner } = await admin.from("members").select("id").eq("auth_user_id", authUserId).neq("id", memberId).maybeSingle();
-    if (owner) redirect("/admin/memberships?error=portal-login-in-use");
+    if (owner) redirect(`${record}&error=portal-login-in-use`);
   } else {
     const { data: invitation, error } = await admin.auth.admin.inviteUserByEmail(email, {
       data: { full_name: member.full_name, membership_active: true },
       redirectTo: `${getTrustedAppOrigin()}/auth/invite?next=/account`,
     });
-    if (error || !invitation.user) redirect("/admin/memberships?error=portal-invitation-failed");
+    if (error || !invitation.user) redirect(`${record}&error=portal-invitation-failed`);
     authUserId = invitation.user.id;
   }
   const { error: linkError } = await admin.from("members").update({
@@ -1015,7 +1309,7 @@ export async function assignMemberPortalLogin(formData: FormData) {
     portal_invitation_status: profile ? "linked" : "sent",
     updated_at: new Date().toISOString(),
   }).eq("id", memberId);
-  if (linkError) redirect("/admin/memberships?error=portal-link-failed");
+  if (linkError) redirect(`${record}&error=portal-link-failed`);
   await admin.from("membership_notifications").update({
     recipient_user_id: authUserId, updated_at: new Date().toISOString(),
   }).eq("member_id", memberId).eq("portal_visible", true).is("recipient_user_id", null);
@@ -1031,7 +1325,7 @@ export async function assignMemberPortalLogin(formData: FormData) {
       portal_visible: true,
       deduplication_key: `membership-portal-access-ready-${memberId}-${authUserId}`,
     });
-    if (noticeError && noticeError.code !== "23505") redirect("/admin/memberships?error=portal-notice-failed");
+    if (noticeError && noticeError.code !== "23505") redirect(`${record}&error=portal-notice-failed`);
     await admin.rpc("request_membership_notification_delivery");
   } else {
     // The Supabase invitation is already the combined activation/account email.
@@ -1044,27 +1338,29 @@ export async function assignMemberPortalLogin(formData: FormData) {
     before: { auth_user_id: member.auth_user_id }, after: { auth_user_id: authUserId, login_email: email, reason },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=portal-login-assigned#member-history`);
+  redirect(`${record}&notice=portal-login-assigned`);
 }
 
 export async function removeMemberPortalLogin(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: member } = await admin.from("members").select("auth_user_id").eq("id", memberId).maybeSingle();
-  if (!member?.auth_user_id) redirect("/admin/memberships?error=portal-login-unavailable");
+  if (!member?.auth_user_id) redirect(`${record}&error=portal-login-unavailable`);
   const { error } = await admin.from("members").update({
     auth_user_id: null, portal_invitation_status: "not_requested", updated_at: new Date().toISOString(),
   }).eq("id", memberId).eq("auth_user_id", member.auth_user_id);
-  if (error) redirect("/admin/memberships?error=portal-login-remove-failed");
+  if (error) redirect(`${record}&error=portal-login-remove-failed`);
   await writeAudit({
     actorUserId: user.id, actorRole: "committee", action: "membership.portal-login-removed",
     entityType: "member", entityId: memberId,
     before: { auth_user_id: member.auth_user_id }, after: { auth_user_id: null, reason },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&section=member-history&notice=portal-login-removed#member-history`);
+  redirect(`${record}&notice=portal-login-removed`);
 }
 
 export async function resolveMembershipPaymentReview(formData: FormData) {
@@ -1079,32 +1375,6 @@ export async function resolveMembershipPaymentReview(formData: FormData) {
   revalidatePath("/account");
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=payment-review-resolved");
-}
-
-export async function resolveMembershipMigrationReview(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
-  const reviewId = idSchema.parse(formData.get("review_id"));
-  const status = z.enum(["resolved", "dismissed"]).parse(formData.get("status"));
-  const resolution = z.string().trim().min(8).max(500).parse(formData.get("resolution"));
-  const admin = createServiceClient();
-  const { data: review } = await admin.from("membership_migration_reviews")
-    .select("id,review_kind,membership_record_id,status,review_group_key").eq("id", reviewId).maybeSingle();
-  if (!review || review.status !== "pending") redirect("/admin/memberships?error=migration-review-unavailable");
-  const { error } = await admin.from("membership_migration_reviews").update({
-    status,
-    resolution,
-    resolved_by: user.id,
-    resolved_at: new Date().toISOString(),
-  }).eq("id", reviewId).eq("status", "pending");
-  if (error) redirect("/admin/memberships?error=migration-review-failed");
-  await writeAudit({
-    actorUserId: user.id, actorRole: "committee", action: "membership.migration-review-resolved",
-    entityType: "membership-migration-review", entityId: reviewId,
-    before: { status: review.status, review_kind: review.review_kind },
-    after: { status, resolution, review_group_key: review.review_group_key },
-  });
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=membermojo-import&notice=migration-review-saved#membermojo-import");
 }
 
 export async function requestMembershipReportExport() {
@@ -1171,21 +1441,23 @@ export async function resolveHonoraryPaymentConflict(formData: FormData) {
 export async function correctMemberEligibility(formData: FormData) {
   const { user, role } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
   const dateOfBirth = z.iso.date().parse(formData.get("date_of_birth"));
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const admin = createServiceClient();
   const { data: before } = await admin.from("members").select("date_of_birth").eq("id", memberId).maybeSingle();
-  if (!before) redirect("/admin/memberships?error=member-unavailable");
+  if (!before) redirect(`${record}&error=member-unavailable`);
   const { error } = await admin.from("members").update({ date_of_birth: dateOfBirth, updated_at: new Date().toISOString() })
     .eq("id", memberId);
-  if (error) redirect("/admin/memberships?error=eligibility-correction-failed");
+  if (error) redirect(`${record}&error=eligibility-correction-failed`);
   await writeAudit({
     actorUserId: user.id, actorRole: role, action: "membership.eligibility-corrected",
     entityType: "member", entityId: memberId, summary: reason,
     before: { date_of_birth: before.date_of_birth }, after: { date_of_birth: dateOfBirth },
   });
   revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&notice=eligibility-corrected`);
+  redirect(`${record}&notice=eligibility-corrected`);
 }
 
 export async function saveMembershipPaymentSettings(formData: FormData) {
@@ -1196,14 +1468,20 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     treasurer_email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
     treasurer_phone: z.string().trim().max(50).optional().transform((value) => value || null),
     bank_account_name: z.string().trim().min(2).max(120),
-    bank_sort_code: z.string().trim().regex(/^[0-9]{2}-[0-9]{2}-[0-9]{2}$/),
-    bank_account_number: z.string().trim().regex(/^[0-9]{8}$/),
+    // 123456 and 12 34 56 are accepted and saved as 12-34-56.
+    bank_sort_code: z.string().transform((value) => normaliseSortCode(value) ?? value).pipe(z.string().regex(/^[0-9]{2}-[0-9]{2}-[0-9]{2}$/)),
+    // 12345678 and 1234 5678 are accepted and saved as 12345678.
+    bank_account_number: z.string().transform((value) => normaliseAccountNumber(value) ?? value).pipe(z.string().regex(/^[0-9]{8}$/)),
     bank_transfer_instructions: z.string().trim().min(5).max(500),
     cheque_payee: z.string().trim().min(2).max(120),
     cheque_delivery_instructions: z.string().trim().min(5).max(500),
     cash_instructions: z.string().trim().min(5).max(500),
   }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/memberships?section=payment-settings&error=Check+the+Treasurer+and+payment+details.");
+  if (!parsed.success) {
+    const bad = (field: string) => parsed.error.issues.some((issue) => issue.path[0] === field);
+    const code = bad("bank_sort_code") ? "payment-sort-code-invalid" : bad("bank_account_number") ? "payment-account-number-invalid" : "payment-details-invalid";
+    redirect(`/admin/memberships?section=payment-settings&error=${code}`);
+  }
   const { error } = await createServiceClient().rpc("replace_membership_payment_settings", {
     p_actor_id: user.id,
     p_treasurer_name: parsed.data.treasurer_name,
@@ -1217,7 +1495,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cheque_delivery_instructions: parsed.data.cheque_delivery_instructions,
     p_cash_instructions: parsed.data.cash_instructions,
   });
-  if (error) redirect("/admin/memberships?section=payment-settings&error=Membership+payment+settings+could+not+be+saved.");
+  if (error) redirect("/admin/memberships?section=payment-settings&error=payment-details-save-failed");
   updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
   revalidatePath("/admin/memberships");
@@ -1235,14 +1513,14 @@ export async function updateMembershipPlan(formData: FormData) {
     requires_approval: z.string().optional().transform((value) => value === "on"),
   }).parse(Object.fromEntries(formData));
   if (values.maximum_age < values.minimum_age) {
-    redirect("/admin/memberships?section=plans&error=plan-age-range-invalid#plans");
+    redirect("/admin/memberships/renewals?error=plan-age-range-invalid");
   }
   const admin = createServiceClient();
   const { data: before } = await admin.from("membership_plans")
     .select("description,minimum_age,maximum_age,active,requires_approval").eq("id", planId).maybeSingle();
-  if (!before) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
+  if (!before) redirect("/admin/memberships/renewals?error=plan-unavailable");
   const { error } = await admin.from("membership_plans").update({ ...values, updated_at: new Date().toISOString() }).eq("id", planId);
-  if (error) redirect("/admin/memberships?section=plans&error=plan-update-failed#plans");
+  if (error) redirect("/admin/memberships/renewals?error=plan-update-failed");
   await writeAudit({
     actorUserId: user.id, actorRole: role, action: "membership.plan-updated",
     entityType: "membership-plan", entityId: planId, before, after: values,
@@ -1250,7 +1528,7 @@ export async function updateMembershipPlan(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=plans&notice=plan-updated#plans");
+  redirect("/admin/memberships/renewals?notice=plan-updated");
 }
 
 export async function configureMembershipPrice(formData: FormData) {
@@ -1261,7 +1539,7 @@ export async function configureMembershipPrice(formData: FormData) {
   const admin = createServiceClient();
   const { data: plan } = await admin.from("membership_plans")
     .select("id,name,stripe_product_id").eq("id", planId).maybeSingle();
-  if (!plan) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
+  if (!plan) redirect("/admin/memberships/renewals?error=plan-unavailable");
   const { data: effectivePrice } = await admin.from("membership_plan_prices")
     .select("amount_pence,stripe_price_id")
     .eq("plan_id", plan.id)
@@ -1272,7 +1550,7 @@ export async function configureMembershipPrice(formData: FormData) {
     .limit(1)
     .maybeSingle();
   if (effectivePrice?.amount_pence === amountPence && effectivePrice.stripe_price_id) {
-    redirect("/admin/memberships?notice=price-unchanged&section=plans#plans");
+    redirect("/admin/memberships/renewals?notice=price-unchanged");
   }
   const stripe = getStripe();
   let productId = plan.stripe_product_id;
@@ -1297,7 +1575,7 @@ export async function configureMembershipPrice(formData: FormData) {
     amount_pence: amountPence, currency: "gbp", stripe_price_id: stripePrice.id,
     active: true, created_by: user.id,
   });
-  if (error) redirect("/admin/memberships?section=plans&error=price-save-failed#plans");
+  if (error) redirect("/admin/memberships/renewals?error=price-save-failed");
   await admin.from("membership_plan_prices").update({ active: false })
     .eq("plan_id", plan.id)
     .gt("membership_year", year)
@@ -1311,7 +1589,7 @@ export async function configureMembershipPrice(formData: FormData) {
       .eq("current_plan_id", plan.id).in("effective_state", ["active", "grace", "payment_review"])
       .order("id").range(offset, offset + pageSize - 1);
     if (affectedError) {
-      redirect("/admin/memberships?section=plans&error=price-transition-queue-failed#plans");
+      redirect("/admin/memberships/renewals?error=price-transition-queue-failed");
     }
     for (const member of affectedMembers ?? []) {
       const subscriptions = member.membership_subscriptions as Array<{ stripe_subscription_id: string; next_charge_at: string | null }> | null;
@@ -1351,13 +1629,6 @@ export async function configureMembershipPrice(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=plans&notice=price-saved#plans");
+  redirect("/admin/memberships/renewals?notice=price-saved");
 }
 
-export async function stageMemberMojoCutover() {
-  const { user } = await requireCapability("memberships.manage");
-  const { error } = await createServiceClient().rpc("execute_membermojo_final_membership_cutover", { p_actor_id: user.id });
-  if (error) redirect("/admin/memberships?error=cutover-failed");
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=cutover-staged");
-}

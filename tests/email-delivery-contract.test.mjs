@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { readAccountSource } from "./account-source.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
@@ -92,7 +93,7 @@ test("names the relevant applicant in shared-mailbox decision messages", async (
 test("uses Society language for member-facing payment updates", async () => {
   const [application, account, actions, webhook, paymentLanguage] = await Promise.all([
     read("app/membership/apply/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("lib/actions/membership.ts"),
     read("app/api/stripe/webhook/route.ts"),
     read("supabase/migrations/202608200035_member_facing_payment_language.sql"),
