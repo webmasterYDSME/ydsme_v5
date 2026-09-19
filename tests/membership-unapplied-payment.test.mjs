@@ -53,3 +53,15 @@ test("an unapplied card payment can be cleared by an officer and then leaves Pro
   assert.match(migration, /add column if not exists resolved_at/);
   assert.match(migration, /revoke all on function public\.record_unapplied_membership_payment/);
 });
+
+test("only payments that hold money are owed back after a denied membership", () => {
+  const inbox = read("lib/membership-admin/inbox.ts");
+  assert.match(inbox, /\["paid", "partially_refunded"\]\.includes\(payment\.status\)/);
+  const migration = read("supabase/migrations/202609190012_membership_money_and_expiry_fixes.sql");
+  assert.match(migration, /p\.status in \('paid','partially_refunded'\)/);
+});
+
+test("an application with a cheque already received is not expired", () => {
+  const migration = read("supabase/migrations/202609190012_membership_money_and_expiry_fixes.sql");
+  assert.match(migration, /offline\.application_id=application\.id and offline\.status='received'/);
+});

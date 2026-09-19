@@ -163,12 +163,15 @@ async function refundsToArrange(admin: Admin) {
   const applications = (denied ?? []) as Row[];
   if (!applications.length) return [];
   const { data: terms, error: termError } = await admin.from("membership_terms")
-    .select("application_id,membership_payments(amount_pence,refunded_pence)")
+    .select("application_id,membership_payments(amount_pence,refunded_pence,status)")
     .in("application_id", applications.map((application) => application.id));
   if (termError) fail("membership refunds", termError);
   const outstanding = new Map<string, number>();
   for (const term of (terms ?? []) as Row[]) {
-    const sum = (term.membership_payments ?? []).reduce((total: number, payment: Row) => total + payment.amount_pence - payment.refunded_pence, 0);
+    // Only payments that actually hold money count; failed, cancelled and unpaid attempts owe nothing back.
+    const sum = (term.membership_payments ?? [])
+      .filter((payment: Row) => ["paid", "partially_refunded"].includes(payment.status))
+      .reduce((total: number, payment: Row) => total + payment.amount_pence - payment.refunded_pence, 0);
     outstanding.set(term.application_id, (outstanding.get(term.application_id) ?? 0) + sum);
   }
   return applications
