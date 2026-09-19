@@ -29,14 +29,16 @@ const money = (pence: number) => new Intl.NumberFormat("en-GB", {
   currency: "GBP",
 }).format(pence / 100);
 
-export function OfficerMembershipEligibilityFields({ plans, prices, today }: {
+export function OfficerMembershipEligibilityFields({ plans, prices, today, initial }: {
   plans: OfficerPlan[];
   prices: OfficerPrice[];
   today: string;
+  /** Values to start from, so a form that came back with an error keeps what was typed. */
+  initial?: { dateOfBirth?: string; startDate?: string; student?: boolean };
 }) {
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [startDate, setStartDate] = useState(today);
-  const [student, setStudent] = useState(false);
+  const [dateOfBirth, setDateOfBirth] = useState(initial?.dateOfBirth ?? "");
+  const [startDate, setStartDate] = useState(initial?.startDate || today);
+  const [student, setStudent] = useState(initial?.student ?? false);
   const eligibility = dateOfBirth
     ? eligibleMembershipPlans(plans, dateOfBirth, new Date(`${startDate}T00:00:00Z`)) : null;
   const adult = eligibility?.plans.find((plan) => plan.slug === "adult") ?? null;

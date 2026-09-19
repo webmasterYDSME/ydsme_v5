@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
+import { membershipErrorMessage } from "../lib/membership-admin/messages.ts";
+import { emptyOfficerMemberState, submittedValues } from "../lib/membership-admin/officer-member.ts";
 import { ageOn, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
 import { buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
@@ -154,4 +156,17 @@ test("works out age from a date of birth", () => {
   assert.equal(ageOn("2008-02-29", "2026-03-01"), 18);
   assert.equal(ageOn(null, "2026-09-19"), null);
   assert.equal(ageOn("", "2026-09-19"), null);
+});
+
+test("keeps what an officer typed when adding a member fails", () => {
+  const form = new FormData();
+  form.set("full_name", "Ada Lovelace");
+  form.set("payment_received", "on");
+  form.set("$ACTION_ID_abc", "hidden framework field");
+  form.set("upload", new File(["x"], "x.txt"));
+  assert.deepEqual(submittedValues(form), { full_name: "Ada Lovelace", payment_received: "on" });
+  assert.deepEqual(emptyOfficerMemberState, { error: null, attempt: 0, values: {} });
+  assert.match(membershipErrorMessage("possible-duplicate"), /Already on the register/);
+  assert.equal(membershipErrorMessage("something-unknown"), null);
+  assert.equal(membershipErrorMessage(null), null);
 });

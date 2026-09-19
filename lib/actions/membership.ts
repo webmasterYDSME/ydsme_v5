@@ -1,6 +1,7 @@
 "use server";
 
 import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
+import { submittedValues, type OfficerMemberState } from "@/lib/membership-admin/officer-member";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -482,37 +483,44 @@ export async function confirmOfflineMembership(formData: FormData) {
   redirect("/admin/memberships?notice=offline-payment-confirmed");
 }
 
-export async function createOfficerManagedMembership(formData: FormData) {
+export async function createOfficerManagedMembership(previous: OfficerMemberState, formData: FormData): Promise<OfficerMemberState> {
   const { user } = await requireCapability("memberships.manage");
-  const parsed = z.object({
-    plan_id: z.string().uuid().optional(),
-    title: z.string().trim().max(10).default(""),
-    full_name: z.string().trim().min(2).max(180),
-    date_of_birth: z.iso.date(),
-    contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
-    contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
-    payment_method: z.enum(["cash", "bank_transfer", "cheque"]),
-    received_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
-    payment_reference: z.string().trim().max(120).optional().transform((value) => value || null),
-    guardian_name: z.string().trim().max(180).optional().transform((value) => value || null),
-    guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
-    guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
-    duplicate_override_reason: z.string().trim().max(500).optional().transform((value) => value || null),
-    address_line_one: z.string().trim().max(180).optional().transform((value) => value || null),
-    address_line_two: z.string().trim().max(180).optional().transform((value) => value || null),
-    city: z.string().trim().max(100).optional().transform((value) => value || null),
-    postcode: z.string().trim().max(20).optional().transform((value) => value || null),
-  }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/memberships?error=officer-member-details-invalid");
+  // A failed attempt returns the typed values to the open drawer instead of redirecting, so nothing has to be typed again.
+  const fail = (error: string): OfficerMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData) });
+  let parsed;
+  try {
+    parsed = z.object({
+      plan_id: z.string().uuid().optional(),
+      title: z.string().trim().max(10).default(""),
+      full_name: z.string().trim().min(2).max(180),
+      date_of_birth: z.iso.date(),
+      contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
+      contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
+      payment_method: z.enum(["cash", "bank_transfer", "cheque"]),
+      received_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
+      payment_reference: z.string().trim().max(120).optional().transform((value) => value || null),
+      guardian_name: z.string().trim().max(180).optional().transform((value) => value || null),
+      guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
+      guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
+      duplicate_override_reason: z.string().trim().max(500).optional().transform((value) => value || null),
+      address_line_one: z.string().trim().max(180).optional().transform((value) => value || null),
+      address_line_two: z.string().trim().max(180).optional().transform((value) => value || null),
+      city: z.string().trim().max(100).optional().transform((value) => value || null),
+      postcode: z.string().trim().max(20).optional().transform((value) => value || null),
+    }).safeParse(Object.fromEntries(formData));
+  } catch {
+    return fail("officer-member-details-invalid");
+  }
+  if (!parsed.success) return fail("officer-member-details-invalid");
   const paymentReceived = formData.get("payment_received") === "on";
   if (paymentReceived && (!parsed.data.received_on || !parsed.data.payment_reference)) {
-    redirect("/admin/memberships?error=offline-payment-evidence-required");
+    return fail("offline-payment-evidence-required");
   }
   if (parsed.data.payment_method === "cheque" && paymentReceived && formData.get("cleared") !== "on") {
-    redirect("/admin/memberships?error=cheque-clearance-required");
+    return fail("cheque-clearance-required");
   }
   if (parsed.data.received_on && parsed.data.received_on > londonToday()) {
-    redirect("/admin/memberships?error=future-payment-date");
+    return fail("future-payment-date");
   }
   const postalAddress = parsed.data.address_line_one || parsed.data.city || parsed.data.postcode ? {
     address_line_one: parsed.data.address_line_one,
@@ -533,11 +541,11 @@ export async function createOfficerManagedMembership(formData: FormData) {
   const selectedPlan = formData.get("student_declaration") === "on"
     ? studentPlan
     : defaultMembershipPlan(eligible.plans);
-  if (!selectedPlan) redirect("/admin/memberships?error=plan-age-mismatch");
+  if (!selectedPlan) return fail("plan-age-mismatch");
   try {
     await ensureMembershipPlanPrice(selectedPlan.id, membershipBillingYear(membershipDate));
   } catch {
-    redirect("/admin/memberships?error=price-unavailable");
+    return fail("price-unavailable");
   }
   const { data, error } = await admin.rpc("create_officer_managed_membership", {
     p_plan_id: selectedPlan.id,
@@ -563,7 +571,7 @@ export async function createOfficerManagedMembership(formData: FormData) {
     const reason = error?.message.includes("membership_possible_duplicate") ? "possible-duplicate"
       : error?.message.includes("membership_guardian_consent_required") ? "guardian-consent-required"
         : error?.message.includes("membership_plan_age_mismatch") ? "plan-age-mismatch" : "officer-member-create-failed";
-    redirect(`/admin/memberships?error=${reason}`);
+    return fail(reason);
   }
   if (paymentReceived && parsed.data.contact_email) await ensureMemberPortalInvitation(memberId);
   revalidatePath("/admin/memberships");
