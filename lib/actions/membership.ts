@@ -16,6 +16,7 @@ import { clearSignupVerification, getSignupVerification } from "@/lib/membership
 import { normaliseAccountNumber, normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
 import { likeLiteral } from "@/lib/like-literal";
+import { assessAmountReceived } from "@/lib/membership-admin/amount";
 import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
@@ -479,7 +480,7 @@ export async function closeOfflineMembershipApplication(formData: FormData) {
 }
 
 export async function confirmOfflineMembership(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
+  const { user, role } = await requireCapability("memberships.manage");
   const applicationId = idSchema.parse(formData.get("application_id"));
   const paymentMethod = z.enum(["cash", "bank_transfer", "cheque"]).parse(formData.get("payment_method"));
   const reference = z.string().trim().min(2).max(120).parse(formData.get("payment_reference"));
@@ -502,6 +503,17 @@ export async function confirmOfflineMembership(formData: FormData) {
   const price = await ensureMembershipPlanPrice(application.requested_plan_id, year).catch(() => null);
   if (!price) redirect("/admin/memberships?error=price-unavailable");
   const amount = proratedMembershipFee(price.amount_pence, paymentDate);
+  const received = assessAmountReceived(formData.get("amount_received"), formData.get("amount_note"), amount);
+  if (received.kind === "invalid") redirect("/admin/memberships?error=amount-received-invalid");
+  if (received.kind === "over-needs-note") redirect("/admin/memberships?error=amount-difference-note");
+  if (received.kind === "short") {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.payment-short-reported",
+      entityType: "membership_application", entityId: applicationId,
+      summary: `Officer received £${(received.receivedPence / 100).toFixed(2)} against a fee of £${(amount / 100).toFixed(2)} (${reference}). Nothing was recorded.`,
+    });
+    redirect("/admin/memberships?error=amount-short");
+  }
   const { data, error } = await admin.rpc("activate_offline_membership_application", {
     p_application_id: applicationId,
     p_plan_price_id: price.id,
@@ -522,6 +534,11 @@ export async function confirmOfflineMembership(formData: FormData) {
       : "offline-payment-confirmation-failed";
     redirect(`/admin/memberships?error=${code}`);
   }
+  if (received.kind === "over") await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-extra-received",
+    entityType: "membership_application", entityId: applicationId,
+    summary: `Received £${(received.receivedPence / 100).toFixed(2)} against a fee of £${(amount / 100).toFixed(2)} (${reference}); extra £${(received.extraPence / 100).toFixed(2)}: ${received.note}`,
+  });
   await closeOpenMembershipCheckouts({ applicationId });
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/admin/memberships");
@@ -911,7 +928,7 @@ export async function reviewStudentMembershipRequest(formData: FormData) {
 }
 
 export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
+  const { user, role } = await requireCapability("memberships.manage");
   const memberId = idSchema.parse(formData.get("member_id"));
   const paymentMethod = z.enum(["cash", "bank_transfer", "cheque"]).parse(formData.get("payment_method"));
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear() + 1)
@@ -966,6 +983,17 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const amount = completesInitialTerm ? pendingInitialTerm.amount_due_pence
     : transitionDate && (transitionDate.getUTCMonth() !== 0 || transitionDate.getUTCDate() !== 1)
       ? proratedMembershipFee(price.amount_pence, transitionDate) : price.amount_pence;
+  const received = assessAmountReceived(formData.get("amount_received"), formData.get("amount_note"), amount);
+  if (received.kind === "invalid") redirect(`${back}&error=amount-received-invalid`);
+  if (received.kind === "over-needs-note") redirect(`${back}&error=amount-difference-note`);
+  if (received.kind === "short") {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.payment-short-reported",
+      entityType: "member", entityId: memberId,
+      summary: `Officer received £${(received.receivedPence / 100).toFixed(2)} against a ${year} fee of £${(amount / 100).toFixed(2)} (${reference}). Nothing was recorded.`,
+    });
+    redirect(`${back}&error=amount-short`);
+  }
   const { error } = await admin.rpc("activate_offline_membership_renewal", {
     p_member_id: memberId,
     p_plan_price_id: price.id,
@@ -977,6 +1005,11 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     p_payment_reference: reference,
   });
   if (error) redirect(`${back}&error=offline-renewal-failed`);
+  if (received.kind === "over") await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-extra-received",
+    entityType: "member", entityId: memberId,
+    summary: `Received £${(received.receivedPence / 100).toFixed(2)} against a ${year} fee of £${(amount / 100).toFixed(2)} (${reference}); extra £${(received.extraPence / 100).toFixed(2)}: ${received.note}`,
+  });
   await closeOpenMembershipCheckouts({ memberId, membershipYear: year });
   await processMembershipProviderCommands(memberId);
   await ensureMemberPortalInvitation(memberId);

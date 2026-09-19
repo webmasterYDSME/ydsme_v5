@@ -38,6 +38,8 @@ export function MemberPaymentPanel({ memberId, name, planName, renewable, choice
           <CirclePoundSterling aria-hidden="true"/>
           <div><span>Amount to record</span><strong>{canRecord ? money(choice!.amount_pence!) : "No payment due"}</strong><small>{choice?.note ?? "Choose a membership year."}</small></div>
         </div>
+        <label>Amount received (£)<input name="amount_received" inputMode="decimal" defaultValue={canRecord ? (choice!.amount_pence! / 100).toFixed(2) : ""} required/></label>
+        <label>Note, if it is not the fee<input name="amount_note" maxLength={300} placeholder="For example: kept the extra as a donation"/></label>
         <label>Payment method<select name="payment_method"><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label>
         <label>Receipt or payment reference<input name="payment_reference" minLength={2} maxLength={120} required/></label>
         <label>Date received<input type="date" name="received_on" max={today} defaultValue={today} required/></label>
