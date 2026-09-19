@@ -128,10 +128,10 @@
   /* Heading: title and the Add membership button share a line. */
   .workspace .heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; margin-bottom: 14px; }
   .heading > div { display: contents; }
-  .heading :global(.eyebrow) { grid-column: 1 / -1; margin-bottom: 0; }
-  .heading h1 { grid-column: 1; margin-bottom: 0; }
-  .heading > a { grid-column: 2; grid-row: 2; }
-  .heading > div > p:last-child { grid-column: 1 / -1; margin: 6px 0 0; }
+  .workspace .heading :global(.eyebrow) { grid-column: 1; grid-row: 1; margin-bottom: 0; }
+  .heading > a { grid-column: 2; grid-row: 1; }
+  .workspace .heading h1 { grid-column: 1 / -1; grid-row: 2; margin: 4px 0 0; font-size: clamp(24px, 7.6vw, 34px); }
+  .workspace .heading > div > p:last-child { display: none; }
   .search { flex-wrap: nowrap; gap: 8px; padding: 12px; }
   .search label { flex: 1 1 0; min-width: 0; }
   .search input { min-height: 42px; }
