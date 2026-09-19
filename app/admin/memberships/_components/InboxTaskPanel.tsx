@@ -130,7 +130,7 @@ function Form({ task }: { task: InboxTask }) {
       <form action={reviewStudentMembershipRequest} className="stack-form"><h3 className={styles.formTitle}>Decline</h3><input type="hidden" name="transition_id" value={task.transitionId}/><input type="hidden" name="decision" value="reject"/><label>Reason for declining<input name="reason" minLength={5} maxLength={500} required/></label><Actions task={task} link={false}><PendingSubmitButton className="danger-button" pendingLabel="Declining…">Keep Adult membership</PendingSubmitButton></Actions></form>
     </div>;
     case "manual-contact": return <div className={styles.panelForms}>
-      <p className={styles.callout}>{task.body}</p>
+      {task.items.map((text, index) => <p key={index} className={styles.callout} style={{ whiteSpace: "pre-line" }}>{text}</p>)}
       <p className={styles.panelNote}>Each person appears once, even when several updates need to be shared with them.</p>
       <form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><label>Contact note<textarea name="reason" rows={3} minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as contacted</PendingSubmitButton></Actions></form>
     </div>;

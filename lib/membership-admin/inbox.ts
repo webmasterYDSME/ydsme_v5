@@ -57,7 +57,7 @@ export type InboxTask = Base & (
   | { type: "renewal-payment"; termId: string; year: number; amountDuePence: number; method: string | null }
   | { type: "verification"; planName: string; application: { id: string; full_name: string; contact_email: string | null; contact_number: string | null; guardian_led: boolean; student_declaration: boolean; date_of_birth: string | null; applied_at: string | null; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null }; payment: VerificationPayment | null }
   | { type: "student-request"; transitionId: string; year: number }
-  | { type: "manual-contact"; notificationId: string; body: string }
+  | { type: "manual-contact"; notificationId: string; items: string[] }
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
   | { type: "honorary-conflict"; body: string }
   | { type: "refund"; reason: string | null; outstandingPence: number }
@@ -174,6 +174,20 @@ async function refundsToArrange(admin: Admin) {
 }
 
 /** Each person appears once, whichever of their updates arrived last. */
+// One task per person. Every officer gets a copy of each task, so identical texts are merged
+// and what is left is the list of different things the member has to be told about.
+function contactTasks(rows: Row[]) {
+  const byMember = new Map<string, { row: Row; items: string[] }>();
+  for (const row of rows) {
+    if (!row.member_id) continue;
+    const text = String(row.body ?? "");
+    const group = byMember.get(row.member_id) ?? { row, items: [] };
+    if (!group.items.includes(text)) group.items.push(text);
+    byMember.set(row.member_id, group);
+  }
+  return Array.from(byMember.values());
+}
+
 function onePerMember(rows: Row[]) {
   return Array.from(new Map(rows.filter((row) => row.member_id).map((row) => [row.member_id as string, row])).values());
 }
@@ -243,11 +257,11 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
   ] as const) if (result.error) fail(what, result.error);
 
   const verificationPayments = await loadVerificationPayments(admin, ((verificationResult.data ?? []) as Row[]).map((row) => row.id));
-  const contact = onePerMember((contactResult.data ?? []) as Row[]);
+  const contact = contactTasks((contactResult.data ?? []) as Row[]);
   const memberIds = Array.from(new Set([
     ...((renewalResult.data ?? []) as Row[]).map((row) => row.member_id),
     ...((studentResult.data ?? []) as Row[]).map((row) => row.member_id),
-    ...contact.map((row) => row.member_id),
+    ...contact.map(({ row }) => row.member_id),
     ...((reviewResult.data ?? []) as Row[]).map((row) => row.member_id),
     ...((conflictResult.data ?? []) as Row[]).map((row) => row.member_id),
   ].filter(Boolean)));
@@ -313,11 +327,13 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
       transitionId: transition.id, year: transition.membership_year,
     });
   }
-  for (const task of contact) {
+  for (const { row: task, items } of contact) {
+    const first = items[0].split("\n")[0];
     add({
       key: `manual-contact.${task.id}`, type: "manual-contact", kind: "contact", name: memberName(task.member_id),
-      summary: String(task.body ?? "").slice(0, 140), since: task.created_at, cta: "Log contact", memberId: task.member_id,
-      notificationId: task.id, body: task.body ?? "",
+      summary: (items.length > 1 ? `${first} and ${items.length - 1} more` : first).slice(0, 140),
+      since: task.created_at, cta: "Log contact", memberId: task.member_id,
+      notificationId: task.id, items,
     });
   }
   for (const term of (reviewResult.data ?? []) as Row[]) {

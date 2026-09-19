@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
@@ -415,4 +416,18 @@ test("renewals skip members whose honorary membership covers the year", async ()
   // Honorary membership that ends part-way through the year with a replacement type still owes a fee.
   assert.match(sql, /replacement_plan_id is not null/);
   assert.match(sql, /update public\.membership_notifications n set read_at=now\(\)/);
+});
+
+test("contact tasks say why the member has to be contacted", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609190008_membership_manual_contact_reasons.sql", import.meta.url), "utf8");
+  // The task starts with the reason and carries the notice that could not be sent.
+  assert.match(sql, /when 'membership\.lapsed' then 'Membership has lapsed'/);
+  assert.match(sql, /The message they would have received/);
+  assert.doesNotMatch(sql, /'Manual member contact required',/);
+  // Tasks already open under the old wording are rewritten.
+  assert.match(sql, /t\.title='Manual member contact required'/);
+  // The Inbox lists every different reason for a member rather than only the latest.
+  const inbox = readFileSync(new URL("../lib/membership-admin/inbox.ts", import.meta.url), "utf8");
+  assert.match(inbox, /function contactTasks/);
+  assert.match(inbox, /items\.includes\(text\)/);
 });
