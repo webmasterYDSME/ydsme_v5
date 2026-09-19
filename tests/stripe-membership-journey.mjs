@@ -465,7 +465,7 @@ try {
     assert.equal(renewalTerm.status,"paid");
     assert.equal(renewalTerm.amount_paid_pence,planPrice.amount_pence);
     await page.goto(siteUrl + "/membership/renew?token=" + renewalToken);
-    await page.getByRole("heading",{name:"Your membership is already paid"}).waitFor();
+    await page.getByRole("heading",{name:/^Thank you, /}).waitFor();
     assert.equal((await admin.from("membership_subscriptions").select("id").eq("member_id",member.id)).data.length,0);
   } finally { if(renewalSession) await stripe.checkout.sessions.expire(renewalSession.id); await renewalBrowser.close(); }
 

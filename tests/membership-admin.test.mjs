@@ -466,3 +466,10 @@ test("the result message floats on screen and every notice has its own wording",
     if (!skip.has(code)) assert.ok(membershipNoticeMessage(code), `no wording for notice ${code}`);
   }
 });
+
+test("the renewal page thanks a member who has paid", () => {
+  const page = readFileSync(new URL("../app/membership/renew/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /title=\{`Thank you, \$\{member\.full_name\.trim\(\)\.split\(\/\\s\+\/\)\[0\]\}\.`\}/);
+  assert.match(page, /Your membership renewal for the year \{year\} is successful\./);
+  assert.doesNotMatch(page, /There is nothing more to do\. Thank you\./);
+});

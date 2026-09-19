@@ -15,9 +15,9 @@ export const dynamic = "force-dynamic";
 const pounds = (pence: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
 
 /** One card in the shared confirmation style, for every state of the page. */
-function Card({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
-  return <PageShell headerTheme="light"><div className={confirmation.page}><section className={confirmation.card} aria-labelledby="renew-title">
-    <div className={confirmation.icon} aria-hidden="true">{icon}</div>
+function Card({ icon, title, children, done }: { icon: ReactNode; title: string; children: ReactNode; done?: boolean }) {
+  return <PageShell headerTheme="light"><div className={confirmation.page}><section className={`${confirmation.card} ${done ? styles.done : ""}`} aria-labelledby="renew-title">
+    <div className={`${confirmation.icon} ${done ? styles.doneIcon : ""}`} aria-hidden="true">{icon}</div>
     <p className="eyebrow dark">Membership renewal</p>
     <h1 id="renew-title">{title}</h1>
     {children}
@@ -38,8 +38,21 @@ export default async function Renewal({ searchParams }: { searchParams: Promise<
   if (!member || !campaign?.open || ["suspended", "archived", "honorary", "payment_review"].includes(member.effective_state)) {
     return <Card icon={<ShieldAlert/>} title="Renewal is not available"><p>Renewal cannot be paid online for this membership at the moment. Please contact the membership officer.</p></Card>;
   }
-  const { data: term } = await admin.from("membership_terms").select("status,amount_paid_pence").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).maybeSingle();
-  if (term?.status === "paid") return <Card icon={<CircleCheck/>} title="Your membership is already paid"><p>{member.full_name} · {invitation.membership_year}</p><p>There is nothing more to do. Thank you.</p></Card>;
+  const { data: term } = await admin.from("membership_terms").select("status,amount_paid_pence,membership_plan_prices(membership_plans(name))").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).maybeSingle();
+  if (term?.status === "paid") {
+    const year = invitation.membership_year;
+    const paidPlan = (term as { membership_plan_prices?: { membership_plans?: { name?: string } | null } | null }).membership_plan_prices?.membership_plans?.name;
+    return <Card done icon={<CircleCheck/>} title={`Thank you, ${member.full_name.trim().split(/\s+/)[0]}.`}>
+      <p className={styles.lead}>Your membership renewal for the year {year} is successful.</p>
+      <dl className={styles.summary}>
+        <div><dt>Member</dt><dd>{member.full_name}</dd></div>
+        {paidPlan ? <div><dt>Membership</dt><dd>{paidPlan}</dd></div> : null}
+        <div><dt>Covers</dt><dd>1 January – 31 December {year}</dd></div>
+        {term.amount_paid_pence > 0 ? <div className={styles.total}><dt>Paid</dt><dd>{pounds(term.amount_paid_pence)}</dd></div> : null}
+      </dl>
+      <div className={confirmation.note}><ShieldCheck aria-hidden="true"/><span>There is nothing more you need to do. If any of these details look wrong, please contact the membership officer.</span></div>
+    </Card>;
+  }
   if ((term?.amount_paid_pence ?? 0) > 0) return <Card icon={<ShieldAlert/>} title="Your payment needs review"><p>Contact the membership officer before making another payment.</p></Card>;
   const { data: transition } = await admin.from("membership_plan_transitions").select("from_plan_id,to_plan_id,status").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).in("status", ["approved", "scheduled", "awaiting_student_review"]).maybeSingle();
   // A pending Student request decides the fee, so nothing can be paid until the officer has answered it.

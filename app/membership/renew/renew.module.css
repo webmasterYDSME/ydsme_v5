@@ -29,6 +29,11 @@
 .total dt { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .total dd { font: 500 44px/1 var(--font-display); letter-spacing: -.02em; }
 
+/* The finished state: a green edge and icon, and a larger first line. */
+.done { border-top: 4px solid #4f865b; }
+.doneIcon { background: #d5e6d3 !important; color: #27533a !important; }
+.lead { margin: 0 !important; max-width: none !important; color: var(--deep) !important; font-size: 20px !important; line-height: 1.5 !important; }
+
 .alert {
   margin: 24px 0 0;
   padding: 16px 20px;
