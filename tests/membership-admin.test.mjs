@@ -5,6 +5,7 @@ import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts
 import { membershipErrorMessage } from "../lib/membership-admin/messages.ts";
 import { emptyOfficerMemberState, submittedValues } from "../lib/membership-admin/officer-member.ts";
 import { ageOn, capitaliseName, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
+import { parseRenewalBody, renewalHtml, renewalText } from "../supabase/functions/deliver-membership-notifications/renewal-email.ts";
 import { ageTransitionSlug, buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
 const memberId = "0f6f2a3c-1b7d-4e55-8c1a-5d2f7b9e4a10";
@@ -316,4 +317,67 @@ test("payments and checkout record any age change before they read the fee", asy
     assert.ok(call > 0);
     assert.ok(call < source.indexOf('.from("membership_plan_transitions")', call));
   }
+});
+
+const renewalBody = [
+  "Clifford Junior Test membership for the year of 2027 has not been renewed yet.",
+  "Membership: Adult\nFee for 2027: £30.00\nYour membership type changes from Junior to Adult for 2027.",
+  "Pay by bank transfer (preferred)\nThe preferred way to pay.\nAccount name: York & District <Society>\nSort code: 12-34-56\nAccount number: 12345678\nAmount: £30.00\nReference: Clifford Junior Test",
+  "Pay by card\nUse your personal link.",
+  "Pay by cheque\nPayable to: York Society\nPost it to the Treasurer: 1 Example Road.",
+  "Pay by cash\nHand it to the Treasurer.",
+  "If you have already paid, please contact the membership officer.",
+].join("\n\n");
+
+test("renewal emails list bank transfer first and put the renewal button with the card option", () => {
+  const blocks = parseRenewalBody(renewalBody);
+  assert.deepEqual(blocks.map((block) => block.type), ["paragraph", "facts", "method", "method", "method", "method", "paragraph"]);
+  const [bank, card, cheque] = blocks.filter((block) => block.type === "method");
+  assert.equal(bank.name, "Pay by bank transfer");
+  assert.equal(bank.preferred, true);
+  assert.deepEqual(bank.rows.map(([label]) => label), ["Account name", "Sort code", "Account number", "Amount", "Reference"]);
+  assert.equal(card.card, true);
+  // Free text with a colon in it is not mistaken for a labelled detail.
+  assert.deepEqual(cheque.rows, [["Payable to", "York Society"]]);
+  assert.deepEqual(cheque.text, ["Post it to the Treasurer: 1 Example Road."]);
+
+  const html = renewalHtml({ eyebrow: "Membership renewal", title: "Please renew your YDSME 2027 membership", body: renewalBody, actionUrl: "http://x/membership/renew?token=abc", buttonLabel: "Renew my membership" });
+  assert.match(html, /Preferred/);
+  assert.ok(html.indexOf("Pay by bank transfer") < html.indexOf("Pay by card"));
+  assert.ok(html.indexOf("Pay by card") < html.indexOf("Pay by cheque"));
+  // One button, inside the card block, before the cheque and cash blocks.
+  assert.equal((html.match(/Renew my membership/g) ?? []).length, 1);
+  assert.ok(html.indexOf("Renew my membership") < html.indexOf("Pay by cheque"));
+  // Text from the database is escaped.
+  assert.match(html, /York &amp; District &lt;Society&gt;/);
+  assert.doesNotMatch(html, /<Society>/);
+
+  const text = renewalText(renewalBody, "http://x/membership/renew?token=abc", "Renew online");
+  assert.ok(text.indexOf("Renew online: http://x") > text.indexOf("Pay by card"));
+  assert.ok(text.indexOf("Renew online: http://x") < text.indexOf("Pay by cheque"));
+});
+
+test("renewal emails queued in the older layout keep the simple layout", () => {
+  const old = "Jo's membership is due.\n\nOther ways to pay\n\nBank transfer\nAccount name: X";
+  assert.equal(parseRenewalBody(old), null);
+  assert.equal(renewalHtml({ eyebrow: "e", title: "t", body: old, actionUrl: null, buttonLabel: "b" }), null);
+  assert.equal(renewalText("plain", null, "Renew online"), "plain");
+  assert.equal(renewalText(old, "http://x", "Renew online").endsWith("Renew online: http://x"), true);
+});
+
+test("the reminder subject and opening line, and the wider body limit, are in the layout migration", async () => {
+  const [sql, worker] = await Promise.all([
+    readFile(new URL("../supabase/migrations/202609190005_membership_renewal_email_layout.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/deliver-membership-notifications/index.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(sql, /'Please renew your YDSME '\|\|p_year\|\|' membership'/);
+  assert.match(sql, /membership for the year of '\|\|p_year\|\|' has not been renewed yet\./);
+  assert.match(sql, /Pay by bank transfer \(preferred\)/);
+  // Bank transfer is emitted first, then the card block, then cheque and cash.
+  assert.ok(sql.indexOf("Pay by bank transfer") < sql.indexOf("||card"));
+  assert.ok(sql.indexOf("||card") < sql.indexOf("Pay by cheque"));
+  assert.match(sql, /char_length\(body\) between 2 and 4000/);
+  assert.match(sql, /drop function if exists public\.membership_renewal_other_ways_text/);
+  assert.match(worker, /renewalHtml\(/);
+  assert.match(worker, /renewalText\(/);
 });
