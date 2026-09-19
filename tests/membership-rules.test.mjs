@@ -36,7 +36,9 @@ test("rounds prorated fees to the nearest penny and gives December to the follow
 
 test("calculates exact age boundaries without local-time drift", () => {
   assert.equal(ageOn("2008-08-20", new Date("2026-08-20T00:00:00Z")), 18);
-  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T23:59:59Z")), 17);
+  // Ages follow the London date, so the last second of 20 August in London (22:59:59 UTC in summer) is still the 20th.
+  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T22:59:59Z")), 17);
+  assert.equal(ageOn("2008-08-21", new Date("2026-08-20T23:00:00Z")), 18);
   assert.equal(ageOn("1946-08-20", new Date("2026-08-20T12:00:00Z")), 80);
 });
 
@@ -257,4 +259,16 @@ test("supports verified public applications and auditable officer-managed offlin
   assert.match(settingsPage, /tab: "payment"/);
   assert.match(settingsPage, /\/admin\/memberships\/setup/);
   assert.doesNotMatch(applicationWizard, /bank_account_number/);
+});
+
+test("fees, billing years and ages follow the London date, as the database does, in the hour after midnight in summer", () => {
+  // 23:30 UTC on 31 May is 00:30 on 1 June in London, so June's fee applies.
+  const justAfterMidnightInLondon = new Date("2027-05-31T23:30:00Z");
+  assert.equal(proratedMembershipFee(1200, justAfterMidnightInLondon), 700);
+  assert.equal(proratedMembershipFee(1200, new Date("2027-05-31T22:30:00Z")), 800);
+  // In winter London and UTC are the same, so the year boundary is unchanged.
+  assert.equal(membershipBillingYear(new Date("2027-11-30T23:30:00Z")), 2027);
+  assert.equal(membershipBillingYear(new Date("2027-12-01T00:30:00Z")), 2028);
+  assert.equal(ageOn("2000-07-01", new Date("2027-06-30T23:30:00Z")), 27);
+  assert.equal(ageOn("2000-07-01", new Date("2027-06-30T22:30:00Z")), 26);
 });

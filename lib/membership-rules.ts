@@ -1,8 +1,21 @@
+const londonFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "numeric", day: "numeric" });
+
+/**
+ * The calendar date in London at that moment. The database prices and ages people by the London date, so
+ * the website has to as well, otherwise the two disagree for the hour after midnight while British Summer
+ * Time is in force and a payment is refused for having "the wrong amount".
+ */
+export function londonDateParts(onDate: Date) {
+  const parts = Object.fromEntries(londonFormat.formatToParts(onDate).map((part) => [part.type, Number(part.value)]));
+  return { year: parts.year, month: parts.month, day: parts.day };
+}
+
 export function ageOn(dateOfBirth: string, onDate = new Date()) {
   const [year, month, day] = dateOfBirth.split("-").map(Number);
-  let age = onDate.getUTCFullYear() - year;
-  const beforeBirthday = onDate.getUTCMonth() + 1 < month
-    || (onDate.getUTCMonth() + 1 === month && onDate.getUTCDate() < day);
+  const today = londonDateParts(onDate);
+  let age = today.year - year;
+  const beforeBirthday = today.month < month
+    || (today.month === month && today.day < day);
   if (beforeBirthday) age -= 1;
   return age;
 }
@@ -33,19 +46,22 @@ export function defaultMembershipPlan<T extends MembershipEligibilityPlan>(plans
 }
 
 export function membershipBillingYear(onDate = new Date()) {
-  return onDate.getUTCFullYear() + (onDate.getUTCMonth() === 11 ? 1 : 0);
+  const { year, month } = londonDateParts(onDate);
+  return year + (month === 12 ? 1 : 0);
 }
 
 export function membershipRenewalYear(onDate = new Date()) {
-  return onDate.getUTCFullYear() + (onDate.getUTCMonth() >= 10 ? 1 : 0);
+  const { year, month } = londonDateParts(onDate);
+  return year + (month >= 11 ? 1 : 0);
 }
 
 export function membershipRenewalIsOpen(onDate = new Date()) {
-  return onDate.getUTCMonth() >= 10 || onDate.getUTCMonth() <= 2;
+  const { month } = londonDateParts(onDate);
+  return month >= 11 || month <= 3;
 }
 
 export function proratedMembershipFee(annualPence: number, onDate = new Date()) {
-  const month = onDate.getUTCMonth() + 1;
+  const { month } = londonDateParts(onDate);
   return month === 12 ? annualPence : Math.round(annualPence * (13 - month) / 12);
 }
 
