@@ -12,6 +12,8 @@ const messages: Record<string, string> = {
   "possible-duplicate": "Someone with the same email address, or the same name and date of birth, is already on the register. If this is a different person, say why in the highlighted box and try again.",
   "honorary-member-details-invalid": "Some details are missing or not valid. Check the name, email address, date of birth, start date and reason.",
   "honorary-member-create-failed": "The honorary member could not be added. Nothing was saved. Check the details and try again.",
+  "honorary-already-exists": "This member already has an honorary membership, so nothing was changed.",
+  "honorary-revoke-failed": "The change could not be scheduled. Check the date and the membership they move to, then try again.",
   "honorary-grant-failed": "The honorary membership could not be granted, so nobody was added. Check the start date and reason and try again.",
   "newsletter-email-required": "A newsletter subscription needs an email address. Add one, or untick the newsletter.",
   "newsletter-consent-evidence-required": "Say how the newsletter consent was given.",

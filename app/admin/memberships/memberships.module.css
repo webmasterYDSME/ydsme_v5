@@ -105,9 +105,8 @@
 .termHead strong { font: 500 24px/1.1 var(--font-display); }
 .term p { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .term small { color: #56625b; }
-.more details { padding: 14px 0; border-top: 1px solid rgba(16,24,20,.12); }
-.more summary { cursor: pointer; font-size: 15px; font-weight: 700; }
-.more details > form { margin-top: 14px; max-width: 560px; }
+.cardGap { margin-top: 14px; }
+.technical > form { margin-top: 12px; }
 
 /* Renewals and setup */
 .twoCol { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }

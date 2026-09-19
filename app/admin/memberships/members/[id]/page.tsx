@@ -4,17 +4,16 @@ import { ArrowLeft, CreditCard, PoundSterling } from "lucide-react";
 import {
   assignMemberPortalLogin,
   correctMemberEligibility,
-  grantHonoraryMembership,
   removeMemberPortalLogin,
   reportOfflineMembershipPaymentFailure,
   requestMemberContactChange,
-  revokeHonoraryMembership,
 } from "@/lib/actions/membership";
 import { requireCapability } from "@/lib/auth";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { newsletterConsentSources } from "@/lib/membership-admin/officer-member";
-import { dateLabel, londonToday, memberStateName, money, paymentMethodName } from "@/lib/membership-admin/format";
+import { dateLabel, memberStateName, money, paymentMethodName } from "@/lib/membership-admin/format";
 import { loadMemberRecord } from "@/lib/membership-admin/records";
+import { MemberHonoraryPanel } from "../../_components/MemberHonoraryPanel";
 import { MemberPaymentPanel } from "../../_components/MemberPaymentPanel";
 import { MembershipFlash } from "../../_components/MembershipFlash";
 import styles from "../../memberships.module.css";
@@ -43,15 +42,14 @@ export default async function MembershipRecord({ params, searchParams }: { param
   if (!record) notFound();
   const { member, plan, plans, terms, honorary, payments, choices, renewable, currentYear } = record;
 
-  const today = londonToday();
-  const nextYearStart = `${Number(today.slice(0, 4)) + 1}-01-01`;
   const base = `/admin/memberships/members/${id}`;
   const initials = String(member.full_name).split(/\s+/).filter(Boolean).slice(0, 2).map((part: string) => part[0]?.toUpperCase()).join("");
   const paidTerms = terms.filter((term) => term.status === "paid");
   const paidUntil = paidTerms.reduce<string | null>((latest, term) => (!latest || term.ends_on > latest ? term.ends_on : latest), null);
   const openHonorary = honorary.find((item) => ["scheduled", "active"].includes(item.status) && !item.revoked_effective_on) ?? null;
   const anyHonorary = honorary.some((item) => ["scheduled", "active"].includes(item.status));
-  const panelOpen = one(query.panel) === "payment";
+  const panel = one(query.panel);
+  const honoraryPanel = panel === "honorary" && !anyHonorary ? "grant" : panel === "end-honorary" && openHonorary ? "end" : null;
   const requestedYear = Number(one(query.year));
   const defaultYear = choices.find((choice) => choice.membership_year === currentYear)?.amount_pence === null ? currentYear + 1 : currentYear;
   const year = requestedYear === currentYear || requestedYear === currentYear + 1 ? requestedYear : defaultYear;
@@ -73,7 +71,8 @@ export default async function MembershipRecord({ params, searchParams }: { param
       </div>
       <div className={styles.profileActions}>
         <Link className="button dark" href={`${base}?panel=payment&year=${year}`} prefetch={false} scroll={false}><PoundSterling/>Record payment</Link>
-        {!anyHonorary ? <a className="button outline" href="#more">Make honorary</a> : null}
+        {!anyHonorary ? <Link className="button outline" href={`${base}?panel=honorary`} prefetch={false} scroll={false}>Make honorary</Link> : null}
+        {openHonorary ? <Link className="button outline" href={`${base}?panel=end-honorary`} prefetch={false} scroll={false}>End honorary</Link> : null}
       </div>
     </section>
 
@@ -105,50 +104,40 @@ export default async function MembershipRecord({ params, searchParams }: { param
       <div className={styles.stack}>
         <section className={styles.card}>
           <h2>Contact</h2>
-          <dl className={styles.facts} style={{ marginTop: 14 }}>
+          <dl className={`${styles.facts} ${styles.cardGap}`}>
             <div><dt>Email</dt><dd>{member.contact_email || "None"}</dd></div>
             {member.contact_email ? <div><dt>Confirmed</dt><dd>{member.contact_email_verified_at ? "Yes" : "Not yet"}</dd></div> : null}
             <div><dt>Newsletter</dt><dd>{newsletterLabel(member)}</dd></div>
             <div><dt>Whose address</dt><dd>{member.contact_role === "guardian" ? "Guardian correspondence" : member.contact_role === "shared_household" ? "Shared household" : "The member’s own"}</dd></div>
             {member.contact_number ? <div><dt>Telephone</dt><dd>{member.contact_number}</dd></div> : null}
           </dl>
-          <details className={styles.technical} style={{ marginTop: 14 }}><summary>Change correspondence details</summary>
+          <details className={`${styles.technical} ${styles.cardGap}`}><summary>Change correspondence details</summary>
             <form action={requestMemberContactChange} className="editor-form"><input type="hidden" name="member_id" value={id}/><p className="form-help">A changed email address is used only after the mailbox confirms it. Shared addresses are allowed.</p><label>Email address <em>Leave empty to remove</em><input type="email" name="contact_email" defaultValue={member.contact_email || ""}/></label><label>Whose address is this?<select name="contact_role" defaultValue={member.contact_role || "self"}><option value="self">The member’s own</option><option value="guardian">Guardian correspondence</option><option value="shared_household">Shared household correspondence</option></select></label><label>Reason for the change<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Sending confirmation…">Save and verify correspondence</PendingSubmitButton></form>
+          </details>
+        </section>
+
+        <section className={styles.card}>
+          <h2>Personal details</h2>
+          <dl className={`${styles.facts} ${styles.cardGap}`}><div><dt>Date of birth</dt><dd>{member.date_of_birth ? dateLabel(member.date_of_birth) : "Not recorded"}</dd></div></dl>
+          <details className={`${styles.technical} ${styles.cardGap}`}><summary>Correct the date of birth</summary>
+            <form action={correctMemberEligibility} className="editor-form"><input type="hidden" name="member_id" value={id}/><p className="form-help">Use this only when the saved date is wrong. The reason is kept in the member’s history.</p><label>Date of birth<input type="date" name="date_of_birth" defaultValue={member.date_of_birth || ""} required/></label><label>Reason for the change<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save corrected date</PendingSubmitButton></form>
           </details>
         </section>
 
         <section className={styles.card}>
           <h2>Website login</h2>
           <p className={styles.lead}>{member.auth_user_id ? "This member has a personal website login." : "This member has no personal website login."} A shared contact address never gives one person access to another person’s membership; each member with website access needs a unique login email.</p>
-          <details className={styles.technical} style={{ marginTop: 14 }}><summary>{member.auth_user_id ? "Remove personal website access" : "Assign or invite a website login"}</summary>
+          <details className={`${styles.technical} ${styles.cardGap}`}><summary>{member.auth_user_id ? "Remove personal website access" : "Assign or invite a website login"}</summary>
             {member.auth_user_id
               ? <form action={removeMemberPortalLogin} className="stack-form"><input type="hidden" name="member_id" value={id}/><label>Reason for removing access<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="danger-button" pendingLabel="Removing…">Remove personal website access</PendingSubmitButton></form>
               : <form action={assignMemberPortalLogin} className="stack-form"><input type="hidden" name="member_id" value={id}/><label>Unique login email<input type="email" name="login_email" required/></label><label>Reason for assigning this login<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Assigning…">Assign or invite website login</PendingSubmitButton></form>}
           </details>
         </section>
-
-        <section className={styles.card}>
-          <h2>Personal details</h2>
-          <dl className={styles.facts} style={{ marginTop: 14 }}><div><dt>Date of birth</dt><dd>{member.date_of_birth ? dateLabel(member.date_of_birth) : "Not recorded"}</dd></div></dl>
-        </section>
       </div>
     </div>
 
-    <section className={`${styles.card} ${styles.more}`} id="more" style={{ marginTop: 18 }}>
-      <h2>Less common actions</h2>
-      <p className={styles.lead}>Every change needs a reason and is kept in the member’s history.</p>
-      {!anyHonorary ? <details><summary>Make this member a lifetime honorary member</summary>
-        <form action={grantHonoraryMembership} className="editor-form"><input type="hidden" name="member_id" value={id}/><label>Start date<input name="effective_from" type="date" min={today} defaultValue={today} required/></label><label>Reason for honorary membership<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="button dark" pendingLabel="Scheduling…">Schedule honorary membership</PendingSubmitButton></form>
-      </details> : null}
-      {openHonorary ? <details><summary>End honorary membership</summary>
-        <form action={revokeHonoraryMembership} className="stack-form"><input type="hidden" name="honorary_id" value={openHonorary.id}/><label>Membership after honorary status<select name="replacement_plan_id" required>{plans.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label><label>Change date<input name="effective_on" type="date" min={today} defaultValue={nextYearStart} required/></label><label>Reason for ending honorary membership<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Scheduling…">Schedule the change</PendingSubmitButton></form>
-      </details> : null}
-      <details><summary>Correct the date of birth</summary>
-        <form action={correctMemberEligibility} className="editor-form"><input type="hidden" name="member_id" value={id}/><p className="form-help">Use this only when the saved date is wrong. The reason is kept in the member’s history.</p><label>Date of birth<input type="date" name="date_of_birth" defaultValue={member.date_of_birth || ""} required/></label><label>Reason for the change<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save corrected date</PendingSubmitButton></form>
-      </details>
-    </section>
-
-    {panelOpen ? <MemberPaymentPanel memberId={id} name={member.full_name} planName={plan?.name ?? null} renewable={renewable} choices={choices} currentYear={currentYear} year={year}
+    {honoraryPanel ? <MemberHonoraryPanel mode={honoraryPanel} memberId={id} name={member.full_name} planName={plan?.name ?? null} honorary={openHonorary ? { id: openHonorary.id, effective_from: openHonorary.effective_from } : null} plans={plans} closeHref={base}/> : null}
+    {panel === "payment" ? <MemberPaymentPanel memberId={id} name={member.full_name} planName={plan?.name ?? null} renewable={renewable} choices={choices} currentYear={currentYear} year={year}
       closeHref={base} yearHref={(option) => `${base}?panel=payment&year=${option}`}/> : null}
   </>;
 }

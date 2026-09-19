@@ -679,14 +679,16 @@ export async function grantHonoraryMembership(formData: FormData) {
   const admin = createServiceClient();
   const { data: existingHonorary } = await admin.from("honorary_memberships").select("id").eq("member_id", memberId)
     .in("status", ["scheduled", "active"]).maybeSingle();
-  if (existingHonorary) redirect("/admin/memberships?error=honorary-already-exists");
+  // The officer is on this member's record, so results go back there.
+  const record = `/admin/memberships?member=${memberId}`;
+  if (existingHonorary) redirect(`${record}&error=honorary-already-exists`);
   const { data, error } = await admin.rpc("grant_lifetime_honorary_membership", {
     p_member_id: memberId, p_effective_from: effectiveFrom, p_reason: reason, p_actor_id: user.id,
   });
-  if (error || !data) redirect("/admin/memberships?error=honorary-grant-failed");
+  if (error || !data) redirect(`${record}&error=honorary-grant-failed`);
   await finishHonoraryGrant(memberId, effectiveFrom);
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=honorary-scheduled");
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${record}&notice=honorary-scheduled`);
 }
 
 export async function createHonoraryMember(previous: HonoraryMemberState, formData: FormData): Promise<HonoraryMemberState> {
@@ -752,13 +754,17 @@ export async function revokeHonoraryMembership(formData: FormData) {
   const effectiveOn = z.iso.date().parse(formData.get("effective_on"));
   const replacementPlanId = idSchema.parse(formData.get("replacement_plan_id"));
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
-  const { data, error } = await createServiceClient().rpc("revoke_lifetime_honorary_membership", {
+  const admin = createServiceClient();
+  const { data: honorary } = await admin.from("honorary_memberships").select("member_id").eq("id", honoraryId).maybeSingle();
+  // The officer is on this member's record, so results go back there.
+  const record = honorary?.member_id ? `/admin/memberships?member=${honorary.member_id}` : "/admin/memberships?";
+  const { data, error } = await admin.rpc("revoke_lifetime_honorary_membership", {
     p_honorary_id: honoraryId, p_effective_on: effectiveOn,
     p_replacement_plan_id: replacementPlanId, p_reason: reason, p_actor_id: user.id,
   });
-  if (error || !data) redirect("/admin/memberships?error=honorary-revoke-failed");
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=honorary-transition-scheduled");
+  if (error || !data) redirect(`${record}${honorary?.member_id ? "&" : ""}error=honorary-revoke-failed`);
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${record}${honorary?.member_id ? "&" : ""}notice=honorary-transition-scheduled`);
 }
 
 export async function toggleMembershipAutoRenew(formData: FormData) {
