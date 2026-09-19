@@ -43,7 +43,10 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
           <div className={styles.fieldGrid}><label>Payment method<select name="payment_method"><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label><label>Receipt or payment reference<input name="payment_reference"/></label></div>
           <label className="checkbox-row"><input type="checkbox" name="payment_received"/>Payment received in full</label>
           <label className="checkbox-row"><input type="checkbox" name="cleared"/>Cheque cleared <em>Cheque payments only</em></label>
-          <label>Reason for adding a possible duplicate <em>Only when a matching person is found</em><textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500}/></label>
+          <details className={styles.disclosure}><summary>Already on the register?</summary>
+            <p className={styles.panelNote}>If someone with the same email address, or the same name and date of birth, is already a member, adding another record is blocked. If this really is a different person, say why here and add them again.</p>
+            <label>Why is this a different person?<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500}/></label>
+          </details>
         </section>
         <div className={styles.actionRow}><p className={styles.panelNote}>The membership becomes active once full payment is recorded. Unpaid ones appear under Payments in the Inbox.</p><PendingSubmitButton pendingLabel="Adding member…">Add member</PendingSubmitButton></div>
       </form>
