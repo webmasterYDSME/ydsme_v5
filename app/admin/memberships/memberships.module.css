@@ -181,9 +181,12 @@
 .panelBody.panelBody :global(.membership-manual-create-form) { padding: 0; border: 0; background: none; gap: 14px; }
 .panelBody.panelBody :global(.stack-form) label, .panelBody.panelBody :global(.editor-form) label { display: flex; flex-wrap: wrap; align-items: baseline; align-content: flex-start; gap: 6px 8px; font-size: 13px; font-weight: 700; line-height: 1.4; text-transform: none; letter-spacing: 0; color: #2b342f; }
 .panelBody.panelBody :global(.stack-form) label em, .panelBody.panelBody :global(.editor-form) label em { font-size: 12px; font-style: normal; font-weight: 400; color: #56625b; }
-.panelBody.panelBody :global(.stack-form) :is(input:not([type="checkbox"]), select, textarea), .panelBody.panelBody :global(.editor-form) :is(input:not([type="checkbox"]), select, textarea) { min-height: 44px; }
+.panelBody.panelBody :global(.stack-form) :is(input:not([type="checkbox"], [type="radio"]), select, textarea), .panelBody.panelBody :global(.editor-form) :is(input:not([type="checkbox"], [type="radio"]), select, textarea) { min-height: 44px; }
 /* A label's hint (Optional) stays on the label's line; everything else in the label takes a full row. */
 .panelBody.panelBody :global(.stack-form) label > :not(em), .panelBody.panelBody :global(.editor-form) label > :not(em) { flex: 0 0 100%; min-width: 0; }
+/* Tick boxes and round buttons are not text fields: no box, padding or square focus ring around them. */
+.panelBody.panelBody :global(.stack-form) input:is([type="checkbox"], [type="radio"]), .panelBody.panelBody :global(.editor-form) input:is([type="checkbox"], [type="radio"]) { width: 17px; height: 17px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; accent-color: var(--forest); }
+.panelBody.panelBody :global(.stack-form) input:is([type="checkbox"], [type="radio"]):focus-visible, .panelBody.panelBody :global(.editor-form) input:is([type="checkbox"], [type="radio"]):focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; box-shadow: none; }
 /* Tick boxes: the box and its text on one centred line, no tile. */
 .panelBody.panelBody :global(.stack-form) :global(.checkbox-row), .panelBody.panelBody :global(.editor-form) :global(.checkbox-row) { display: flex !important; flex-direction: row !important; flex-wrap: nowrap; align-items: center; gap: 10px; min-height: 0; padding: 0; border: 0; background: none; font-size: 14px !important; font-weight: 600; line-height: 1.4; }
 .panelBody.panelBody :global(.stack-form) :global(.checkbox-row) > *, .panelBody.panelBody :global(.editor-form) :global(.checkbox-row) > * { flex: 0 0 auto; }
@@ -214,10 +217,11 @@
 }
 
 /* Add a membership: payment status choice, consent box, buttons, and a submit row that stays in view. */
-.segmented { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 6px; align-content: start; }
+.segmented { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .segmented legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: #2b342f; }
-.panelBody.panelBody .segmented :global(.checkbox-row) { padding: 9px 12px; border: 1px solid rgba(16,24,20,.2); border-radius: 8px; background: #fffdf8; }
+.panelBody.panelBody .segmented :global(.checkbox-row) { min-height: 44px; padding: 0 14px; border: 1px solid rgba(16,24,20,.2); border-radius: 8px; background: #fffdf8; cursor: pointer; }
 .panelBody.panelBody .segmented :global(.checkbox-row):has(input:checked) { border-color: var(--forest); background: #edf2ed; }
+.panelBody.panelBody .segmented :global(.checkbox-row):has(input:focus-visible) { outline: 2px solid var(--forest); outline-offset: 2px; }
 .consentBox { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid rgba(16,24,20,.14); border-radius: 8px; background: #fffdf8; }
 .buttonPair { display: flex; flex-wrap: wrap; gap: 10px; }
 .stickyActions { position: sticky; bottom: 0; z-index: 2; margin: 0 -30px -34px; padding: 12px 30px 16px; background: #fffdf8; border-top: 1px solid rgba(16,24,20,.12); justify-content: flex-end; }

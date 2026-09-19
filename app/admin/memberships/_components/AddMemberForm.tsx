@@ -162,22 +162,19 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>Payment</h3>
       <OfficerFeeSummary eligibility={eligibility}/>
+      <fieldset className={styles.segmented}>
+        <legend>Payment status</legend>
+        <label className="checkbox-row"><input type="radio" name="payment_received" value="off" checked={!paid} onChange={() => setPaid(false)}/>Not paid yet</label>
+        <label className="checkbox-row"><input type="radio" name="payment_received" value="on" checked={paid} onChange={() => setPaid(true)}/>Paid in full</label>
+      </fieldset>
       <div className={styles.fieldGrid}>
-        <label>Payment method<select name="payment_method" value={method} onChange={(event) => setMethod(event.target.value as keyof typeof paymentMethods)}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <fieldset className={styles.segmented}>
-          <legend>Payment status</legend>
-          <label className="checkbox-row"><input type="radio" name="payment_received" value="off" checked={!paid} onChange={() => setPaid(false)}/>Not paid yet</label>
-          <label className="checkbox-row"><input type="radio" name="payment_received" value="on" checked={paid} onChange={() => setPaid(true)}/>Paid in full</label>
-        </fieldset>
+        <label>{paid ? "Paid by" : "Will pay by"}<select name="payment_method" value={method} onChange={(event) => setMethod(event.target.value as keyof typeof paymentMethods)}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        {paid ? <label>Receipt or payment reference<input name="payment_reference" defaultValue={value("payment_reference")} required/></label> : null}
       </div>
-      {paid ? <>
-        <label>Receipt or payment reference<input name="payment_reference" defaultValue={value("payment_reference")} required/></label>
-        {method === "cheque" ? <>
-          <label className="checkbox-row"><input type="checkbox" name="cleared" defaultChecked={values.cleared === "on"} required/>The cheque has cleared</label>
-          <p className={styles.panelNote}>If it has not cleared yet, choose “Not paid yet” and record it from the Inbox when it does.</p>
-        </> : null}
-        <p className={styles.panelNote}>The payment is recorded as received on the start date, {dateLabel(eligibility.startDate) || "today"}.</p>
-      </> : <p className={styles.panelNote}>It appears under Payments in the Inbox until the money arrives.</p>}
+      {paid && method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" defaultChecked={values.cleared === "on"} required/>The cheque has cleared</label> : null}
+      <p className={styles.panelNote}>{paid
+        ? `Recorded as received on the start date, ${dateLabel(eligibility.startDate) || "today"}.${method === "cheque" ? " If the cheque has not cleared yet, choose “Not paid yet” and record it from the Inbox when it does." : ""}`
+        : "It appears under Payments in the Inbox until the money arrives."}</p>
     </section>
 
     {message ? <p ref={alert} className="form-message error" role="alert">{message}</p> : null}
