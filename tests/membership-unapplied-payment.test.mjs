@@ -65,3 +65,18 @@ test("an application with a cheque already received is not expired", () => {
   const migration = read("supabase/migrations/202609190012_membership_money_and_expiry_fixes.sql");
   assert.match(migration, /offline\.application_id=application\.id and offline\.status='received'/);
 });
+
+test("website access follows the membership record and never reopens or locks out the wrong people", () => {
+  const migration = read("supabase/migrations/202609190013_membership_access_follows_membership.sql");
+  // Moving or removing a login suspends it only when nothing else keeps it a member, officer or committee listing.
+  assert.match(migration, /old\.auth_user_id is distinct from new\.auth_user_id/);
+  assert.match(migration, /ur\.role <> 'member'/);
+  assert.match(migration, /public\.committees cm/);
+  // Only active and lapsed accounts move; suspended and archived ones are never reopened.
+  assert.match(migration, /membership_status in \('active', 'lapsed'\)/);
+  assert.doesNotMatch(migration, /membership_status = 'archived'/);
+  // Administrators are never lapsed or suspended by it.
+  assert.match(migration, /ur\.role = 'administrator'/);
+  const config = read("supabase/config.toml");
+  assert.doesNotMatch(config, /^enable_signup = true/m);
+});

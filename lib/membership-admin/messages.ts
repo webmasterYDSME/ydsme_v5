@@ -102,7 +102,7 @@ const notices: Record<string, string> = {
   "contact-verification-sent": "Saved. A confirmation email has been sent to the new address, which is used once it is confirmed.",
   "contact-cleared": "Correspondence email removed.",
   "portal-login-assigned": "Website login assigned. The member is invited to set it up.",
-  "portal-login-removed": "Personal website access removed.",
+  "portal-login-removed": "Personal website access removed. That login can no longer open the members’ area.",
   "refund-recorded": "Refund recorded. It has been cleared from Problems.",
   "delivery-problem-cleared": "Marked as dealt with.",
   "unapplied-payment-cleared": "Marked as dealt with.",
