@@ -13,6 +13,7 @@ import {
 } from "@/lib/cache-tags";
 import { refreshMembershipApplicationPaymentLink } from "@/lib/membership";
 import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
+import { normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
@@ -1413,14 +1414,18 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     treasurer_email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
     treasurer_phone: z.string().trim().max(50).optional().transform((value) => value || null),
     bank_account_name: z.string().trim().min(2).max(120),
-    bank_sort_code: z.string().trim().regex(/^[0-9]{2}-[0-9]{2}-[0-9]{2}$/),
+    // 123456 and 12 34 56 are accepted and saved as 12-34-56.
+    bank_sort_code: z.string().transform((value) => normaliseSortCode(value) ?? value).pipe(z.string().regex(/^[0-9]{2}-[0-9]{2}-[0-9]{2}$/)),
     bank_account_number: z.string().trim().regex(/^[0-9]{8}$/),
     bank_transfer_instructions: z.string().trim().min(5).max(500),
     cheque_payee: z.string().trim().min(2).max(120),
     cheque_delivery_instructions: z.string().trim().min(5).max(500),
     cash_instructions: z.string().trim().min(5).max(500),
   }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/admin/memberships?section=payment-settings&error=Check+the+Treasurer+and+payment+details.");
+  if (!parsed.success) {
+    const badSortCode = parsed.error.issues.some((issue) => issue.path[0] === "bank_sort_code");
+    redirect(`/admin/memberships?section=payment-settings&error=${badSortCode ? "payment-sort-code-invalid" : "payment-details-invalid"}`);
+  }
   const { error } = await createServiceClient().rpc("replace_membership_payment_settings", {
     p_actor_id: user.id,
     p_treasurer_name: parsed.data.treasurer_name,
@@ -1434,7 +1439,7 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     p_cheque_delivery_instructions: parsed.data.cheque_delivery_instructions,
     p_cash_instructions: parsed.data.cash_instructions,
   });
-  if (error) redirect("/admin/memberships?section=payment-settings&error=Membership+payment+settings+could+not+be+saved.");
+  if (error) redirect("/admin/memberships?section=payment-settings&error=payment-details-save-failed");
   updateTag(PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG);
   revalidatePath("/membership/apply");
   revalidatePath("/admin/memberships");

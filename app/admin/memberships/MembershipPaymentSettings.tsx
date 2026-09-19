@@ -1,4 +1,5 @@
 import { Banknote } from "lucide-react";
+import { SortCodeInput } from "./_components/SortCodeInput";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { saveMembershipPaymentSettings } from "@/lib/actions/membership";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
@@ -26,7 +27,7 @@ export async function MembershipPaymentSettings() {
             <p className="form-help">Bank details and the amount are sent after email verification. Applicants use their full name as the payment reference.</p>
             <div className="settings-field-grid">
               <label>Account name<input name="bank_account_name" defaultValue={membershipPayment.bank_account_name} required/></label>
-              <label>Sort code<input name="bank_sort_code" inputMode="numeric" pattern="[0-9]{2}-[0-9]{2}-[0-9]{2}" defaultValue={membershipPayment.bank_sort_code} required/></label>
+              <SortCodeInput name="bank_sort_code" defaultValue={membershipPayment.bank_sort_code}/>
               <label>Account number<input name="bank_account_number" inputMode="numeric" pattern="[0-9]{8}" defaultValue={membershipPayment.bank_account_number} required/></label>
               <label className="wide">Additional instructions<textarea name="bank_transfer_instructions" rows={3} defaultValue={membershipPayment.bank_transfer_instructions} required/></label>
             </div>
