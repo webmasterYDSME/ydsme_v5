@@ -9,6 +9,6 @@ export function MembershipFlash({ query }: { query: { error?: Value; notice?: Va
   const notice = one(query.notice);
   return <>
     {error ? <p className="form-message error" role="alert">{membershipErrorMessage(error) ?? <>That change could not be completed. Check the details and try again. <small>({error.replaceAll("-", " ")})</small></>}</p> : null}
-    {notice ? <p className="form-message success" role="status">{membershipNoticeMessage(notice) ?? (notice === "membership-payment-settings-saved" ? "Membership payment instructions saved as a new version." : notice === "price-unchanged" ? "No fee change was needed. The current annual fee will continue automatically." : "Done. The membership record has been updated.")}</p> : null}
+    {notice ? <p className="form-message success" role="status">{membershipNoticeMessage(notice) ?? (notice === "membership-payment-settings-saved" ? "Payment details saved." : notice === "price-unchanged" ? "No fee change was needed. The current annual fee will continue automatically." : "Done. The membership record has been updated.")}</p> : null}
   </>;
 }

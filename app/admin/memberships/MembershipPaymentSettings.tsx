@@ -6,11 +6,11 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 export async function MembershipPaymentSettings() {
   const { data: membershipPayment, error } = await createServiceClient()
     .from("membership_payment_settings_versions")
-    .select("version,configured,treasurer_name,treasurer_email,treasurer_phone,bank_account_name,bank_sort_code,bank_account_number,bank_transfer_instructions,cheque_payee,cheque_delivery_instructions,cash_instructions")
+    .select("configured,treasurer_name,treasurer_email,treasurer_phone,bank_account_name,bank_sort_code,bank_account_number,bank_transfer_instructions,cheque_payee,cheque_delivery_instructions,cash_instructions")
     .eq("active", true).single();
   if (error || !membershipPayment) throw new Error("Unable to load membership payment settings.");
   return <section className="settings-tab-panel">
-        <header className="settings-panel-heading"><div><span>Membership administration</span><h2>Treasurer and offline payments</h2><p>These versioned details are used in verified bank-transfer, cheque and cash instructions. Existing applications retain the version they received.</p></div><Banknote/></header>
+        <header className="settings-panel-heading"><div><span>Membership administration</span><h2>Treasurer and offline payments</h2><p>These details go in the bank transfer, cheque and cash instructions sent to applicants and in renewal emails. A change applies to emails sent from then on; emails already sent keep the details they had.</p></div><Banknote/></header>
         {!membershipPayment.configured ? <p className="form-message error">Bank transfer remains unavailable to applicants until real Society account details are saved.</p> : null}
         <form action={saveMembershipPaymentSettings} className="editor-form">
           <fieldset className="wide settings-fieldset">
@@ -40,7 +40,7 @@ export async function MembershipPaymentSettings() {
               <label className="wide">Cash instructions<textarea name="cash_instructions" rows={3} defaultValue={membershipPayment.cash_instructions} required/></label>
             </div>
           </fieldset>
-          <PendingSubmitButton className="button dark">Save a new payment-settings version</PendingSubmitButton>
+          <PendingSubmitButton className="button dark">Save payment details</PendingSubmitButton>
         </form>
       </section>;
 }

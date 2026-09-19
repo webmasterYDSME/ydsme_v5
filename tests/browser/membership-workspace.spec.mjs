@@ -86,7 +86,7 @@ test("membership workspace shows one job per screen and keeps old links working"
     expect((await admin.from("user_roles").update({role:"committee"}).eq("user_id",id)).error).toBeNull();
     expect((await admin.from("user_capabilities").insert({user_id:id,capability:"memberships.manage"})).error).toBeNull();
     await page.goto("/admin/memberships/setup?tab=payment");
-    await expect(page.getByRole("button", {name:"Save a new payment-settings version"})).toBeVisible();
+    await expect(page.getByRole("button", {name:"Save payment details"})).toBeVisible();
     await page.goto("/settings?tab=site");
     await expect(page).toHaveURL(/dashboard\?notice=not-authorised/);
     expect((await admin.from("user_capabilities").delete().eq("user_id",id)).error).toBeNull();

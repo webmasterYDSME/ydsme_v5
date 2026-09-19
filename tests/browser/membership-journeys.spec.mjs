@@ -658,7 +658,7 @@ test.describe("membership public, member and officer journeys", () => {
     expect(completed.read_at).toBeTruthy();
   });
 
-  test("membership officer configures versioned payment instructions and bank transfer becomes public", async ({ page }) => {
+  test("membership officer configures payment details and bank transfer becomes public", async ({ page }) => {
     await signIn(page, officerEmail, "/settings?tab=membership");
     const form = page.locator("form.editor-form");
     await form.locator('input[name="treasurer_name"]').fill("Journey Treasurer");
@@ -670,7 +670,7 @@ test.describe("membership public, member and officer journeys", () => {
     await form.locator('input[name="cheque_payee"]').fill("Journey Society Test");
     await form.locator('textarea[name="cheque_delivery_instructions"]').fill("Deliver the test cheque to the test Treasurer.");
     await form.locator('textarea[name="cash_instructions"]').fill("Arrange the complete test cash payment with an officer.");
-    await form.getByRole("button", { name: "Save a new payment-settings version" }).click();
+    await form.getByRole("button", { name: "Save payment details" }).click();
     await page.waitForURL(/notice=membership-payment-settings-saved/);
     const activeSettings = await databaseRow(
       admin.from("membership_payment_settings_versions").select("configured,treasurer_email").eq("active", true).single(),
