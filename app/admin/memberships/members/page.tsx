@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { UsersRound } from "lucide-react";
+import { ArrowRight, UsersRound } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
 import { loadMemberRegister, type RegisterMember } from "@/lib/membership-admin/records";
 import { dateLabel, memberStateName } from "@/lib/membership-admin/format";
@@ -70,7 +70,7 @@ export default async function MembershipMembers({ searchParams }: { searchParams
             <span><span className={`${styles.pill} ${stateClass(member.state)}`}>{memberStateName(member.state)}</span></span>
             <span>{member.state === "honorary" ? "Lifetime" : member.paidUntil ? dateLabel(member.paidUntil) : "—"}</span>
           </div>
-          <Link className="button outline" href={`/admin/memberships/members/${member.id}`} prefetch={false}>View membership</Link>
+          <Link className={styles.rowAction} href={`/admin/memberships/members/${member.id}`} prefetch={false}>View membership<ArrowRight aria-hidden="true"/></Link>
         </article>)}
       </div>
       <PortalPagination currentPage={page} totalPages={pages} totalItems={filtered.length} itemLabel="memberships" href={(next) => href({ page: String(next) })} ariaLabel="Membership register pages"/>
