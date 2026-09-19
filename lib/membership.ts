@@ -759,6 +759,10 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew = fa
   return session.url;
 }
 
+// The two things a member may need to be told alongside "your membership is active" when no website login was created.
+const PORTAL_EMAIL_ALREADY_USED = "There is no website login for this membership yet, because this email address is already used for another login. If you would like one, please give the membership officer a different email address.";
+const NO_PORTAL_LOGIN_YET = "No website login has been set up for this membership. If the member gets their own email address later, please tell the membership officer.";
+
 /**
  * Link an existing portal profile or send the first Supabase invitation after
  * payment/honorary activation. Safe to call repeatedly from webhook retries.
@@ -786,7 +790,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
         recipient_user_id: authUserId,
         portal_visible: Boolean(authUserId),
         action_href: actionHref,
-        body: extraBody ? `${notice.body} ${extraBody}` : notice.body,
+        body: extraBody ? `${notice.body}\n\n${extraBody}` : notice.body,
         email_status: "queued",
         scheduled_for: new Date().toISOString(),
         last_email_error: null,
@@ -821,7 +825,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   }
   if (member.contact_role === "guardian" || member.portal_invitation_status === "declined") {
     await admin.from("members").update({ portal_invitation_status: "not_requested" }).eq("id", member.id);
-    await releaseActivationEmail(null, null, "A personal portal account has not been created. Contact the membership officer if the member later has a unique login email.");
+    await releaseActivationEmail(null, null, NO_PORTAL_LOGIN_YET);
     return;
   }
 
@@ -850,7 +854,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
     // An email match is only a correspondence signal. It is never sufficient
     // evidence that this Auth account belongs to this canonical member.
     await admin.from("members").update({ portal_invitation_status: "blocked_shared" }).eq("id", member.id);
-    await releaseActivationEmail(null, null, "This correspondence email already has a website login. Membership is active, but a different email or an officer-confirmed portal assignment is needed for this member's personal portal access.");
+    await releaseActivationEmail(null, null, PORTAL_EMAIL_ALREADY_USED);
     return;
   }
 

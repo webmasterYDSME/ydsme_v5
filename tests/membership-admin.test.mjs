@@ -483,3 +483,12 @@ test("an unpaid offline application can be closed by an officer without emailing
   const panel = readFileSync(new URL("../app/admin/memberships/_components/InboxTaskPanel.tsx", import.meta.url), "utf8");
   assert.match(panel, /closeOfflineMembershipApplication/);
 });
+
+test("the activation email explains a missing website login in plain words, in its own paragraph", () => {
+  const source = readFileSync(new URL("../lib/membership.ts", import.meta.url), "utf8");
+  assert.match(source, /`\$\{notice\.body\}\\n\\n\$\{extraBody\}`/);
+  assert.match(source, /There is no website login for this membership yet, because this email address is already used for another login\./);
+  assert.match(source, /No website login has been set up for this membership\./);
+  assert.doesNotMatch(source, /officer-confirmed portal assignment/);
+  assert.doesNotMatch(source, /correspondence email already has a website login/);
+});
