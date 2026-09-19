@@ -16,6 +16,7 @@
 .card > h2, .cardTitle { margin: 0; font: 500 28px/1.12 var(--font-display); }
 .card > .lead { margin: 6px 0 0; color: #56625b; font-size: 13px; line-height: 1.55; max-width: 680px; }
 .eyebrowNote { color: #56625b; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.actionRow { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 16px; }
 .linkButton { font-size: 13px; font-weight: 700; color: var(--forest); text-decoration: underline; text-underline-offset: 4px; }
 .backLink { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 13px; font-weight: 700; color: var(--forest); text-underline-offset: 4px; }
 .backLink svg { width: 16px; }
