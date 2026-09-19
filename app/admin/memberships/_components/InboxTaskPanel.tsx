@@ -14,7 +14,7 @@ import {
 } from "@/lib/actions/membership";
 import { reviewPaidMembership } from "@/lib/actions/membership-renewals";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { ageOn, dateLabel, eighteenthBirthday, londonToday, money, paymentMethodName } from "@/lib/membership-admin/format";
+import { ageOn, dateLabel, londonToday, money, paymentMethodName } from "@/lib/membership-admin/format";
 import { kindPillLabel, type InboxTask, type VerificationPayment } from "@/lib/membership-admin/inbox";
 import { SidePanel } from "./SidePanel";
 import styles from "../memberships.module.css";
@@ -55,16 +55,10 @@ function paymentRows(payment: VerificationPayment | null): [string, ReactNode][]
   rows.push(["Payment", `${paymentStatusLabel[payment.status] ?? payment.status.replaceAll("_", " ")}${amount}`]);
   rows.push(["Method", payment.method ? paymentMethodName(payment.method).replace(/^./, (c) => c.toUpperCase()) : "Not recorded"]);
   if (payment.refundedPence > 0) rows.push(["Refunded", money(payment.refundedPence)]);
-  if (payment.year) rows.push(["Membership year", String(payment.year)]);
   if (payment.reference) rows.push(["Reference", <span key="ref" className={styles.mono}>{payment.reference}</span>]);
   if (payment.receivedOn) rows.push([payment.method === "stripe" ? "Paid on" : "Received", dateLabel(payment.receivedOn)]);
-  if (payment.clearedOn) rows.push(["Cleared", dateLabel(payment.clearedOn)]);
-  if (payment.stripe) {
-    const { paymentIntent, checkoutSession, invoice, dashboardUrl } = payment.stripe;
-    if (paymentIntent) rows.push(["Stripe payment", <span key="pi"><span className={styles.mono}>{paymentIntent}</span>{dashboardUrl ? <> · <a className={styles.inlineLink} href={dashboardUrl} target="_blank" rel="noreferrer">Open in Stripe<span className="sr-only"> (opens in a new tab)</span></a></> : null}</span>]);
-    if (checkoutSession) rows.push(["Checkout session", <span key="cs" className={styles.mono}>{checkoutSession}</span>]);
-    if (invoice) rows.push(["Stripe invoice", <span key="inv" className={styles.mono}>{invoice}</span>]);
-  }
+  const stripe = payment.stripe;
+  if (stripe?.paymentIntent) rows.push(["Stripe payment", <span key="pi"><span className={styles.mono}>{stripe.paymentIntent}</span>{stripe.dashboardUrl ? <> · <a className={styles.inlineLink} href={stripe.dashboardUrl} target="_blank" rel="noreferrer">Open in Stripe<span className="sr-only"> (opens in a new tab)</span></a></> : null}</span>]);
   return rows;
 }
 
@@ -72,14 +66,12 @@ function verificationSections(task: Extract<InboxTask, { type: "verification" }>
   const { application, planName, payment } = task;
   const today = londonToday();
   const age = ageOn(application.date_of_birth, today);
-  const turns18 = age !== null && age < 18 ? eighteenthBirthday(application.date_of_birth) : null;
+  const junior = Boolean(application.guardian_name);
   const person: [string, ReactNode][] = [
     ["Membership type", application.student_declaration ? `${planName} · student declaration made` : planName],
-    ["Date of birth", application.date_of_birth ? `${dateLabel(application.date_of_birth)} · ${age !== null ? `age ${age}` : ""}`.replace(/ · $/, "") : "Not recorded"],
-    ...(turns18 ? [["Turns 18", dateLabel(turns18)] as [string, ReactNode]] : []),
-    ["Email", application.contact_email || "None given"],
-    ...(application.contact_number ? [["Phone", application.contact_number] as [string, ReactNode]] : []),
-    ["Applied", dateLabel(application.applied_at)],
+    ["Date of birth", application.date_of_birth ? `${dateLabel(application.date_of_birth)}${age !== null ? ` · ${age}yo` : ""}` : "Not recorded"],
+    // On a guardian-led application the address on file is the guardian's, which is shown under Guardian.
+    ...(application.guardian_led ? [] : [[junior ? "Member’s email" : "Email", application.contact_email || "None given"] as [string, ReactNode]]),
   ];
   const guardian: [string, ReactNode][] = application.guardian_name ? [
     ["Guardian", application.guardian_name],

@@ -55,7 +55,7 @@ export type VerificationPayment = {
 export type InboxTask = Base & (
   | { type: "application-payment"; application: { id: string; full_name: string; contact_email: string | null; date_of_birth: string; payment_method: string | null; status: string; guardian_name: string | null }; planName: string; received: { payment_reference: string | null; received_on: string | null } | null }
   | { type: "renewal-payment"; termId: string; year: number; amountDuePence: number; method: string | null }
-  | { type: "verification"; planName: string; application: { id: string; full_name: string; contact_email: string | null; contact_number: string | null; student_declaration: boolean; date_of_birth: string | null; applied_at: string | null; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null }; payment: VerificationPayment | null }
+  | { type: "verification"; planName: string; application: { id: string; full_name: string; contact_email: string | null; contact_number: string | null; guardian_led: boolean; student_declaration: boolean; date_of_birth: string | null; applied_at: string | null; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null }; payment: VerificationPayment | null }
   | { type: "student-request"; transitionId: string; year: number }
   | { type: "manual-contact"; notificationId: string; body: string }
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
@@ -222,7 +222,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.applications("id,full_name,contact_email,date_of_birth,payment_method,status,guardian_name,created_at,requested_plan_id,membership_offline_payment_records(id,status,payment_reference,received_on)"),
     admin.from("membership_plans").select("id,name"),
     from.renewalPayments("id,member_id,membership_year,amount_due_pence,expected_payment_method,created_at"),
-    from.verifications("id,full_name,contact_email,contact_number,student_declaration,requested_plan_id,payment_method,guardian_name,guardian_email,guardian_contact_number,guardian_consent_version,guardian_verified_at,date_of_birth,created_at,converted_member_id"),
+    from.verifications("id,full_name,contact_email,contact_number,guardian_led,student_declaration,requested_plan_id,payment_method,guardian_name,guardian_email,guardian_contact_number,guardian_consent_version,guardian_verified_at,date_of_birth,created_at,converted_member_id"),
     from.studentRequests("id,member_id,membership_year,requested_at"),
     from.manualContact("id,member_id,body,created_at").order("created_at"),
     from.paymentReviews("id,member_id,membership_year,amount_due_pence,amount_paid_pence,updated_at"),
@@ -296,7 +296,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
       since: application.created_at, cta: "Verify", memberId: application.converted_member_id ?? null,
       planName: planName.get(application.requested_plan_id) || "Membership type not found",
       application: {
-        id: application.id, full_name: application.full_name, contact_email: application.contact_email ?? null, contact_number: application.contact_number ?? null,
+        id: application.id, full_name: application.full_name, contact_email: application.contact_email ?? null, contact_number: application.contact_number ?? null, guardian_led: Boolean(application.guardian_led),
         student_declaration: Boolean(application.student_declaration), date_of_birth: application.date_of_birth ?? null, applied_at: application.created_at ?? null,
         guardian_name: application.guardian_name, guardian_email: application.guardian_email, guardian_contact_number: application.guardian_contact_number,
         guardian_consent_version: application.guardian_consent_version, guardian_verified_at: application.guardian_verified_at,
