@@ -3,6 +3,12 @@
 
 export const money = (pence: number) => new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(pence / 100);
 
+/**
+ * Capitalises the first letter of each part of a name ("alex smith-jones" becomes "Alex Smith-Jones").
+ * Letters already typed as capitals are kept, so "McDonald" is left alone.
+ */
+export const capitaliseName = (name: string) => name.replace(/(^|[\s\-'’])(\p{Ll})/gu, (_, before: string, letter: string) => before + letter.toLocaleUpperCase("en-GB"));
+
 export const paymentMethodName = (method: string | null) => ({
   cash: "cash",
   bank_transfer: "bank transfer",

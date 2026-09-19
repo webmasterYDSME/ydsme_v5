@@ -1,7 +1,7 @@
 "use server";
 
 import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
-import { dateLabel } from "@/lib/membership-admin/format";
+import { capitaliseName, dateLabel } from "@/lib/membership-admin/format";
 import { guardianConsentMethods, submittedValues, type HonoraryMemberState, type OfficerMemberState, type PossibleDuplicate } from "@/lib/membership-admin/officer-member";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
@@ -493,14 +493,14 @@ export async function createOfficerManagedMembership(previous: OfficerMemberStat
     parsed = z.object({
       plan_id: z.string().uuid().optional(),
       title: z.string().trim().max(10).default(""),
-      full_name: z.string().trim().min(2).max(180),
+      full_name: z.string().trim().min(2).max(180).transform(capitaliseName),
       date_of_birth: z.iso.date(),
       contact_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
       contact_number: z.string().trim().max(40).optional().transform((value) => value || null),
       payment_method: z.enum(["cash", "bank_transfer", "cheque"]),
       received_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
       payment_reference: z.string().trim().max(120).optional().transform((value) => value || null),
-      guardian_name: z.string().trim().max(180).optional().transform((value) => value || null),
+      guardian_name: z.string().trim().max(180).optional().transform((value) => value ? capitaliseName(value) : null),
       guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
       guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
       guardian_consent_method: z.enum(["paper_form", "in_person", "phone", "other"]).optional().catch(undefined),
@@ -694,7 +694,7 @@ export async function createHonoraryMember(previous: HonoraryMemberState, formDa
   // A failed attempt goes back to the open drawer with what was typed, and nothing is left half-created.
   const fail = (error: string): HonoraryMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData) });
   const text = (name: string) => String(formData.get(name) ?? "").trim();
-  const fullName = z.string().min(2).max(180).safeParse(text("full_name"));
+  const fullName = z.string().min(2).max(180).transform(capitaliseName).safeParse(text("full_name"));
   const email = text("contact_email") ? z.email().max(254).safeParse(text("contact_email")) : null;
   const birth = text("date_of_birth") ? z.iso.date().safeParse(text("date_of_birth")) : null;
   const effectiveFrom = z.iso.date().safeParse(text("effective_from"));

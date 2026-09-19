@@ -8,6 +8,7 @@ import { emptyHonoraryMemberState, type HonoraryMemberState } from "@/lib/member
 import { membershipPhoneHint, membershipPhonePattern } from "@/lib/membership-phone";
 import { DuplicateWarning, usePossibleDuplicates } from "./PossibleDuplicates";
 import styles from "../memberships.module.css";
+import { nameFieldProps } from "@/app/components/nameField";
 
 /** The Add an honorary member form. A failed attempt keeps what was typed, and nothing is added unless the whole thing succeeds. */
 export function AddHonoraryForm({ today }: { today: string }) {
@@ -26,7 +27,7 @@ function Fields({ state, formAction, today }: { state: HonoraryMemberState; form
   const matches = usePossibleDuplicates({ name, dateOfBirth, email, includeNameOnly: true });
   const message = state.error ? membershipErrorMessage(state.error) ?? "The honorary member could not be added. Check the details and try again." : null;
   return <form action={formAction} className="stack-form">
-    <label>Full name<input name="full_name" value={name} onChange={(event) => setName(event.target.value)} required/></label>
+    <label>Full name<input name="full_name" {...nameFieldProps} value={name} onChange={(event) => setName(event.target.value)} required/></label>
     <div className={styles.fieldGrid}>
       <label>Date of birth <em>Optional</em><input type="date" name="date_of_birth" value={dateOfBirth} onChange={(event) => setDateOfBirth(event.target.value)} max={today}/></label>
       <label>Start date<input name="effective_from" type="date" min={today} value={startDate} onChange={(event) => setStartDate(event.target.value)} required/></label>

@@ -4,7 +4,7 @@ import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
 import { membershipErrorMessage } from "../lib/membership-admin/messages.ts";
 import { emptyOfficerMemberState, submittedValues } from "../lib/membership-admin/officer-member.ts";
-import { ageOn, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
+import { ageOn, capitaliseName, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
 import { buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
 const memberId = "0f6f2a3c-1b7d-4e55-8c1a-5d2f7b9e4a10";
@@ -181,4 +181,13 @@ test("records how and when an officer-added member agreed to the newsletter", as
   assert.match(migration, /membership_newsletter_consent_evidence_required/);
   assert.match(migration, /'newsletter_opt_in',v_newsletter/);
   assert.match(migration, /grant execute on function public\.create_officer_managed_membership\(.*boolean,text,date\)/);
+});
+
+test("capitalises each part of a name without lowering letters already typed as capitals", () => {
+  assert.equal(capitaliseName("alex smith"), "Alex Smith");
+  assert.equal(capitaliseName("jane smith-jones"), "Jane Smith-Jones");
+  assert.equal(capitaliseName("d'arcy o’neil"), "D'Arcy O’Neil");
+  assert.equal(capitaliseName("Fiona McDonald"), "Fiona McDonald");
+  assert.equal(capitaliseName("émile zola"), "Émile Zola");
+  assert.equal(capitaliseName(""), "");
 });

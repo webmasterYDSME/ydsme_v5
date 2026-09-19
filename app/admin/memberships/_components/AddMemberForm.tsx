@@ -16,6 +16,7 @@ import { membershipPhoneHint, membershipPhonePattern } from "@/lib/membership-ph
 import { DuplicateWarning, usePossibleDuplicates } from "./PossibleDuplicates";
 import { OfficerFeeSummary, OfficerMembershipEligibilityFields, useOfficerEligibility } from "../OfficerMembershipEligibilityFields";
 import styles from "../memberships.module.css";
+import { nameFieldProps } from "@/app/components/nameField";
 
 type Plan = { id: string; slug: string; name: string; minimum_age: number; maximum_age: number };
 type Price = { plan_id: string; membership_year: number; amount_pence: number };
@@ -88,7 +89,7 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>About the member</h3>
       <div className={`${styles.fieldGrid} ${styles.nameRow}`}>
-        <label>Full name<input name="full_name" value={name} onChange={(event) => setName(event.target.value)} required/></label>
+        <label>Full name<input name="full_name" {...nameFieldProps} value={name} onChange={(event) => setName(event.target.value)} required/></label>
         <label>Title <em>Optional</em><input name="title" defaultValue={value("title")} maxLength={10}/></label>
       </div>
       <OfficerMembershipEligibilityFields eligibility={eligibility}/>
@@ -127,7 +128,7 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
       <h3 className={styles.formTitle}>Guardian</h3>
       <p className={styles.panelNote}>Junior members need a guardian’s name and a record of how the guardian agreed.</p>
       <div className={styles.fieldGrid}>
-        <label>Guardian’s name<input name="guardian_name" defaultValue={value("guardian_name")} required/></label>
+        <label>Guardian’s name<input name="guardian_name" {...nameFieldProps} defaultValue={value("guardian_name")} required/></label>
         <label>Guardian’s email <em>Optional</em><input type="email" name="guardian_email" defaultValue={value("guardian_email")}/></label>
         <label>How did the guardian agree?<select name="guardian_consent_method" defaultValue={value("guardian_consent_method") || "paper_form"} required>{Object.entries(guardianConsentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label>Date agreed<input type="date" name="guardian_consent_on" defaultValue={value("guardian_consent_on") || today} max={today} required/></label>
