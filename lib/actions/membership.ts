@@ -13,7 +13,7 @@ import {
 } from "@/lib/cache-tags";
 import { refreshMembershipApplicationPaymentLink } from "@/lib/membership";
 import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
-import { normaliseSortCode } from "@/lib/membership-admin/bank";
+import { normaliseAccountNumber, normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
@@ -1416,15 +1416,17 @@ export async function saveMembershipPaymentSettings(formData: FormData) {
     bank_account_name: z.string().trim().min(2).max(120),
     // 123456 and 12 34 56 are accepted and saved as 12-34-56.
     bank_sort_code: z.string().transform((value) => normaliseSortCode(value) ?? value).pipe(z.string().regex(/^[0-9]{2}-[0-9]{2}-[0-9]{2}$/)),
-    bank_account_number: z.string().trim().regex(/^[0-9]{8}$/),
+    // 12345678 and 1234 5678 are accepted and saved as 12345678.
+    bank_account_number: z.string().transform((value) => normaliseAccountNumber(value) ?? value).pipe(z.string().regex(/^[0-9]{8}$/)),
     bank_transfer_instructions: z.string().trim().min(5).max(500),
     cheque_payee: z.string().trim().min(2).max(120),
     cheque_delivery_instructions: z.string().trim().min(5).max(500),
     cash_instructions: z.string().trim().min(5).max(500),
   }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    const badSortCode = parsed.error.issues.some((issue) => issue.path[0] === "bank_sort_code");
-    redirect(`/admin/memberships?section=payment-settings&error=${badSortCode ? "payment-sort-code-invalid" : "payment-details-invalid"}`);
+    const bad = (field: string) => parsed.error.issues.some((issue) => issue.path[0] === field);
+    const code = bad("bank_sort_code") ? "payment-sort-code-invalid" : bad("bank_account_number") ? "payment-account-number-invalid" : "payment-details-invalid";
+    redirect(`/admin/memberships?section=payment-settings&error=${code}`);
   }
   const { error } = await createServiceClient().rpc("replace_membership_payment_settings", {
     p_actor_id: user.id,

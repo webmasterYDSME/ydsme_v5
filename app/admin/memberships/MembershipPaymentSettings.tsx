@@ -1,4 +1,5 @@
 import { Banknote } from "lucide-react";
+import { AccountNumberInput } from "./_components/AccountNumberInput";
 import { SortCodeInput } from "./_components/SortCodeInput";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { saveMembershipPaymentSettings } from "@/lib/actions/membership";
@@ -28,7 +29,7 @@ export async function MembershipPaymentSettings() {
             <div className="settings-field-grid">
               <label>Account name<input name="bank_account_name" defaultValue={membershipPayment.bank_account_name} required/></label>
               <SortCodeInput name="bank_sort_code" defaultValue={membershipPayment.bank_sort_code}/>
-              <label>Account number<input name="bank_account_number" inputMode="numeric" pattern="[0-9]{8}" defaultValue={membershipPayment.bank_account_number} required/></label>
+              <AccountNumberInput name="bank_account_number" defaultValue={membershipPayment.bank_account_number}/>
               <label className="wide">Additional instructions<textarea name="bank_transfer_instructions" rows={3} defaultValue={membershipPayment.bank_transfer_instructions} required/></label>
             </div>
           </fieldset>
