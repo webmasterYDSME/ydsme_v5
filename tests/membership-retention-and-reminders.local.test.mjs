@@ -176,3 +176,23 @@ begin
   if not (r ? 'retention') or not (r ? 'days_run') then raise exception 'daily job result: %',r; end if;
 end $test$;`);
 });
+
+test("the website's server role can read what the Old records page and the Inbox need, and signed-in users cannot", () => {
+  runRolledBack("Server role access database test", String.raw`
+do $test$
+begin
+  set local role service_role;
+  perform 1 from public.membership_retention_settings;
+  perform 1 from public.membership_daily_runs;
+  perform count(*) from public.membership_retention_candidates(current_date, 62);
+  update public.membership_retention_settings set enabled=enabled where singleton;
+  reset role;
+  set local role authenticated;
+  begin
+    perform 1 from public.membership_retention_settings;
+    raise exception 'signed-in users can read the retention switch';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+end $test$;`);
+});
