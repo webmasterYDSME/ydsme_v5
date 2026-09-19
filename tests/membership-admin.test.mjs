@@ -394,3 +394,14 @@ test("renewal emails end with one short automated-email note", async () => {
   const html = renewalHtml({ eyebrow: "e", title: "t", body, actionUrl: null, buttonLabel: "b" });
   assert.match(html, /font-size:14px;line-height:22px">This is an automated email/);
 });
+
+test("the local Stripe listener names every event the webhook handles", async () => {
+  const [listener, webhook] = await Promise.all([
+    readFile(new URL("../scripts/listen-local-stripe.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/stripe/webhook/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(listener, /"--events", events/);
+  const handled = [...webhook.matchAll(/event\.type === "([a-z_.]+)"/g)].map((match) => match[1]);
+  assert.ok(handled.length >= 10);
+  for (const type of handled) assert.ok(listener.includes(`"${type}"`), `${type} is not forwarded`);
+});

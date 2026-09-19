@@ -27,7 +27,16 @@ if (updated !== source) writeFileSync(envPath, updated, { mode: 0o600 });
 const endpoint = new URL("/api/stripe/webhook", site).href;
 console.log(`Test-mode Stripe webhooks → ${endpoint}`);
 console.log("Membership signing secret saved in .env.local. Keep this command running alongside npm run dev.");
-const listener = spawn("stripe", ["listen", "--skip-update", "--forward-to", endpoint], {
+// Newer Stripe CLI versions refuse to listen without an explicit event list. These are the events
+// app/api/stripe/webhook/route.ts handles; anything else would only be acknowledged and ignored.
+const events = [
+  "checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed",
+  "checkout.session.expired", "customer.subscription.created", "customer.subscription.updated",
+  "customer.subscription.deleted", "invoice.paid", "invoice.payment_succeeded", "invoice.payment_failed",
+  "invoice.payment_action_required", "invoice.finalization_failed", "charge.refunded",
+  "charge.dispute.created", "charge.dispute.closed",
+].join(",");
+const listener = spawn("stripe", ["listen", "--skip-update", "--events", events, "--forward-to", endpoint], {
   env: environment, stdio: ["ignore", "pipe", "pipe"],
 });
 for (const stream of [listener.stdout, listener.stderr]) {
