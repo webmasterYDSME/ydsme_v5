@@ -27,6 +27,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
       <span>Saved</span>
       <h3>{plural(result.added, "person", "people")} added, {plural(result.renewed, "member")} renewed for {preview.year}</h3>
       <p>{result.alreadyPaid} already paid for {preview.year} · {result.skipped} left out · {result.loginsLinked} linked to an existing website login.</p>
+      {result.honorary ? <p>{plural(result.honorary, "person", "people")} became lifetime honorary members (Life or Associate Volunteer): no fee, no renewal.</p> : null}
       <p>{plural(result.detailsFilled, "existing member")} had missing details (title, date of birth, phone or address) filled in.</p>
       <p>{plural(result.needInvitation, "person", "people")} can now be invited to the website. Use the invitations section below.</p>
     </div></section>;
@@ -36,7 +37,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
     <form action={formAction} className="stack-form member-import-apply-form">
       <input type="hidden" name="fileSha256" value={preview.fileSha256}/>
       <div className="member-import-apply-scope"><strong>This will:</strong><ul>
-        <li>Add {plural(preview.totals.add, "new person", "new people")} and mark them as full members for {preview.year}, paid through MemberMojo.</li>
+        <li>Add {plural(preview.totals.add, "new person", "new people")}{preview.totals.honorary ? `, of whom ${preview.totals.honorary} become lifetime honorary members (no fee),` : ""} and mark the rest as full members for {preview.year}, paid through MemberMojo.</li>
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
         <li>Fill in each person’s title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
@@ -74,7 +75,7 @@ export function MemberMojoImportForm() {
     {state.status === "success" && preview ? <section className="member-import-results" aria-live="polite">
       <header className="member-import-result-heading"><div><p className="eyebrow dark">Nothing has been saved yet</p><h2>{plural(preview.totals.people, "person", "people")} in this file</h2><p>Membership year {preview.year}. Columns used: {preview.columnsUsed.join(", ")}.{preview.birthMonthOnly ? " MemberMojo only records the month and year of birth, so dates are saved as the 1st of the month." : ""}{preview.totals.unreadableBirthDates ? ` ${preview.totals.unreadableBirthDates} date(s) of birth could not be read and are left blank.` : ""}{preview.notActive ? ` ${preview.notActive} not marked Active were left out.` : ""}</p></div><FileUp/></header>
       <div className="member-import-stats">
-        <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>added as full members</small></article>
+        <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>{preview.totals.honorary ? `${preview.totals.honorary} honorary · ${preview.totals.add - preview.totals.honorary} full members` : "added as full members"}</small></article>
         <article><Check/><span>Existing members</span><strong>{preview.totals.renew} renewed</strong><small>{preview.totals.alreadyPaid} already paid for {preview.year}</small></article>
         <article><Mail/><span>Website login</span><strong>{preview.totals.needInvitation} to invite</strong><small>{preview.totals.loginsToLink} already have a login and are linked</small></article>
         <article className={preview.totals.noBirthDate ? "has-warning" : ""}><Database/><span>Personal details</span><strong>{preview.totals.noBirthDate} without a date of birth</strong><small>{preview.totals.withPhone} phone · {preview.totals.withAddress} address · {preview.totals.withTitle} title</small></article>

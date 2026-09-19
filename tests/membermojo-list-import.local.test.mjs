@@ -17,8 +17,8 @@ do $test$
 declare
   adult uuid; tag text := substr(md5(random()::text), 1, 8);
   officer uuid := gen_random_uuid(); login uuid := gen_random_uuid();
-  lapsed uuid; paid uuid; archived uuid; term_price uuid;
-  rows jsonb; r jsonb; r2 jsonb; m record; yr integer := extract(year from current_date)::integer;
+  lapsed uuid; paid uuid; archived uuid; old_life uuid; term_price uuid;
+  before_count integer; rows jsonb; r jsonb; r2 jsonb; m record; yr integer := extract(year from current_date)::integer;
 begin
   select id into adult from public.membership_plans where slug='adult';
   select id into term_price from public.membership_plan_prices where plan_id=adult and active order by membership_year desc, version desc limit 1;
@@ -33,6 +33,8 @@ begin
    values('Paid Person','paid-'||tag||'@example.test',adult,'active','officer','07000 111111',date '1960-05-01') returning id into paid;
   insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
    values(paid,term_price,yr,make_date(yr,1,1),make_date(yr,12,31),make_date(yr+1,3,1),'paid',2000,2000,'officer');
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
+   values('Old Life','old-life-'||tag||'@example.test',adult,'lapsed','officer') returning id into old_life;
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
    values('Archived Person','archived-'||tag||'@example.test',adult,'archived','officer') returning id into archived;
 
@@ -54,11 +56,13 @@ begin
     jsonb_build_object('full_name','No Email','email','','membership_type','Adult member'),
     jsonb_build_object('full_name','Bad Email','email','not-an-email','membership_type','Adult member'),
     jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','Old Life','email','old-life-'||tag||'@example.test','membership_type','Life (Honorary)'),
+    jsonb_build_object('full_name','Volunteer One','email','volunteer-'||tag||'@example.test','membership_type','Associate Volunteer*'),
     jsonb_build_object('full_name','Life One','email','life-'||tag||'@example.test','membership_type','Life (Honorary)','date_of_birth','2031-02-30','contact_number','x')
   );
 
-  if (select count(*) from public.membermojo_import_plan(rows, yr) where action='skip')<>3 then
-    raise exception 'expected archived, bad email and the duplicate to be skipped: %', (select jsonb_agg(to_jsonb(p)) from public.membermojo_import_plan(rows, yr) p);
+  if (select count(*) from public.membermojo_import_plan(rows, yr) where action='skip')<>4 then
+    raise exception 'expected archived, bad email, the duplicate and an existing member typed honorary to be skipped: %', (select jsonb_agg(to_jsonb(p)) from public.membermojo_import_plan(rows, yr) p);
   end if;
   if (select plan_flag from public.membermojo_import_plan(rows, yr) where full_name='Life One')<>'honorary' then raise exception 'honorary not flagged'; end if;
 
@@ -71,7 +75,7 @@ begin
   end;
 
   r := public.apply_membermojo_import(officer, rows, yr, repeat('a',64));
-  if (r->>'added')::int<>9 or (r->>'renewed')::int<>1 or (r->>'already_paid')::int<>1 or (r->>'skipped')::int<>3 then
+  if (r->>'added')::int<>10 or (r->>'renewed')::int<>1 or (r->>'already_paid')::int<>1 or (r->>'skipped')::int<>4 or (r->>'honorary')::int<>2 then
     raise exception 'unexpected result %', r;
   end if;
   if (r->>'logins_linked')::int<>1 then raise exception 'existing login not linked: %', r; end if;
@@ -92,6 +96,13 @@ begin
     or m.postal_address<>jsonb_build_object('address_line_one','1 High Street','address_line_two','Heslington','city','York','postcode','YO10 5DD','country','United Kingdom') then
     raise exception 'new adult details wrong: %', m;
   end if;
+  select * into m from public.members where full_name='Life One';
+  if m.effective_state<>'honorary' or m.current_plan_id<>adult then raise exception 'life member not honorary: %', m; end if;
+  if not exists(select 1 from public.honorary_memberships h where h.member_id=m.id and h.status='active' and h.reason like 'Life (Honorary)%') then raise exception 'no honorary record'; end if;
+  if exists(select 1 from public.membership_terms where member_id=m.id) then raise exception 'an honorary member was given a fee'; end if;
+  select * into m from public.members where full_name='Volunteer One';
+  if m.effective_state<>'honorary' or exists(select 1 from public.membership_terms where member_id=m.id) then raise exception 'volunteer not honorary: %', m; end if;
+  if (select effective_state from public.members where id=old_life)<>'lapsed' then raise exception 'an existing member was made honorary by the import'; end if;
   select * into m from public.members where full_name='Life One';
   if m.date_of_birth is not null or m.postal_address is not null then raise exception 'an unreadable date or missing address was invented: %', m; end if;
   select * into m from public.members where full_name='New Junior';
@@ -116,9 +127,10 @@ begin
   if not exists(select 1 from public.audit_logs where action='membermojo.list-imported' and actor_user_id=officer) then raise exception 'no audit entry'; end if;
 
   -- Saving the same list again changes nothing.
+  select count(*) into before_count from public.members where source='membermojo_cutover';
   r2 := public.apply_membermojo_import(officer, rows, yr, repeat('a',64));
-  if (r2->>'added')::int<>0 or (r2->>'renewed')::int<>0 or (r2->>'already_paid')::int<>11 or (r2->>'details_filled')::int<>0 then raise exception 'not idempotent: %', r2; end if;
-  if (select count(*) from public.members where source='membermojo_cutover')<>9 then raise exception 'second save added members'; end if;
+  if (r2->>'added')::int<>0 or (r2->>'renewed')::int<>0 or (r2->>'already_paid')::int<>10 or (r2->>'details_filled')::int<>0 then raise exception 'not idempotent: %', r2; end if;
+  if (select count(*) from public.members where source='membermojo_cutover')<>before_count then raise exception 'second save added members'; end if;
 
   if not has_function_privilege('service_role','public.apply_membermojo_import(uuid,jsonb,integer,text)','execute') then raise exception 'service_role cannot import'; end if;
   if has_function_privilege('authenticated','public.apply_membermojo_import(uuid,jsonb,integer,text)','execute') then raise exception 'members can import'; end if;

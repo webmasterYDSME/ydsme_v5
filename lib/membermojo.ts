@@ -40,6 +40,8 @@ export type MemberImportPreview = {
   totals: {
     people: number;
     add: number;
+    /** Of the people added, how many become lifetime honorary members (no fee). */
+    honorary: number;
     renew: number;
     alreadyPaid: number;
     skipped: number;
@@ -66,6 +68,7 @@ export type MemberImportResult = {
   loginsLinked: number;
   needInvitation: number;
   detailsFilled: number;
+  honorary: number;
 };
 
 export function currentMembershipYear(now = new Date()) {
@@ -96,13 +99,12 @@ export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberI
   const flagged: ImportPreviewItem[] = [];
   for (const row of plan) {
     if (row.action === "skip") continue;
-    if (row.plan_flag === "honorary") flagged.push({ name: row.full_name, detail: `Type "${row.membership_type}" is imported as an Adult member. Change it on their record if it should be Honorary.` });
-    else if (row.plan_flag === "unrecognised") flagged.push({ name: row.full_name, detail: `Type "${row.membership_type || "(blank)"}" was not recognised and is imported as an Adult member.` });
+    if (row.plan_flag === "unrecognised") flagged.push({ name: row.full_name, detail: `Type "${row.membership_type || "(blank)"}" was not recognised and is imported as an Adult member.` });
     if (!row.email) flagged.push({ name: row.full_name, detail: "No email address. They are added without a website login and cannot be invited." });
     else if (row.shared_email) flagged.push({ name: row.full_name, detail: "Shares an email address with another person. They are added without a website login." });
     else if (row.plan_slug === "junior") flagged.push({ name: row.full_name, detail: "Junior member. Juniors do not get their own website login." });
     const person = parsed.rows[row.row_no - 1];
-    if (!person.dateOfBirth) {
+    if (!person.dateOfBirth && row.plan_flag !== "honorary") {
       const consequence = row.plan_slug === "junior" ? "They will not move to Adult automatically at 18, and there is no way to check they are still eligible."
         : row.plan_slug === "student" ? "They will not move to Adult automatically at 25."
         : row.plan_slug === "adult" || row.plan_slug === "concession" ? "Automatic moves between Adult and Concession will not happen for them."
@@ -122,6 +124,7 @@ export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberI
     totals: {
       people: plan.length,
       add: count("add"),
+      honorary: plan.filter((row) => row.action === "add" && row.plan_flag === "honorary").length,
       renew: count("renew"),
       alreadyPaid: count("already_paid"),
       skipped: count("skip"),
@@ -166,6 +169,7 @@ export async function applyMemberListImport(actorId: string, bytes: Uint8Array, 
     added: result.added ?? 0, renewed: result.renewed ?? 0, alreadyPaid: result.already_paid ?? 0,
     skipped: result.skipped ?? 0, loginsLinked: result.logins_linked ?? 0, needInvitation: result.needs_invitation ?? 0,
     detailsFilled: result.details_filled ?? 0,
+    honorary: result.honorary ?? 0,
   };
 }
 
