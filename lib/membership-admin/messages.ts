@@ -50,7 +50,7 @@ const messages: Record<string, string> = {
   "email-retry-unavailable": "That email cannot be sent again.",
   "email-retry-failed": "The email could not be queued again. Try again.",
   "offline-payment-record-failed": "The payment could not be recorded. Nothing was changed. Try again.",
-  "offline-payment-duplicate": "Someone with this name and date of birth is already a member, so a second membership was not created. Check the Members list. If they are the same person, there is nothing more to record.",
+  "offline-payment-duplicate": "Someone with this name and date of birth is already a member, so a second membership was not created. Check the Members list. If they are the same person, open this application and close it.",
   "offline-payment-guardian": "The guardian has not confirmed their email address yet, so this junior membership cannot start. Ask the guardian to use the link in their email.",
   "offline-payment-amount": "The fee for this payment date does not match what the system expects, so nothing was recorded. Check the payment date and the annual fee under Renewals.",
   "offline-payment-confirmation-failed": "The payment could not be confirmed. Nothing was changed. Try again.",
@@ -69,6 +69,7 @@ const messages: Record<string, string> = {
 const notices: Record<string, string> = {
   "membership-payment-settings-saved": "Payment details saved.",
   "price-unchanged": "No fee change was needed. The current annual fee will continue automatically.",
+  "application-closed": "Application closed. The applicant was not emailed.",
   "application-approved": "Application approved.",
   "application-rejected": "Application declined.",
   "verification-recorded": "Decision recorded.",

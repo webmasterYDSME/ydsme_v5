@@ -473,3 +473,13 @@ test("the renewal page thanks a member who has paid", () => {
   assert.match(page, /Your membership renewal for the year \{year\} is successful\./);
   assert.doesNotMatch(page, /There is nothing more to do\. Thank you\./);
 });
+
+test("an unpaid offline application can be closed by an officer without emailing the applicant", () => {
+  const actions = readFileSync(new URL("../lib/actions/membership.ts", import.meta.url), "utf8");
+  const body = actions.slice(actions.indexOf("export async function closeOfflineMembershipApplication"), actions.indexOf("export async function confirmOfflineMembership"));
+  assert.match(body, /\.in\("status", \["awaiting_cash", "awaiting_bank_transfer", "awaiting_cheque"\]\)/);
+  assert.match(body, /min\(5\)/);
+  assert.doesNotMatch(body, /membership_notifications/);
+  const panel = readFileSync(new URL("../app/admin/memberships/_components/InboxTaskPanel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /closeOfflineMembershipApplication/);
+});

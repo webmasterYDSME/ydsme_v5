@@ -445,6 +445,27 @@ export async function recordOfflineApplicationPayment(formData: FormData) {
   redirect(`/admin/memberships?notice=offline-payment-${event}`);
 }
 
+/** Closes an application that is waiting for cash, a bank transfer or a cheque and is not going ahead (for example a repeat application). The applicant is not emailed. */
+export async function closeOfflineMembershipApplication(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const applicationId = idSchema.parse(formData.get("application_id"));
+  const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_applications")
+    .update({ status: "rejected", reviewed_by: user.id, reviewed_at: new Date().toISOString(), review_reason: reason })
+    .eq("id", applicationId).in("status", ["awaiting_cash", "awaiting_bank_transfer", "awaiting_cheque"]).select("id").maybeSingle();
+  if (error || !data) {
+    if (error) console.error("Application could not be closed", error);
+    redirect("/admin/memberships?error=application-unavailable");
+  }
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.application-closed",
+    entityType: "membership_application", entityId: applicationId, summary: reason,
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=application-closed");
+}
+
 export async function confirmOfflineMembership(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const applicationId = idSchema.parse(formData.get("application_id"));

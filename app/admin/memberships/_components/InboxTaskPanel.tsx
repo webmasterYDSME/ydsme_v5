@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Banknote } from "lucide-react";
 import {
+  closeOfflineMembershipApplication,
   completeManualMembershipContact,
   recordDeniedMembershipRefund,
   resolveMembershipDeliveryProblem,
@@ -120,6 +121,9 @@ function Form({ task }: { task: InboxTask }) {
       return <div className={styles.panelForms}>
         {cheque && !received ? <form action={recordOfflineApplicationPayment} className="stack-form"><h3 className={styles.formTitle}>Cheque received</h3><p className={styles.panelNote}>Use this when the cheque arrives but has not cleared yet.</p><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="event" value="received"/><label>Cheque reference<input name="payment_reference" required/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label><Actions task={task} link={false}><PendingSubmitButton pendingLabel="Saving…">Mark cheque as received</PendingSubmitButton></Actions></form> : null}
         <form action={confirmOfflineMembership} className="stack-form">{cheque && !received ? <><h3 className={styles.formTitle}>Payment complete</h3><p className={styles.panelNote}>Use this once the payment has cleared.</p></> : null}<input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="payment_method" value={application.payment_method ?? ""}/><label>Receipt or payment reference<input name="payment_reference" defaultValue={received?.payment_reference || ""} required/></label><label>Date received<input type="date" name="received_on" defaultValue={received?.received_on || today} max={today} required/></label>{cheque ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<Actions task={task}><PendingSubmitButton pendingLabel="Confirming…"><Banknote/>Mark paid and activate</PendingSubmitButton></Actions></form>
+        <details className={styles.technical}><summary>Not going ahead? Close this application</summary>
+          <form action={closeOfflineMembershipApplication} className="stack-form"><input type="hidden" name="application_id" value={application.id}/><p className={styles.panelNote}>Use this for a repeat application or one that will not be paid. The applicant is not emailed.</p><label>Reason<input name="reason" minLength={5} maxLength={500} placeholder="For example: repeat application, already a member." required/></label><PendingSubmitButton className="danger-button" pendingLabel="Closing…">Close application</PendingSubmitButton></form>
+        </details>
       </div>;
     }
     case "renewal-payment": return <form action={confirmExistingMemberOfflineRenewal} className="stack-form"><input type="hidden" name="member_id" value={task.memberId ?? ""}/><input type="hidden" name="membership_year" value={task.year}/><input type="hidden" name="payment_method" value={task.method || "cash"}/><label>Receipt or payment reference<input name="payment_reference" required minLength={2} maxLength={120}/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label>{task.method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<Actions task={task}><PendingSubmitButton pendingLabel="Activating…">Mark paid and activate</PendingSubmitButton></Actions></form>;
