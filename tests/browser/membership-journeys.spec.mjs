@@ -647,9 +647,9 @@ test.describe("membership public, member and officer journeys", () => {
     await page.goto("/admin/memberships?kind=contact");
     await expect(page.locator("article").filter({ hasText: `${fixtureNamePrefix} Honorary` })).toHaveCount(1);
     const taskPanel = await openInboxTask(page, "contact", `${fixtureNamePrefix} Honorary`);
-    const taskForm = taskPanel.locator("form").filter({ hasText: "Mark all updates as contacted" });
+    const taskForm = taskPanel.locator("form").filter({ hasText: "Mark as contacted" });
     await taskForm.locator('textarea[name="reason"]').fill("Telephoned the member and confirmed the designation.");
-    await taskForm.getByRole("button", { name: "Mark all updates as contacted" }).click();
+    await taskForm.getByRole("button", { name: "Mark as contacted" }).click();
     await page.waitForURL(/notice=manual-contact-completed/);
     const completed = await databaseRow(
       admin.from("membership_notifications").select("read_at").eq("id", manualTask.id).single(),

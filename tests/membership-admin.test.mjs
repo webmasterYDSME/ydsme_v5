@@ -405,3 +405,14 @@ test("the local Stripe listener names every event the webhook handles", async ()
   assert.ok(handled.length >= 10);
   for (const type of handled) assert.ok(listener.includes(`"${type}"`), `${type} is not forwarded`);
 });
+
+test("renewals skip members whose honorary membership covers the year", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609190007_membership_renewal_skip_honorary.sql", import.meta.url), "utf8");
+  assert.match(sql, /create or replace function public\.membership_honorary_covers_year/);
+  // The invitation and the reminder both check it, and it is used to close tasks already raised.
+  assert.equal((sql.match(/membership_honorary_covers_year\((?:m\.id|n\.member_id),/g) ?? []).length, 3);
+  assert.match(sql, /h\.status in \('scheduled','active'\)/);
+  // Honorary membership that ends part-way through the year with a replacement type still owes a fee.
+  assert.match(sql, /replacement_plan_id is not null/);
+  assert.match(sql, /update public\.membership_notifications n set read_at=now\(\)/);
+});

@@ -188,7 +188,7 @@ test("keeps officer contact and renewal work safe and understandable", async () 
   ]);
   const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");
   assert.match(inbox, /function onePerMember[\s\S]*Array\.from\(new Map/);
-  assert.match(officerPage, /Mark all updates as contacted/);
+  assert.match(officerPage, /Mark as contacted/);
   assert.match(officerPage, /Each person appears once/);
   assert.match(renewalForm, /Amount to record/);
   assert.match(renewalForm, /No payment due/);

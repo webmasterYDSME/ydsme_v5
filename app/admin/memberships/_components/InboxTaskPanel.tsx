@@ -132,7 +132,7 @@ function Form({ task }: { task: InboxTask }) {
     case "manual-contact": return <div className={styles.panelForms}>
       <p className={styles.callout}>{task.body}</p>
       <p className={styles.panelNote}>Each person appears once, even when several updates need to be shared with them.</p>
-      <form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><label>Contact note<textarea name="reason" rows={3} minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark all updates as contacted</PendingSubmitButton></Actions></form>
+      <form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><label>Contact note<textarea name="reason" rows={3} minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as contacted</PendingSubmitButton></Actions></form>
     </div>;
     case "payment-review": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>A full refund or disputed payment was reported. Access stays available until a decision is recorded. Any refund must be issued through the online payment service.</p>
