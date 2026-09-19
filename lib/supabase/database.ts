@@ -3674,6 +3674,7 @@ export type Database = {
           title: string
         }[]
       }
+      get_own_newsletter_preference: { Args: never; Returns: Json }
       grant_lifetime_honorary_membership: {
         Args: {
           p_actor_id: string
@@ -3931,6 +3932,7 @@ export type Database = {
         Args: { p_today?: string }
         Returns: Json
       }
+      set_own_newsletter_preference: { Args: { p_subscribe: boolean }; Returns: Json }
       stage_membermojo_membership_cutover: {
         Args: { p_actor_id: string }
         Returns: Json

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
+import { readAccountSource } from "./account-source.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
@@ -347,7 +348,7 @@ test("ships database and HTTP defence in depth", async () => {
 test("reports denied navigation clearly and keeps account controls labelled", async () => {
   const [dashboard, account, eventEditor] = await Promise.all([
     read("app/dashboard/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("app/components/EventEditorDialog.tsx"),
   ]);
   assert.match(dashboard, /"not-authorised": \{ message: "You do not have permission to open that page\.", tone: "error" \}/);
@@ -363,7 +364,7 @@ test("bounds portal reads and synchronizes member profile updates", async () => 
   const [adminPage, settings, account, profileAction, audit, summaries, profileSync] = await Promise.all([
     read("app/admin/[section]/page.tsx"),
     read("app/settings/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("lib/actions/content.ts"),
     read("app/admin/audit/page.tsx"),
     read("supabase/migrations/202608180024_portal_management_summaries.sql"),
@@ -829,7 +830,7 @@ test("enables the complete membership platform with one flag and otherwise falls
     read("lib/features.ts"),
     read("app/membership/page.tsx"),
     read("app/membership/apply/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("app/membership/checkout/page.tsx"),
     read("app/membership/verify/route.ts"),
     read("app/membership/guardian-consent/page.tsx"),
@@ -847,7 +848,7 @@ test("enables the complete membership platform with one flag and otherwise falls
   assert.match(membershipPage, /href=\{enabled \? "\/membership\/apply" : MEMBERMOJO_MEMBERSHIP_URL\}/);
   assert.doesNotMatch(membershipPage, /id="membership-application"|submitMembershipApplication/);
   assert.match(applicationPage, /if \(!enabled\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
-  assert.match(accountPage, /\{!membershipEnabled \? <div className="billing-panel">/);
+  assert.match(accountPage, /memberMojoLink=\{!membershipEnabled\}/);
   assert.match(accountPage, /href=\{MEMBERMOJO_MEMBERSHIP_URL\}/);
   for (const guardedRoute of [checkout, verification, guardian]) {
     assert.match(guardedRoute, /if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
@@ -898,7 +899,7 @@ test("links member-facing activation notices to newly created portal accounts", 
     read("supabase/migrations/202608200032_membership_activation_notice_wording.sql"),
     read("supabase/migrations/202608200033_membership_guardian_notification_isolation.sql"),
     read("supabase/migrations/202608210004_member_notification_ownership.sql"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("lib/actions/membership.ts"),
   ]);
   assert.match(routing, /route_membership_notification_to_portal/);

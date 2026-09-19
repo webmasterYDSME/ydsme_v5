@@ -44,6 +44,7 @@ export const newsletterConsentSources = {
 export const newsletterConsentLabels = {
   ...newsletterConsentSources,
   membermojo_list: "Had not unsubscribed from MemberMojo group emails when the list was imported",
+  member_account: "Subscribed by the member on their account page",
 } as const;
 
 /** The submitted fields as plain text, without the framework's hidden action fields or uploaded files. */

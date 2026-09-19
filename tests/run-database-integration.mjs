@@ -28,6 +28,7 @@ try {
     "tests/membermojo-apply.local.test.mjs",
     "tests/membermojo-list-import.local.test.mjs",
     "tests/membermojo-invitation-run.local.test.mjs",
+    "tests/member-newsletter-preference.local.test.mjs",
     "tests/membership-price-carry-forward.local.test.mjs",
     "tests/membership-plan-view-security.local.test.mjs",
     "tests/membership-offline.local.test.mjs",

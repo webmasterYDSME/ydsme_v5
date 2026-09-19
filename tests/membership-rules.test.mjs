@@ -10,6 +10,7 @@ import {
   proratedMembershipFee,
 } from "../lib/membership-rules.ts";
 import { readMembershipAdminSource } from "./membership-admin-source.mjs";
+import { readAccountSource } from "./account-source.mjs";
 
 const eligibilityPlans = [
   { id: "junior", slug: "junior", minimum_age: 14, maximum_age: 17 },
@@ -176,8 +177,8 @@ test("carries unchanged annual fees forward and delays future Stripe price chang
 });
 
 test("shows a single paid membership amount because partial payments are unsupported", async () => {
-  const accountPage = await readFile(new URL("../app/account/page.tsx", import.meta.url), "utf8");
-  assert.match(accountPage, /<dt>Paid<\/dt><dd>\{money\(membership\.term\.amount_paid_pence\)\}<\/dd>/);
+  const accountPage = await readAccountSource();
+  assert.match(accountPage, /<dt>Paid<\/dt><dd>\{money\(term\.amount_paid_pence\)\}<\/dd>/);
   assert.match(accountPage, /term\.amount_paid_pence !== term\.amount_due_pence/);
 });
 
