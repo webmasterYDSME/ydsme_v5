@@ -81,6 +81,10 @@ const paragraphs = (lines: string[]) => lines.map((line) => `<p style="margin:10
 
 function renderBlock(block: RenewalBlock, actionUrl: string | null, buttonLabel: string) {
   if (block.type === "paragraph") {
+    // The closing "automated email" note is small print.
+    if (block.text.startsWith("This is an automated email")) {
+      return `<p style="margin:26px 0 0;color:#68716c;font-size:14px;line-height:22px">${escapeHtml(block.text)}</p>`;
+    }
     return `<p style="margin:24px 0 0;${TEXT};white-space:pre-line">${escapeHtml(block.text)}</p>`;
   }
   if (block.type === "facts") {

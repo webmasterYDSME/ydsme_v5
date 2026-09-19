@@ -381,3 +381,16 @@ test("the reminder subject and opening line, and the wider body limit, are in th
   assert.match(worker, /renewalHtml\(/);
   assert.match(worker, /renewalText\(/);
 });
+
+test("renewal emails end with one short automated-email note", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609190006_membership_renewal_email_closing.sql", import.meta.url), "utf8");
+  assert.match(sql, /This is an automated email\. If you have already paid, there is nothing you need to do\. The membership officer may not have recorded your payment yet\./);
+  // The two older closing lines are gone from the reminder and the payment block.
+  assert.doesNotMatch(sql, /your membership is renewed once the officer has recorded/);
+  assert.doesNotMatch(sql, /so they can check your record/);
+  const body = "Hello.\n\nPay by card\nUse the link.\n\nThis is an automated email. If you have already paid, there is nothing you need to do.";
+  const blocks = parseRenewalBody(body);
+  assert.equal(blocks.at(-1).type, "paragraph");
+  const html = renewalHtml({ eyebrow: "e", title: "t", body, actionUrl: null, buttonLabel: "b" });
+  assert.match(html, /font-size:14px;line-height:22px">This is an automated email/);
+});
