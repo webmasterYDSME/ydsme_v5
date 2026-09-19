@@ -5,7 +5,7 @@ import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts
 import { membershipErrorMessage } from "../lib/membership-admin/messages.ts";
 import { emptyOfficerMemberState, submittedValues } from "../lib/membership-admin/officer-member.ts";
 import { ageOn, capitaliseName, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
-import { buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
+import { ageTransitionSlug, buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
 const memberId = "0f6f2a3c-1b7d-4e55-8c1a-5d2f7b9e4a10";
 
@@ -281,4 +281,39 @@ test("renewal emails quote the fee for the member's next type and list the other
   assert.equal((sql.match(/membership_renewal_other_ways_text\(/g) ?? []).length >= 3, true);
   assert.match(page, /awaiting_student_review/);
   assert.match(page, /Your membership type is being reviewed/);
+});
+
+test("an age change is priced at the new type's fee before it has been recorded", () => {
+  assert.equal(ageTransitionSlug("junior", "2008-06-01", 2027), "adult");
+  assert.equal(ageTransitionSlug("junior", "2009-06-01", 2027), null);
+  assert.equal(ageTransitionSlug("student", "2002-01-01", 2027), "adult");
+  assert.equal(ageTransitionSlug("adult", "1947-01-01", 2027), "concession");
+  assert.equal(ageTransitionSlug("adult", "1947-01-02", 2027), null);
+  assert.equal(ageTransitionSlug("concession", "1940-01-01", 2027), null);
+  assert.equal(ageTransitionSlug("junior", null, 2027), null);
+  const junior = "plan-junior";
+  const plans = [{ id: junior, slug: "junior" }, { id: adult, slug: "adult" }];
+  const withJunior = [...prices, { plan_id: junior, membership_year: 2026, amount_pence: 1000 }];
+  const list = choices({ current_plan_id: junior, date_of_birth: "2008-06-01" }, { prices: withJunior, plans });
+  assert.equal(forYear(list, 2027).amount_pence, 4500);
+  // A change that is already recorded, or a member still under 18, is left alone.
+  const recorded = choices({ current_plan_id: junior, date_of_birth: "2008-06-01" }, { prices: withJunior, plans, transitions: [{ member_id: "m1", membership_year: 2027, status: "awaiting_student_review", to_plan_id: adult }] });
+  assert.equal(forYear(recorded, 2027).amount_pence, null);
+  const younger = choices({ current_plan_id: junior, date_of_birth: "2010-06-01" }, { prices: withJunior, plans });
+  assert.equal(forYear(younger, 2027).amount_pence, 1000);
+});
+
+test("payments and checkout record any age change before they read the fee", async () => {
+  const [sql, actions, checkout] = await Promise.all([
+    readFile(new URL("../supabase/migrations/202609190004_ensure_membership_age_transition.sql", import.meta.url), "utf8"),
+    readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/membership.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(sql, /on conflict\(member_id,membership_year\) do nothing/);
+  assert.match(sql, /grant execute on function public\.ensure_membership_age_transition\(uuid,integer\) to service_role/);
+  for (const source of [actions, checkout]) {
+    const call = source.indexOf("ensure_membership_age_transition");
+    assert.ok(call > 0);
+    assert.ok(call < source.indexOf('.from("membership_plan_transitions")', call));
+  }
 });

@@ -688,6 +688,10 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew = fa
   const transitionDate = honoraryTransition?.revoked_effective_on
     ? new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`) : null;
   const membershipYear = requestedYear ?? transitionDate?.getUTCFullYear() ?? campaign.membership_year;
+  if (!honoraryTransition) {
+    const { error: ageChangeError } = await admin.rpc("ensure_membership_age_transition", { p_member_id: member.id, p_year: membershipYear });
+    if (ageChangeError) throw new Error("This membership is not available for online renewal.");
+  }
   const { data: transition } = honoraryTransition ? { data: null } : await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", member.id).eq("membership_year", membershipYear)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();

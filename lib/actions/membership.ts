@@ -885,6 +885,9 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)")
     .eq("id", memberId).maybeSingle();
   if (!member?.current_plan_id) redirect(`${back}&error=offline-member-unavailable`);
+  // Record any age change first, so the amount follows it even before renewals are opened.
+  const { error: ageChangeError } = await admin.rpc("ensure_membership_age_transition", { p_member_id: memberId, p_year: year });
+  if (ageChangeError) redirect(`${back}&error=price-unavailable`);
   const { data: transition } = await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", memberId).eq("membership_year", year)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();

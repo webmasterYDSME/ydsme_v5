@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { buildRenewalChoices, renewableMembers, type RenewalMember } from "@/lib/membership-rules";
+import { buildRenewalChoices, renewableMembers, type RenewalMember, type RenewalPlan } from "@/lib/membership-rules";
 import { money } from "@/lib/membership-admin/format";
 import { buildRenewalRows, defaultRenewalYear, summariseRenewals } from "@/lib/membership-admin/renewals";
 
@@ -65,7 +65,7 @@ export async function loadMemberRecord(memberId: string) {
     admin.from("members").select("id,full_name,contact_email,contact_email_verified_at,contact_role,contact_number,date_of_birth,effective_state,current_plan_id,auth_user_id,portal_invitation_status,newsletter_opt_in,newsletter_consent_source,newsletter_consent_given_on,newsletter_consent_recorded_at,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").eq("id", memberId).maybeSingle(),
     admin.from("membership_terms").select("id,membership_year,status,amount_due_pence,amount_paid_pence,source,starts_on,ends_on").eq("member_id", memberId).order("membership_year", { ascending: false }),
     admin.from("honorary_memberships").select("id,status,effective_from,reason,granted_at,revoked_effective_on,revocation_reason").eq("member_id", memberId).order("granted_at", { ascending: false }),
-    admin.from("membership_plans").select("id,name").order("sort_order"),
+    admin.from("membership_plans").select("id,name,slug,active").order("sort_order"),
     admin.from("membership_plan_prices").select("plan_id,membership_year,amount_pence").eq("active", true).order("membership_year", { ascending: false }),
     admin.from("membership_plan_transitions").select("member_id,membership_year,status,to_plan_id")
       .eq("member_id", memberId).in("status", ["scheduled", "approved", "awaiting_student_review"])
@@ -87,6 +87,7 @@ export async function loadMemberRecord(memberId: string) {
     members: [member as RenewalMember],
     prices: (priceResult.data ?? []) as Row[],
     transitions: (transitionResult.data ?? []) as Row[],
+    plans: plans as RenewalPlan[],
     terms: terms.map((term) => ({ ...term, member_id: memberId })),
     currentYear,
     formatMoney: money,
@@ -121,12 +122,12 @@ export async function loadRenewalWorkspace(requestedYear?: string | null) {
   const admin = createServiceClient();
   const currentYear = new Date().getUTCFullYear();
   const [memberRows, prices, transitions, terms, plans, campaigns] = await Promise.all([
-    readAll<Row>((from, to) => admin.from("members").select("id,full_name,contact_email,current_plan_id,effective_state,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name").order("id").range(from, to), "renewals"),
+    readAll<Row>((from, to) => admin.from("members").select("id,full_name,contact_email,date_of_birth,current_plan_id,effective_state,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name").order("id").range(from, to), "renewals"),
     admin.from("membership_plan_prices").select("plan_id,membership_year,amount_pence").eq("active", true).order("membership_year", { ascending: false }),
     admin.from("membership_plan_transitions").select("member_id,membership_year,status,to_plan_id")
       .in("status", ["scheduled", "approved", "awaiting_student_review"]).gte("membership_year", currentYear).lte("membership_year", currentYear + 1),
     readAll<Row>((from, to) => admin.from("membership_terms").select("member_id,membership_year,status,amount_due_pence,amount_paid_pence,source").gte("membership_year", currentYear).lte("membership_year", currentYear + 1).order("id").range(from, to), "renewals"),
-    admin.from("membership_plans").select("id,name").order("sort_order"),
+    admin.from("membership_plans").select("id,name,slug,active").order("sort_order"),
     admin.from("membership_renewal_campaigns").select("membership_year,open,opened_at").gte("membership_year", currentYear).lte("membership_year", currentYear + 1),
   ]);
   for (const result of [prices, transitions, plans, campaigns]) if (result.error) fail("renewals", result.error);
@@ -141,7 +142,7 @@ export async function loadRenewalWorkspace(requestedYear?: string | null) {
   const planNames = new Map(((plans.data ?? []) as Row[]).map((plan) => [plan.id as string, plan.name as string]));
   const choices = buildRenewalChoices({
     members: memberRows as RenewalMember[], prices: (prices.data ?? []) as Row[], transitions: (transitions.data ?? []) as Row[],
-    terms: terms as Row[], currentYear, formatMoney: money,
+    terms: terms as Row[], plans: (plans.data ?? []) as RenewalPlan[], currentYear, formatMoney: money,
   });
   const rows = buildRenewalRows({
     year,

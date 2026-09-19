@@ -57,8 +57,25 @@ export type RenewalMember = {
   id: string;
   current_plan_id: string | null;
   effective_state: string;
+  /** Lets the fee follow an age change before the change has been recorded. */
+  date_of_birth?: string | null;
   honorary_memberships: Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
 };
+
+export type RenewalPlan = { id: string; slug: string; active?: boolean };
+
+/**
+ * The membership type a member moves to on 1 January of `year` because of their age, or null.
+ * Mirrors `prepare_membership_age_transitions` and `ensure_membership_age_transition` in the database.
+ */
+export function ageTransitionSlug(currentSlug: string, dateOfBirth: string | null | undefined, year: number): "adult" | "concession" | null {
+  if (!dateOfBirth) return null;
+  const age = ageOn(dateOfBirth, new Date(Date.UTC(year, 0, 1)));
+  if (currentSlug === "junior" && age >= 18) return "adult";
+  if (currentSlug === "student" && age >= 25) return "adult";
+  if (currentSlug === "adult" && age >= 80) return "concession";
+  return null;
+}
 
 export type RenewalPrice = { plan_id: string; membership_year: number; amount_pence: number };
 export type RenewalTransition = { member_id: string; membership_year: number; status: string; to_plan_id: string | null };
@@ -90,10 +107,12 @@ export function buildRenewalChoices(input: {
   prices: RenewalPrice[];
   transitions: RenewalTransition[];
   terms: RenewalTerm[];
+  /** When given, an age change that has not been recorded yet is still priced at the new type's fee. */
+  plans?: RenewalPlan[];
   currentYear: number;
   formatMoney: (pence: number) => string;
 }): RenewalChoice[] {
-  const { members, prices, transitions, terms, currentYear, formatMoney } = input;
+  const { members, prices, transitions, terms, plans, currentYear, formatMoney } = input;
   return renewableMembers(members).flatMap((member) => [currentYear, currentYear + 1].map((membershipYear): RenewalChoice => {
     const honoraryRows = member.honorary_memberships;
     const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
@@ -105,7 +124,11 @@ export function buildRenewalChoices(input: {
       member_id: member.id, membership_year: membershipYear, amount_pence: null,
       note: "Honorary membership covers this year, so no payment should be recorded.",
     };
-    const transition = transitions.find((item) => item.member_id === member.id && item.membership_year === membershipYear);
+    const recorded = transitions.find((item) => item.member_id === member.id && item.membership_year === membershipYear);
+    const currentSlug = plans?.find((plan) => plan.id === member.current_plan_id)?.slug;
+    const expectedSlug = !recorded && currentSlug ? ageTransitionSlug(currentSlug, member.date_of_birth, membershipYear) : null;
+    const expectedPlan = expectedSlug ? plans?.find((plan) => plan.slug === expectedSlug && plan.active !== false) : undefined;
+    const transition = recorded ?? (expectedPlan ? { status: "scheduled", to_plan_id: expectedPlan.id } : undefined);
     if (transition?.status === "awaiting_student_review") return {
       member_id: member.id, membership_year: membershipYear, amount_pence: null,
       note: "The Student membership request must be decided before payment is recorded.",
