@@ -28,10 +28,28 @@ export const reviewKindName = (kind: string) => ({
   unknown_plan: "Membership type needs checking",
 } as Record<string, string>)[kind] || kind.replaceAll("_", " ");
 
-/** "14 Jun 2026" for a plain YYYY-MM-DD date. */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sept", "Oct", "Nov", "Dec"];
+
+/** The one date format used across the membership screens: "2 Sept 2011", from a plain YYYY-MM-DD date (or the date part of a timestamp). */
 export function dateLabel(value: string | null | undefined) {
-  if (!value) return "";
-  return new Date(`${value.slice(0, 10)}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || "");
+  if (!match) return "";
+  return `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}`;
+}
+
+/** The same format for a timestamp, read as a day in the Society's time zone: "2 Sept 2011". */
+export function timestampDateLabel(timestamp: string | null | undefined) {
+  const date = timestamp ? new Date(timestamp) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  return dateLabel(londonToday(date));
+}
+
+/** A timestamp with its time in the Society's time zone: "2 Sept 2011, 14:30". */
+export function dateTimeLabel(timestamp: string | null | undefined) {
+  const day = timestampDateLabel(timestamp);
+  if (!day) return "";
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(timestamp as string));
+  return `${day}, ${time}`;
 }
 
 /** "Today", "Yesterday" or "5 days" for a timestamp, measured in UTC days. */

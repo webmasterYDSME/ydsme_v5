@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
-import { ageOn, dateLabel, memberStateName, money, paymentMethodName, waitingLabel } from "../lib/membership-admin/format.ts";
+import { ageOn, dateLabel, dateTimeLabel, memberStateName, money, paymentMethodName, timestampDateLabel, waitingLabel } from "../lib/membership-admin/format.ts";
 import { buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
 const memberId = "0f6f2a3c-1b7d-4e55-8c1a-5d2f7b9e4a10";
@@ -69,7 +69,13 @@ test("formats money, payment methods, member states, dates and waiting times", (
   assert.equal(paymentMethodName(null), "payment");
   assert.equal(memberStateName("grace"), "Payment overdue");
   assert.equal(memberStateName("some_new_state"), "some new state");
-  assert.match(dateLabel("2026-09-18"), /^18 Sept? 2026$/);
+  assert.equal(dateLabel("2026-09-18"), "18 Sept 2026");
+  assert.equal(dateLabel("2011-09-02"), "2 Sept 2011");
+  assert.equal(dateLabel("2026-01-05T10:00:00Z"), "5 Jan 2026");
+  assert.equal(timestampDateLabel("2026-08-31T23:30:00Z"), "1 Sept 2026");
+  assert.equal(dateTimeLabel("2026-01-05T14:30:00Z"), "5 Jan 2026, 14:30");
+  assert.equal(dateTimeLabel("2026-07-05T14:30:00Z"), "5 Jul 2026, 15:30");
+  assert.equal(dateTimeLabel(null), "");
   assert.equal(dateLabel(null), "");
   const now = new Date("2026-09-18T15:00:00Z");
   assert.equal(waitingLabel("2026-09-18T01:00:00Z", now), "Today");

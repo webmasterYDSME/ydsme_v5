@@ -87,7 +87,7 @@ export default async function MembershipRecord({ params, searchParams }: { param
           </div>)}
           {honorary.map((item) => <div className={styles.term} key={item.id}>
             <div className={styles.termHead}><strong>Lifetime honorary · {item.status}</strong></div>
-            <small>Starts {item.effective_from}{item.revoked_effective_on ? ` · changes ${item.revoked_effective_on}` : ""}</small>
+            <small>Starts {dateLabel(item.effective_from)}{item.revoked_effective_on ? ` · changes ${dateLabel(item.revoked_effective_on)}` : ""}</small>
             <p>{item.reason}{item.revocation_reason ? ` · ${item.revocation_reason}` : ""}</p>
           </div>)}
           {!terms.length && !honorary.length ? <div className="membership-empty-state"><CreditCard/><strong>No history yet</strong><p>No membership or payment history has been recorded.</p></div> : null}

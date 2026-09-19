@@ -14,7 +14,7 @@ import {
 } from "@/lib/actions/membership";
 import { reviewPaidMembership } from "@/lib/actions/membership-renewals";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { ageOn, dateLabel, londonToday, money, paymentMethodName } from "@/lib/membership-admin/format";
+import { ageOn, dateLabel, londonToday, timestampDateLabel, money, paymentMethodName } from "@/lib/membership-admin/format";
 import { kindPillLabel, type InboxTask, type VerificationPayment } from "@/lib/membership-admin/inbox";
 import { SidePanel } from "./SidePanel";
 import styles from "../memberships.module.css";
@@ -76,7 +76,7 @@ function verificationSections(task: Extract<InboxTask, { type: "verification" }>
   const guardian: [string, ReactNode][] = application.guardian_name ? [
     ["Guardian", application.guardian_name],
     ...(application.guardian_email || application.guardian_contact_number ? [["Contact", [application.guardian_email, application.guardian_contact_number].filter(Boolean).join(" · ")] as [string, ReactNode]] : []),
-    ...(application.guardian_consent_version ? [["Consent", <span key="consent" className={styles.lines}><span>Declaration {application.guardian_consent_version}</span><span>{application.guardian_verified_at ? `Email verified ${new Date(application.guardian_verified_at).toLocaleDateString("en-GB")}` : "Email verification pending"}</span></span>] as [string, ReactNode]] : []),
+    ...(application.guardian_consent_version ? [["Consent", <span key="consent" className={styles.lines}><span>Declaration {application.guardian_consent_version}</span><span>{application.guardian_verified_at ? `Email verified ${timestampDateLabel(application.guardian_verified_at)}` : "Email verification pending"}</span></span>] as [string, ReactNode]] : []),
   ] : [];
   const sections: Section[] = [{ title: "Applicant", rows: person }];
   if (guardian.length) sections.push({ title: "Guardian", rows: guardian });
