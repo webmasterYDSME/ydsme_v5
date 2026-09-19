@@ -66,6 +66,7 @@ const messages: Record<string, string> = {
   "payment-details-invalid": "Some payment details are missing or not valid. Check the treasurer details and the instructions. Nothing was saved.",
   "payment-details-save-failed": "The payment details could not be saved. Nothing was changed. Try again.",
   "refund-unavailable": "The refund could not be recorded. It may already be recorded, or the membership was not denied. Refresh and check.",
+  "unapplied-payment-unavailable": "That payment was already marked as dealt with or could not be found. Refresh and check.",
   "delivery-problem-unavailable": "That email problem was already cleared or could not be found. Refresh and check.",
   "officer-member-create-failed": "The membership could not be added. Check the details and try again.",
 };
@@ -104,6 +105,7 @@ const notices: Record<string, string> = {
   "portal-login-removed": "Personal website access removed.",
   "refund-recorded": "Refund recorded. It has been cleared from Problems.",
   "delivery-problem-cleared": "Marked as dealt with.",
+  "unapplied-payment-cleared": "Marked as dealt with.",
   "offline-payment-review-created": "The payment has been sent for checking. Follow it up under Problems in the Inbox.",
 };
 

@@ -11,7 +11,7 @@ import {
   PUBLIC_MEMBERSHIP_PAYMENT_CONTACT_CACHE_TAG,
   PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG,
 } from "@/lib/cache-tags";
-import { refreshMembershipApplicationPaymentLink } from "@/lib/membership";
+import { closeOpenMembershipCheckouts, refreshMembershipApplicationPaymentLink } from "@/lib/membership";
 import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
 import { normaliseAccountNumber, normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
@@ -511,6 +511,7 @@ export async function confirmOfflineMembership(formData: FormData) {
       : "offline-payment-confirmation-failed";
     redirect(`/admin/memberships?error=${code}`);
   }
+  await closeOpenMembershipCheckouts({ applicationId });
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=offline-payment-confirmed");
@@ -965,6 +966,7 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     p_payment_reference: reference,
   });
   if (error) redirect(`${back}&error=offline-renewal-failed`);
+  await closeOpenMembershipCheckouts({ memberId, membershipYear: year });
   await processMembershipProviderCommands(memberId);
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/account");
@@ -1031,6 +1033,23 @@ export async function resolveMembershipDeliveryProblem(formData: FormData) {
   });
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=delivery-problem-cleared");
+}
+
+/** Clears a card payment that could not be applied to a membership once the officer has matched it or refunded it. */
+export async function resolveUnappliedMembershipPayment(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const attemptId = idSchema.parse(formData.get("attempt_id"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_checkout_attempts")
+    .update({ resolved_at: new Date().toISOString() }).eq("id", attemptId).eq("status", "payment_review").is("resolved_at", null)
+    .select("id").maybeSingle();
+  if (error || !data) redirect("/admin/memberships?error=unapplied-payment-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.payment-not-applied-resolved",
+    entityType: "membership_checkout_attempt", entityId: attemptId, summary: "Officer marked a card payment that could not be applied as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=unapplied-payment-cleared");
 }
 
 export async function retryMembershipNotification(formData: FormData) {

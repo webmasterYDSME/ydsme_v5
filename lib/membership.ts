@@ -336,6 +336,37 @@ async function reserveCheckoutAttempt(input: {
   return { attempt, existingUrl: null };
 }
 
+/**
+ * Once an officer has recorded a cash, cheque or bank payment, any card payment page the member
+ * left open must stop working, otherwise they can pay twice. Best effort: it never blocks the officer,
+ * and a card payment that still arrives is caught by the duplicate-payment check.
+ */
+export async function closeOpenMembershipCheckouts(target: { applicationId?: string; memberId?: string; membershipYear?: number }) {
+  try {
+    const admin = createServiceClient();
+    let query = admin.from("membership_checkout_attempts")
+      .select("id,stripe_checkout_session_id").in("status", ["creating", "open"]);
+    if (target.applicationId) query = query.eq("application_id", target.applicationId);
+    else if (target.memberId) {
+      query = query.eq("member_id", target.memberId);
+      if (target.membershipYear) query = query.eq("membership_year", target.membershipYear);
+    } else return;
+    const { data } = await query;
+    for (const attempt of data ?? []) {
+      if (attempt.stripe_checkout_session_id) {
+        const session = await getStripe().checkout.sessions.retrieve(attempt.stripe_checkout_session_id);
+        // A payment that has already gone through is left for the webhook to record.
+        if (session.status === "complete") continue;
+        if (session.status === "open") await getStripe().checkout.sessions.expire(session.id);
+      }
+      await admin.from("membership_checkout_attempts").update({ status: "expired", updated_at: new Date().toISOString() })
+        .eq("id", attempt.id).in("status", ["creating", "open"]);
+    }
+  } catch (error) {
+    console.error("Open card payment pages could not be closed after an offline payment", error instanceof Error ? error.message : error);
+  }
+}
+
 async function attachCheckoutSession(attemptId: string, sessionId: string, expiresAt: number) {
   const { data, error } = await createServiceClient().rpc("attach_membership_checkout_session", {
     p_attempt_id: attemptId,

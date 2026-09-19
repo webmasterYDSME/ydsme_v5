@@ -2,7 +2,8 @@ import "server-only";
 
 import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { waitingLabel } from "@/lib/membership-admin/format";
+import { money, waitingLabel } from "@/lib/membership-admin/format";
+import { isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -61,6 +62,7 @@ export type InboxTask = Base & (
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
   | { type: "honorary-conflict"; body: string }
   | { type: "refund"; applicationId: string; reason: string | null; outstandingPence: number }
+  | { type: "unapplied-payment"; attemptId: string; reason: string; amountPence: number | null; year: number | null; technical: string | null }
   | { type: "email-delivery"; eventId: string; recipient: string | null; event: "bounced" | "complained" | "suppressed"; subject: string | null }
   | { type: "email-retry"; notificationId: string; recipient: string; attempts: number; error: string | null }
   | { type: "notice"; area: "Online payments" | "Email" | "Setup"; title: string; body: string; technical: string | null; href: string | null; hrefLabel: string | null }
@@ -82,7 +84,7 @@ function sources(admin: Admin) {
     paymentReviews: (columns: string, options?: typeof HEAD) => admin.from("membership_terms").select(columns, options).eq("status", "payment_review"),
     honoraryConflicts: (columns: string, options?: typeof HEAD) => notifications().select(columns, options).eq("kind", "membership.honorary-payment-review-officer").is("read_at", null),
     checkoutNotices: (columns: string, options?: typeof HEAD) => notifications().select(columns, options).eq("kind", "membership.application-payment-attention-officer").is("read_at", null),
-    checkoutAttempts: (columns: string) => admin.from("membership_checkout_attempts").select(columns).in("status", ["failed", "payment_review"]).limit(LIMIT.checkoutAttempts),
+    checkoutAttempts: (columns: string) => admin.from("membership_checkout_attempts").select(columns).in("status", ["failed", "payment_review"]).is("resolved_at", null).limit(LIMIT.checkoutAttempts),
     webhookFailures: (columns: string) => admin.from("stripe_webhook_events").select(columns).eq("processing_status", "failed").limit(LIMIT.webhookFailures),
     providerCommands: (columns: string) => admin.from("membership_provider_commands").select(columns).eq("status", "failed").limit(LIMIT.providerCommands),
     emailFailures: (columns: string) => notifications().select(columns).eq("email_status", "failed").limit(LIMIT.emailFailures),
@@ -243,7 +245,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.paymentReviews("id,member_id,membership_year,amount_due_pence,amount_paid_pence,updated_at"),
     from.honoraryConflicts("id,member_id,body,created_at").order("created_at"),
     from.checkoutNotices("id,title,body,action_href,created_at").order("created_at"),
-    from.checkoutAttempts("id,status,last_error,updated_at"),
+    from.checkoutAttempts("id,status,last_error,updated_at,application_id,member_id,amount_pence,membership_year"),
     from.webhookFailures("stripe_event_id,event_type,last_error,claimed_at"),
     from.providerCommands("id,command_type,attempts,last_error,updated_at"),
     from.emailFailures("id,member_id,title,recipient_email,email_attempts,last_email_error,created_at"),
@@ -265,6 +267,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     ...contact.map(({ row }) => row.member_id),
     ...((reviewResult.data ?? []) as Row[]).map((row) => row.member_id),
     ...((conflictResult.data ?? []) as Row[]).map((row) => row.member_id),
+    ...((attemptResult.data ?? []) as Row[]).map((row) => row.member_id),
   ].filter(Boolean)));
   const names = new Map<string, string>();
   if (memberIds.length) {
@@ -273,6 +276,14 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     for (const member of (data ?? []) as Row[]) names.set(member.id, member.full_name);
   }
   const memberName = (id: string | null) => (id ? names.get(id) : null) || "Member";
+  // A card payment that could not be applied may belong to an application that has no member yet.
+  const attemptApplicationIds = Array.from(new Set(((attemptResult.data ?? []) as Row[]).map((row) => row.application_id).filter(Boolean)));
+  const applicationNames = new Map<string, string>();
+  if (attemptApplicationIds.length) {
+    const { data, error } = await admin.from("membership_applications").select("id,full_name").in("id", attemptApplicationIds);
+    if (error) fail("application names", error);
+    for (const application of (data ?? []) as Row[]) applicationNames.set(application.id, application.full_name);
+  }
   const planName = new Map(((planResult.data ?? []) as Row[]).map((plan) => [plan.id, plan.name as string]));
   const tasks: InboxTask[] = [];
   const add = (task: Omit<Base, "waiting"> & Record<string, unknown>) => {
@@ -367,6 +378,17 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     });
   }
   for (const attempt of (attemptResult.data ?? []) as Row[]) {
+    if (isUnappliedPayment(attempt.last_error)) {
+      const who = (attempt.member_id ? names.get(attempt.member_id) : null) ?? (attempt.application_id ? applicationNames.get(attempt.application_id) : null) ?? "A member";
+      add({
+        key: `unapplied-payment.${attempt.id}`, type: "unapplied-payment", kind: "problem", name: who,
+        summary: `Paid by card${attempt.amount_pence != null ? ` (${money(attempt.amount_pence)})` : ""} · membership was not updated`,
+        since: attempt.updated_at, cta: "See details", memberId: attempt.member_id ?? null,
+        attemptId: attempt.id, reason: unappliedPaymentReason(attempt.last_error), amountPence: attempt.amount_pence ?? null,
+        year: attempt.membership_year ?? null, technical: attempt.last_error,
+      });
+      continue;
+    }
     const review = attempt.status === "payment_review";
     add({
       key: `notice.attempt-${attempt.id}`, type: "notice", kind: "problem", name: review ? "Possible duplicate payment" : "Payment page could not be opened",

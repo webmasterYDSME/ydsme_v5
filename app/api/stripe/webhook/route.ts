@@ -8,6 +8,7 @@ import {
   MEMBERSHIP_INTEGRATION_IDENTIFIER,
   processMembershipProviderCommands,
 } from "@/lib/membership";
+import { membershipRefusalCode } from "@/lib/membership-admin/unapplied-payment";
 import { createAdminClient, createServiceClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe";
 
@@ -124,6 +125,13 @@ async function invoicePaymentIds(invoiceId: string) {
   return { intentId, chargeId };
 }
 
+async function recordedMemberIdForSession(sessionId: string): Promise<string | null> {
+  const { data } = await createServiceClient().from("membership_payments")
+    .select("membership_terms(member_id)").eq("stripe_checkout_session_id", sessionId).limit(1).maybeSingle();
+  const term = (data as { membership_terms?: { member_id: string } | Array<{ member_id: string }> | null } | null)?.membership_terms;
+  return (Array.isArray(term) ? term[0]?.member_id : term?.member_id) ?? null;
+}
+
 async function activateMembershipCheckout(event: Stripe.Event) {
   const session = event.data.object as Stripe.Checkout.Session;
   if (
@@ -182,7 +190,9 @@ async function activateMembershipCheckout(event: Stripe.Event) {
     p_cancel_at_period_end: desiredCancelAtPeriodEnd,
     p_current_period_end: period.end,
   };
-  const { data, error } = applicationId
+  // A retry after a partly finished delivery must not try to pay the same term twice.
+  const alreadyRecorded = await recordedMemberIdForSession(session.id);
+  const { data, error } = alreadyRecorded ? { data: [{ member_id: alreadyRecorded }], error: null } : applicationId
     ? await admin.rpc("activate_membership_application_checkout", {
       ...common,
       p_application_id: applicationId,
@@ -196,7 +206,20 @@ async function activateMembershipCheckout(event: Stripe.Event) {
       p_current_period_start: period.start,
       p_stripe_event_created_at: new Date(event.created * 1000).toISOString(),
     });
-  if (error) throw new Error(`Unable to activate verified membership: ${error.message}`);
+  if (error) {
+    // The card payment is real. If the database refuses it for a business reason, retrying cannot help:
+    // record it once for an officer, and tell Stripe we have it so it stops resending.
+    const refusal = membershipRefusalCode(error.message);
+    if (!refusal) throw new Error(`Unable to activate verified membership: ${error.message}`);
+    const { data: recorded, error: recordError } = await admin.rpc("record_unapplied_membership_payment", {
+      p_stripe_checkout_session_id: session.id,
+      p_stripe_payment_intent_id: payment.intentId,
+      p_code: refusal,
+    });
+    if (recordError || !recorded) throw new Error(`Unable to activate verified membership: ${error.message}`);
+    console.error("Card payment received but could not be applied to a membership", refusal);
+    return true;
+  }
   const memberId = (data as Array<{ member_id: string }> | null)?.[0]?.member_id;
   if (!memberId) throw new Error("Verified membership activation returned no member.");
   const postActivationAdmin = createServiceClient();
