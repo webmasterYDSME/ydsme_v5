@@ -29,20 +29,24 @@ begin
 
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
    values('Lapsed Person','lapsed-'||tag||'@example.test',adult,'lapsed','officer') returning id into lapsed;
-  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
-   values('Paid Person','paid-'||tag||'@example.test',adult,'active','officer') returning id into paid;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source,contact_number,date_of_birth)
+   values('Paid Person','paid-'||tag||'@example.test',adult,'active','officer','07000 111111',date '1960-05-01') returning id into paid;
   insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
    values(paid,term_price,yr,make_date(yr,1,1),make_date(yr,12,31),make_date(yr+1,3,1),'paid',2000,2000,'officer');
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
    values('Archived Person','archived-'||tag||'@example.test',adult,'archived','officer') returning id into archived;
 
   rows := jsonb_build_array(
-    jsonb_build_object('full_name','Lapsed Person','email','LAPSED-'||tag||'@example.test','membership_type','Adult member'),
-    jsonb_build_object('full_name','Paid Person','email','paid-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','Lapsed Person','email','LAPSED-'||tag||'@example.test','membership_type','Adult member',
+      'title','Mrs','date_of_birth','1970-01-01','contact_number','01234 000000','address_line_one','5 Mill Lane','city','Selby','postcode','YO8 4AA'),
+    jsonb_build_object('full_name','Paid Person','email','paid-'||tag||'@example.test','membership_type','Adult member',
+      'title','Mr','date_of_birth','1990-01-01','contact_number','07999 999999'),
     jsonb_build_object('full_name','Archived Person','email','archived-'||tag||'@example.test','membership_type','Adult member'),
-    jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member',
+      'title','Dr','date_of_birth','1958-04-01','contact_number','01904 123456','address_line_one','1 High Street',
+      'address_line_two','Heslington','city','York','postcode','YO10 5DD'),
     jsonb_build_object('full_name','New Student','email','student-'||tag||'@example.test','membership_type','Student member'),
-    jsonb_build_object('full_name','New Junior','email','family-'||tag||'@example.test','membership_type','Junior member'),
+    jsonb_build_object('full_name','New Junior','email','family-'||tag||'@example.test','membership_type','Junior member','date_of_birth','2010-06-01'),
     jsonb_build_object('full_name','Parent One','email','family-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Shared One','email','shared-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Shared Two','email','shared-'||tag||'@example.test','membership_type','Adult member'),
@@ -50,7 +54,7 @@ begin
     jsonb_build_object('full_name','No Email','email','','membership_type','Adult member'),
     jsonb_build_object('full_name','Bad Email','email','not-an-email','membership_type','Adult member'),
     jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member'),
-    jsonb_build_object('full_name','Life One','email','life-'||tag||'@example.test','membership_type','Life (Honorary)')
+    jsonb_build_object('full_name','Life One','email','life-'||tag||'@example.test','membership_type','Life (Honorary)','date_of_birth','2031-02-30','contact_number','x')
   );
 
   if (select count(*) from public.membermojo_import_plan(rows, yr) where action='skip')<>3 then
@@ -74,13 +78,24 @@ begin
 
   select * into m from public.members where id=lapsed;
   if m.effective_state<>'active' then raise exception 'lapsed member not renewed'; end if;
+  if m.title<>'Mrs' or m.date_of_birth<>date '1970-01-01' or m.contact_number<>'01234 000000' or m.postal_address->>'city'<>'Selby' then raise exception 'blank details not filled in: %', m; end if;
+  select * into m from public.members where id=paid;
+  if m.title<>'Mr' or m.date_of_birth<>date '1960-05-01' or m.contact_number<>'07000 111111' then raise exception 'existing details were overwritten or the blank title not filled: %', m; end if;
+  if (r->>'details_filled')::int<>2 then raise exception 'expected two existing members to be filled in: %', r; end if;
   if not exists(select 1 from public.membership_terms where member_id=lapsed and membership_year=yr and status='paid' and amount_paid_pence=amount_due_pence) then raise exception 'renewed member has no paid term'; end if;
   if (select effective_state from public.members where id=archived)<>'archived' then raise exception 'archived member changed'; end if;
 
   select * into m from public.members where full_name='New Adult';
   if m.source<>'membermojo_cutover' or m.portal_invitation_status<>'eligible' or m.contact_role<>'self' or m.auth_user_id is not null then raise exception 'new adult wrong: %', m; end if;
   if (select count(*) from public.members where full_name='New Adult')<>1 then raise exception 'duplicate row added twice'; end if;
+  if m.title<>'Dr' or m.date_of_birth<>date '1958-04-01' or m.contact_number<>'01904 123456' or m.preferred_contact_method<>'email'
+    or m.postal_address<>jsonb_build_object('address_line_one','1 High Street','address_line_two','Heslington','city','York','postcode','YO10 5DD','country','United Kingdom') then
+    raise exception 'new adult details wrong: %', m;
+  end if;
+  select * into m from public.members where full_name='Life One';
+  if m.date_of_birth is not null or m.postal_address is not null then raise exception 'an unreadable date or missing address was invented: %', m; end if;
   select * into m from public.members where full_name='New Junior';
+  if m.date_of_birth<>date '2010-06-01' then raise exception 'junior date of birth missing'; end if;
   if m.contact_role<>'guardian' or m.portal_invitation_status<>'not_requested' or m.auth_user_id is not null then raise exception 'junior wrong: %', m; end if;
   select * into m from public.members where full_name='Parent One';
   if m.contact_role<>'self' or m.portal_invitation_status<>'eligible' then raise exception 'parent sharing an email with a junior wrong: %', m; end if;
@@ -102,7 +117,7 @@ begin
 
   -- Saving the same list again changes nothing.
   r2 := public.apply_membermojo_import(officer, rows, yr, repeat('a',64));
-  if (r2->>'added')::int<>0 or (r2->>'renewed')::int<>0 or (r2->>'already_paid')::int<>11 then raise exception 'not idempotent: %', r2; end if;
+  if (r2->>'added')::int<>0 or (r2->>'renewed')::int<>0 or (r2->>'already_paid')::int<>11 or (r2->>'details_filled')::int<>0 then raise exception 'not idempotent: %', r2; end if;
   if (select count(*) from public.members where source='membermojo_cutover')<>9 then raise exception 'second save added members'; end if;
 
   if not has_function_privilege('service_role','public.apply_membermojo_import(uuid,jsonb,integer,text)','execute') then raise exception 'service_role cannot import'; end if;

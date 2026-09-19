@@ -27,6 +27,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
       <span>Saved</span>
       <h3>{plural(result.added, "person", "people")} added, {plural(result.renewed, "member")} renewed for {preview.year}</h3>
       <p>{result.alreadyPaid} already paid for {preview.year} · {result.skipped} left out · {result.loginsLinked} linked to an existing website login.</p>
+      <p>{plural(result.detailsFilled, "existing member")} had missing details (title, date of birth, phone or address) filled in.</p>
       <p>{plural(result.needInvitation, "person", "people")} can now be invited to the website. Use the invitations section below.</p>
     </div></section>;
   }
@@ -34,15 +35,19 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
     <div className="member-import-section-heading"><div><span>Final check</span><h3 id="member-import-apply-heading">Save this member list</h3></div><ShieldCheck/></div>
     <form action={formAction} className="stack-form member-import-apply-form">
       <input type="hidden" name="fileSha256" value={preview.fileSha256}/>
-      <input type="hidden" name="rows" value={JSON.stringify(preview.rows)}/>
       <div className="member-import-apply-scope"><strong>This will:</strong><ul>
         <li>Add {plural(preview.totals.add, "new person", "new people")} and mark them as full members for {preview.year}, paid through MemberMojo.</li>
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
+        <li>Fill in each person's title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
       </ul><strong>This will not:</strong><ul>
         <li>Remove or change anyone who is not in this file.</li>
         <li>Charge anyone or change any payment.</li>
       </ul></div>
+      <label>Choose the same MemberMojo file again
+        <input type="file" name="file" accept="text/csv,.csv" required/>
+        <small>The file is read again for saving and must be exactly the one you checked. It is not kept.</small>
+      </label>
       <label className="member-import-review-check"><input type="checkbox" name="confirmed" value="yes" required/><span>I have checked the things to look at and want to save this list.</span></label>
       {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
       <PendingSubmitButton className="button dark" pendingLabel="Saving the member list…"><Database/>Save member list</PendingSubmitButton>
@@ -59,7 +64,7 @@ export function MemberMojoImportForm() {
       <form action={formAction} className="stack-form member-import-form">
         <label>MemberMojo member-list file
           <input type="file" name="file" accept="text/csv,.csv" required/>
-          <small>Choose the CSV downloaded from MemberMojo. We use only the name, the email and, if present, the Membership column. Everyone in the file is made a full member for the current year.</small>
+          <small>Choose the CSV downloaded from MemberMojo. We read the name, email, Membership type, title, date of birth, phone number and address. Everyone in the file is made a full member for the current year.</small>
         </label>
         <PendingSubmitButton className="button dark" pendingLabel="Checking the file…"><FileSearch/>Show me what will happen</PendingSubmitButton>
       </form>
@@ -67,11 +72,12 @@ export function MemberMojoImportForm() {
     </section>
 
     {state.status === "success" && preview ? <section className="member-import-results" aria-live="polite">
-      <header className="member-import-result-heading"><div><p className="eyebrow dark">Nothing has been saved yet</p><h2>{plural(preview.totals.people, "person", "people")} in this file</h2><p>Membership year {preview.year}. Columns used: {preview.columnsUsed.join(", ")}.{preview.notActive ? ` ${preview.notActive} not marked Active were left out.` : ""}</p></div><FileUp/></header>
+      <header className="member-import-result-heading"><div><p className="eyebrow dark">Nothing has been saved yet</p><h2>{plural(preview.totals.people, "person", "people")} in this file</h2><p>Membership year {preview.year}. Columns used: {preview.columnsUsed.join(", ")}.{preview.birthMonthOnly ? " MemberMojo only records the month and year of birth, so dates are saved as the 1st of the month." : ""}{preview.totals.unreadableBirthDates ? ` ${preview.totals.unreadableBirthDates} date(s) of birth could not be read and are left blank.` : ""}{preview.notActive ? ` ${preview.notActive} not marked Active were left out.` : ""}</p></div><FileUp/></header>
       <div className="member-import-stats">
         <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>added as full members</small></article>
         <article><Check/><span>Existing members</span><strong>{preview.totals.renew} renewed</strong><small>{preview.totals.alreadyPaid} already paid for {preview.year}</small></article>
         <article><Mail/><span>Website login</span><strong>{preview.totals.needInvitation} to invite</strong><small>{preview.totals.loginsToLink} already have a login and are linked</small></article>
+        <article className={preview.totals.noBirthDate ? "has-warning" : ""}><Database/><span>Personal details</span><strong>{preview.totals.noBirthDate} without a date of birth</strong><small>{preview.totals.withPhone} phone · {preview.totals.withAddress} address · {preview.totals.withTitle} title</small></article>
         <article className={preview.totals.skipped || preview.flagged.length ? "has-warning" : ""}><AlertTriangle/><span>To look at</span><strong>{preview.flagged.length + preview.totals.skipped}</strong><small>{preview.totals.skipped} left out</small></article>
       </div>
       {preview.skipped.length ? <details className="member-import-details" open>

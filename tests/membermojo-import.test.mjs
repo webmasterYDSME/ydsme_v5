@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { MEMBER_LIST_MAX_ROWS, MemberListError, parseMemberList } from "../lib/membermojo-list.ts";
+import { MEMBER_LIST_MAX_ROWS, MemberListError, parseMemberList, readBirthDate, readPhone, readPostcode } from "../lib/membermojo-list.ts";
 
 const bytes = (text, encoding = "utf8") => new Uint8Array(Buffer.from(text, encoding));
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
@@ -12,18 +12,56 @@ test("reads a MemberMojo export: first name, last name, email and membership", (
     + "Ms,Ann,Example,Ann@Example.test,Adult member,Active,2025-01-31\r\n"
     + "Mr,Bob,Sample,bob@example.test,Junior member,Active,2027-01-31\r\n",
   ));
-  assert.deepEqual(parsed.rows, [
+  assert.deepEqual(parsed.rows.map(({ fullName, email, membershipType }) => ({ fullName, email, membershipType })), [
     { fullName: "Ann Example", email: "ann@example.test", membershipType: "Adult member" },
     { fullName: "Bob Sample", email: "bob@example.test", membershipType: "Junior member" },
   ]);
+  assert.equal(parsed.rows[0].dateOfBirth, "");
   assert.equal(parsed.notActive, 0);
-  assert.deepEqual(parsed.columnsUsed, ["First name and Last name", "Email", "Membership", "Membership state"]);
+  assert.deepEqual(parsed.columnsUsed, ["First name and Last name", "Email", "Membership", "Membership state", "Title"]);
 });
 
 test("reads the simple email and full_name layout and ignores every other column", () => {
   const parsed = parseMemberList(bytes("full_name,email,secret\n\"Smith, Jo\",jo@example.test,x\n"));
-  assert.deepEqual(parsed.rows, [{ fullName: "Smith, Jo", email: "jo@example.test", membershipType: "" }]);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0].fullName, "Smith, Jo");
+  assert.equal(parsed.rows[0].email, "jo@example.test");
   assert.deepEqual(parsed.columnsUsed, ["full_name", "Email"]);
+});
+
+test("reads title, month and year of birth, phone and address from MemberMojo's layout", () => {
+  const parsed = parseMemberList(bytes(
+    "Title,First name,Last name,Month and Year of Birth,Email,Contact number,Address line 1,Address line 2,Address line 3,Address line 4,Postcode,Membership\n"
+    + "Dr,Ann,Example,1958-04-01,a@example.test,t:01904 123456,1 High Street,Heslington,Fulford,York,yo10  5dd,Adult\n"
+    + "Mr,Bob,Sample,,b@example.test,t:+447700900123,2 Low Road,,,York,,Adult\n"
+    + "Ms,Cat,Nowhere,15/13/1990,c@example.test,,,,,,,Adult\n",
+  ));
+  assert.deepEqual(parsed.rows[0], {
+    fullName: "Ann Example", email: "a@example.test", membershipType: "Adult", title: "Dr", dateOfBirth: "1958-04-01",
+    phone: "01904 123456", addressLineOne: "1 High Street", addressLineTwo: "Heslington, Fulford", city: "York", postcode: "YO10 5DD",
+  });
+  assert.equal(parsed.rows[1].dateOfBirth, "");
+  assert.equal(parsed.rows[1].phone, "+447700900123");
+  assert.equal(parsed.rows[1].addressLineTwo, "");
+  assert.equal(parsed.rows[1].city, "York");
+  assert.equal(parsed.rows[2].dateOfBirth, "");
+  assert.equal(parsed.unreadableBirthDates, 1);
+  assert.equal(parsed.birthMonthOnly, true);
+  assert.ok(parsed.columnsUsed.includes("Address") && parsed.columnsUsed.includes("Contact number"));
+});
+
+test("dates, numbers and postcodes are tidied and never invented", () => {
+  assert.equal(readBirthDate("2008-04-01"), "2008-04-01");
+  assert.equal(readBirthDate("01/04/2008"), "2008-04-01");
+  assert.equal(readBirthDate("04/2008"), "2008-04-01");
+  assert.equal(readBirthDate("2008-02-31"), "");
+  assert.equal(readBirthDate("1850-01-01"), "");
+  assert.equal(readBirthDate("2999-01-01"), "");
+  assert.equal(readBirthDate("soon"), "");
+  assert.equal(readPhone("t:01904  123456"), "01904 123456");
+  assert.equal(readPhone("m: 07700 900123"), "07700 900123");
+  assert.equal(readPostcode("YO61 3 SA"), "YO61 3SA");
+  assert.equal(readPostcode("hg4  1rl"), "HG4 1RL");
 });
 
 test("leaves out people who are not Active", () => {

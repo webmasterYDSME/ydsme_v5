@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { ensureMembershipPlanPrice } from "@/lib/membership";
 import { londonDateParts } from "@/lib/membership-rules";
-import { parseMemberList, type MemberListRow } from "@/lib/membermojo-list";
+import { MemberListError, parseMemberList, type MemberListRow } from "@/lib/membermojo-list";
 import { createServiceClient } from "@/lib/supabase/admin";
 
 export class MemberImportError extends Error {
@@ -35,6 +35,8 @@ export type MemberImportPreview = {
   fileSha256: string;
   columnsUsed: string[];
   notActive: number;
+  /** MemberMojo only records month and year of birth. */
+  birthMonthOnly: boolean;
   totals: {
     people: number;
     add: number;
@@ -43,12 +45,17 @@ export type MemberImportPreview = {
     skipped: number;
     loginsToLink: number;
     needInvitation: number;
+    /** People being added or renewed who have no date of birth. */
+    noBirthDate: number;
+    /** People being added or renewed with a date of birth that could not be read. */
+    unreadableBirthDates: number;
+    withPhone: number;
+    withAddress: number;
+    withTitle: number;
   };
   /** Things worth a look, none of which stop the import. */
   flagged: ImportPreviewItem[];
   skipped: ImportPreviewItem[];
-  /** What the apply step sends back to be saved. */
-  rows: MemberListRow[];
 };
 
 export type MemberImportResult = {
@@ -58,6 +65,7 @@ export type MemberImportResult = {
   skipped: number;
   loginsLinked: number;
   needInvitation: number;
+  detailsFilled: number;
 };
 
 export function currentMembershipYear(now = new Date()) {
@@ -66,6 +74,8 @@ export function currentMembershipYear(now = new Date()) {
 
 const toJson = (rows: MemberListRow[]) => rows.map((row) => ({
   full_name: row.fullName, email: row.email, membership_type: row.membershipType,
+  title: row.title, date_of_birth: row.dateOfBirth, contact_number: row.phone,
+  address_line_one: row.addressLineOne, address_line_two: row.addressLineTwo, city: row.city, postcode: row.postcode,
 }));
 
 async function planRows(rows: MemberListRow[], year: number) {
@@ -91,14 +101,24 @@ export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberI
     if (!row.email) flagged.push({ name: row.full_name, detail: "No email address. They are added without a website login and cannot be invited." });
     else if (row.shared_email) flagged.push({ name: row.full_name, detail: "Shares an email address with another person. They are added without a website login." });
     else if (row.plan_slug === "junior") flagged.push({ name: row.full_name, detail: "Junior member. Juniors do not get their own website login." });
+    const person = parsed.rows[row.row_no - 1];
+    if (!person.dateOfBirth) {
+      const consequence = row.plan_slug === "junior" ? "They will not move to Adult automatically at 18, and there is no way to check they are still eligible."
+        : row.plan_slug === "student" ? "They will not move to Adult automatically at 25."
+        : row.plan_slug === "adult" || row.plan_slug === "concession" ? "Automatic moves between Adult and Concession will not happen for them."
+        : "";
+      flagged.push({ name: row.full_name, detail: `No date of birth. ${consequence} Add it on their record when you have it.`.replace("  ", " ") });
+    }
   }
   const done = plan.filter((row) => row.action !== "skip");
+  const doneRows = done.map((row) => parsed.rows[row.row_no - 1]);
   const needInvitation = done.filter((row) => row.email && !row.shared_email && row.plan_slug !== "junior" && !row.login_user_id).length;
   return {
     year,
     fileSha256: sha256Hex(bytes),
     columnsUsed: parsed.columnsUsed,
     notActive: parsed.notActive,
+    birthMonthOnly: parsed.birthMonthOnly,
     totals: {
       people: plan.length,
       add: count("add"),
@@ -107,14 +127,22 @@ export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberI
       skipped: count("skip"),
       loginsToLink: done.filter((row) => row.login_user_id && !row.member_id).length,
       needInvitation,
+      noBirthDate: doneRows.filter((person) => !person.dateOfBirth).length,
+      unreadableBirthDates: parsed.unreadableBirthDates,
+      withPhone: doneRows.filter((person) => person.phone).length,
+      withAddress: doneRows.filter((person) => person.addressLineOne || person.city || person.postcode).length,
+      withTitle: doneRows.filter((person) => person.title).length,
     },
     flagged: flagged.slice(0, 300),
     skipped: plan.filter((row) => row.action === "skip").map((row) => ({ name: row.full_name || "(no name)", detail: row.note ?? "Left out" })),
-    rows: parsed.rows,
   };
 }
 
-export async function applyMemberListImport(actorId: string, rows: MemberListRow[], fileSha256: string): Promise<MemberImportResult> {
+/** The file is sent again for saving, and must be exactly the one that was checked. */
+export async function applyMemberListImport(actorId: string, bytes: Uint8Array, expectedSha256: string): Promise<MemberImportResult> {
+  const fileSha256 = sha256Hex(bytes);
+  if (fileSha256 !== expectedSha256) throw new MemberListError("This is not the same file that was checked. Choose the same file again, or check the new one first.");
+  const rows = parseMemberList(bytes).rows;
   const year = currentMembershipYear();
   const plan = await planRows(rows, year);
   const slugs = [...new Set(plan.filter((row) => row.action !== "skip").map((row) => row.plan_slug))];
@@ -137,6 +165,7 @@ export async function applyMemberListImport(actorId: string, rows: MemberListRow
   return {
     added: result.added ?? 0, renewed: result.renewed ?? 0, alreadyPaid: result.already_paid ?? 0,
     skipped: result.skipped ?? 0, loginsLinked: result.logins_linked ?? 0, needInvitation: result.needs_invitation ?? 0,
+    detailsFilled: result.details_filled ?? 0,
   };
 }
 

@@ -14,7 +14,7 @@ import {
   type MemberImportPreview,
   type MemberImportResult,
 } from "@/lib/membermojo";
-import { MEMBER_LIST_MAX_BYTES, MEMBER_LIST_MAX_ROWS, MemberListError } from "@/lib/membermojo-list";
+import { MEMBER_LIST_MAX_BYTES, MemberListError } from "@/lib/membermojo-list";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 
@@ -44,32 +44,25 @@ export async function previewMemberList(_previous: MemberImportPreviewState, for
   }
 }
 
-const applySchema = z.object({
-  fileSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  rows: z.array(z.object({
-    fullName: z.string().max(180),
-    email: z.string().max(254),
-    membershipType: z.string().max(120),
-  })).min(1).max(MEMBER_LIST_MAX_ROWS),
-  confirmed: z.literal("yes"),
-});
-
 export async function applyMemberList(_previous: MemberImportApplyState, formData: FormData): Promise<MemberImportApplyState> {
   const { user } = await requireRole(["administrator"]);
-  let rows: unknown;
-  try { rows = JSON.parse(String(formData.get("rows") ?? "")); } catch { rows = null; }
-  const parsed = applySchema.safeParse({ fileSha256: formData.get("fileSha256"), rows, confirmed: formData.get("confirmed") });
-  if (!parsed.success) return { status: "error", message: "Tick the box to confirm. If this keeps happening, check the file again." };
+  const details = z.object({ fileSha256: z.string().regex(/^[a-f0-9]{64}$/), confirmed: z.literal("yes") })
+    .safeParse({ fileSha256: formData.get("fileSha256"), confirmed: formData.get("confirmed") });
+  const file = formData.get("file");
+  if (!details.success) return { status: "error", message: "Tick the box to confirm." };
+  if (!(file instanceof File) || !file.size || file.size > MEMBER_LIST_MAX_BYTES) {
+    return { status: "error", message: "Choose the same MemberMojo file that you checked above." };
+  }
   if (!await consumeRateLimit("membermojo-import-apply", 6, 60 * 60, user.id)) {
     return { status: "error", message: "This has been tried several times. Please wait before saving again." };
   }
   try {
-    const result = await applyMemberListImport(user.id, parsed.data.rows, parsed.data.fileSha256);
+    const result = await applyMemberListImport(user.id, new Uint8Array(await file.arrayBuffer()), details.data.fileSha256);
     revalidatePath("/administrator/member-import");
     revalidatePath("/admin/members");
     return { status: "success", message: "The member list was saved.", result };
   } catch (error) {
-    if (error instanceof MemberImportError) return { status: "error", message: error.message };
+    if (error instanceof MemberListError || error instanceof MemberImportError) return { status: "error", message: error.message };
     console.error("MemberMojo list save failed", { error: error instanceof Error ? error.message : "unknown" });
     return { status: "error", message: "We could not save the member list. Nothing was changed." };
   }
