@@ -75,8 +75,10 @@ test("website access follows the membership record and never reopens or locks ou
   // Only active and lapsed accounts move; suspended and archived ones are never reopened.
   assert.match(migration, /membership_status in \('active', 'lapsed'\)/);
   assert.doesNotMatch(migration, /membership_status = 'archived'/);
-  // Administrators are never lapsed or suspended by it.
-  assert.match(migration, /ur\.role = 'administrator'/);
+  // Administrators are not exempt: a later migration removes the exemption the first version had.
+  const noExemption = read("supabase/migrations/202609190016_membership_access_no_administrator_exemption.sql");
+  assert.doesNotMatch(noExemption, /administrator'\)/);
+  assert.match(noExemption, /membership_status in \('active', 'lapsed'\)/);
   const config = read("supabase/config.toml");
   assert.doesNotMatch(config, /^enable_signup = true/m);
 });
