@@ -394,7 +394,7 @@ test.describe("membership public, member and officer journeys", () => {
 
   test("membership officer page fits desktop, tablet and phone widths", async ({ page }) => {
     await signIn(page, officerEmail, "/admin/memberships");
-    await expect(page.getByRole("heading", { name: "Inbox", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Membership workspace" }).getByRole("link", { name: /^Inbox/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("navigation", { name: "Filter tasks" })).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     for (const width of [1440, 1100, 820, 390]) {

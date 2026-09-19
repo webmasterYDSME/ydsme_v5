@@ -45,11 +45,7 @@ export default async function MembershipInbox({ searchParams }: { searchParams: 
 
   return <>
     <MembershipFlash query={query}/>
-    <section className={styles.intro}>
-      <p className="eyebrow dark">Daily work</p>
-      <h2>Inbox</h2>
-      <p>Everything that needs a membership officer, oldest first. Finished tasks disappear automatically.</p>
-    </section>
+    <p className={styles.tabNote}>Everything that needs a membership officer, oldest first. Finished tasks disappear automatically.</p>
     <div className={styles.filterBar}>
       <nav className={styles.chips} aria-label="Filter tasks">
         {chips.map((chip) => <Link key={chip.key} className={`${styles.chip} ${chip.key === kind ? styles.chipOn : ""}`} href={inboxHref(chip.key)} prefetch={false} aria-current={chip.key === kind ? "true" : undefined}>{chip.label}<span>{chip.count}</span></Link>)}

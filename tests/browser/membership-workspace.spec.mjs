@@ -46,7 +46,7 @@ test("membership workspace shows one job per screen and keeps old links working"
     await page.goto("/admin/memberships");
     const tabs = page.getByRole("navigation", {name:"Membership workspace"});
     await expect(tabs.getByRole("link")).toHaveCount(4);
-    await expect(page.getByRole("heading",{name:"Inbox",exact:true})).toBeVisible();
+    await expect(tabs.getByRole("link",{name:/^Inbox/})).toHaveAttribute("aria-current","page");
     await expect(page.getByRole("navigation",{name:"Filter tasks"})).toBeVisible();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await tabs.getByRole("link",{name:/^Members/}).click();

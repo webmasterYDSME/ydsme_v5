@@ -16,7 +16,7 @@ export default async function MembershipLayout({ children }: { children: ReactNo
   await requireCapability("memberships.manage");
   const [inboxCount, reviewCount] = await Promise.all([countInboxTasks(), countMigrationReviews()]);
   return <div className={`portal-content membership-admin-page ${styles.workspace}`}>
-    <header className={styles.pageHeader}>
+    <header className="portal-heading">
       <div><p className="eyebrow dark">Membership team</p><h1>Manage memberships</h1><p>Review applications, record payments and look after the member register.</p></div>
       <Link className="button dark" href="/admin/memberships/members?add=member"><UserPlus/>Add membership</Link>
     </header>

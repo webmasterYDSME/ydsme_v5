@@ -50,11 +50,7 @@ export default async function MembershipMembers({ searchParams }: { searchParams
 
   return <>
     <MembershipFlash query={query}/>
-    <section className={styles.intro}>
-      <p className="eyebrow dark">Membership records</p>
-      <h2>Find and manage a member</h2>
-      <p>Search the register, open someone’s record, or add a person who joined offline.</p>
-    </section>
+    <p className={styles.tabNote}>Search the register, open someone’s record, or add a person who joined offline.</p>
     <form className={styles.search} method="get">
       {group.key !== "all" ? <input type="hidden" name="status" value={group.key}/> : null}
       <label>Find a membership<input name="q" defaultValue={one(query.q) || ""} placeholder="Name or correspondence email"/></label>

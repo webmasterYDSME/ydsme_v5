@@ -16,11 +16,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
   const { currentYear, plans, renewable, choices } = await loadRenewalWorkspace();
   return <>
     <MembershipFlash query={query}/>
-    <section className={styles.intro}>
-      <p className="eyebrow dark">Money and renewals</p>
-      <h2>Renewals</h2>
-      <p>Open the yearly renewal campaign, or record a payment made by cash, bank transfer or cheque. Payments still waiting for you appear in the Inbox.</p>
-    </section>
+    <p className={styles.tabNote}>Open the yearly renewal campaign, or record a payment made by cash, bank transfer or cheque. Payments still waiting for you appear in the Inbox.</p>
     <div className={styles.twoCol}>
       <RenewalCampaign plans={plans} year={currentYear}/>
       <section className={styles.card} id="renewals">

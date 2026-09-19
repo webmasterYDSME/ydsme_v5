@@ -31,11 +31,7 @@ export default async function MembershipSetup({ searchParams }: { searchParams: 
 
   return <>
     <MembershipFlash query={query}/>
-    <section className={styles.intro}>
-      <p className="eyebrow dark">Membership setup</p>
-      <h2>Settings that rarely change</h2>
-      <p>Annual fees and membership types, the treasurer’s payment details, bookkeeping reports, and the one-time MemberMojo import.</p>
-    </section>
+    <p className={styles.tabNote}>Annual fees and membership types, the treasurer’s payment details, bookkeeping reports, and the one-time MemberMojo import.</p>
     <div className={styles.setupLayout}>
       <nav className={styles.subnav} aria-label="Setup sections">
         {tabs.map((item) => <Link key={item.key} href={item.key === "fees" ? "/admin/memberships/setup" : `/admin/memberships/setup?tab=${item.key}`} prefetch={false} aria-current={item.key === tab ? "page" : undefined}>{item.label}{"count" in item && item.count ? <span>{item.count}</span> : null}</Link>)}
