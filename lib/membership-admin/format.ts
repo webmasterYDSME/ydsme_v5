@@ -50,3 +50,21 @@ export function waitingLabel(timestamp: string | null | undefined, now = new Dat
 export function londonToday(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
+
+/** Whole years between a YYYY-MM-DD birth date and a YYYY-MM-DD day (a 29 February birthday counts from 1 March). Null when the date is missing. */
+export function ageOn(dateOfBirth: string | null | undefined, day: string): number | null {
+  const born = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth || "");
+  const today = /^(\d{4})-(\d{2})-(\d{2})/.exec(day || "");
+  if (!born || !today) return null;
+  const [by, bm, bd, ty, tm, td] = [born[1], born[2], born[3], today[1], today[2], today[3]].map(Number);
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0);
+}
+
+/** The day someone turns 18 as YYYY-MM-DD (1 March for a 29 February birthday), or null when the birth date is missing. */
+export function eighteenthBirthday(dateOfBirth: string | null | undefined): string | null {
+  const born = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth || "");
+  if (!born) return null;
+  const [year, month, day] = [Number(born[1]) + 18, Number(born[2]), Number(born[3])];
+  const exists = new Date(Date.UTC(year, month - 1, day)).getUTCMonth() === month - 1;
+  return exists ? `${year}-${born[2]}-${born[3]}` : `${year}-03-01`;
+}

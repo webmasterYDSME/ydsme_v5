@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Banknote } from "lucide-react";
 import {
@@ -13,8 +14,8 @@ import {
 } from "@/lib/actions/membership";
 import { reviewPaidMembership } from "@/lib/actions/membership-renewals";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { dateLabel, londonToday, money, paymentMethodName } from "@/lib/membership-admin/format";
-import { kindPillLabel, type InboxTask } from "@/lib/membership-admin/inbox";
+import { ageOn, dateLabel, eighteenthBirthday, londonToday, money, paymentMethodName } from "@/lib/membership-admin/format";
+import { kindPillLabel, type InboxTask, type VerificationPayment } from "@/lib/membership-admin/inbox";
 import { SidePanel } from "./SidePanel";
 import styles from "../memberships.module.css";
 
@@ -31,12 +32,6 @@ function facts(task: InboxTask): [string, string][] {
       ...(task.received?.received_on ? [["Cheque received", dateLabel(task.received.received_on)] as [string, string]] : []),
     ];
     case "renewal-payment": return [["Membership year", String(task.year)], ["Payment method", paymentMethodName(task.method)], ["Amount due", money(task.amountDuePence)]];
-    case "verification": return [
-      ["Date of birth", dateLabel(task.application.date_of_birth)],
-      ...(task.application.guardian_name ? [["Guardian", task.application.guardian_name] as [string, string]] : []),
-      ...(task.application.guardian_email || task.application.guardian_contact_number ? [["Guardian contact", [task.application.guardian_email, task.application.guardian_contact_number].filter(Boolean).join(" · ")] as [string, string]] : []),
-      ...(task.application.guardian_consent_version ? [["Guardian consent", `Declaration ${task.application.guardian_consent_version} · ${task.application.guardian_verified_at ? `email verified ${new Date(task.application.guardian_verified_at).toLocaleDateString("en-GB")}` : "email verification pending"}`] as [string, string]] : []),
-    ];
     case "student-request": return [["Requested for", String(task.year)], ["Membership until decided", "Adult"]];
     case "payment-review": return [["Membership year", String(task.year)], ["Paid", `${money(task.paidPence)} of ${money(task.duePence)}`]];
     case "refund": return [["To refund", money(task.outstandingPence)]];
@@ -44,6 +39,58 @@ function facts(task: InboxTask): [string, string][] {
     case "notice": return [["Area", task.area]];
     default: return [];
   }
+}
+
+type Section = { title: string; rows: [string, ReactNode][] };
+
+const paymentStatusLabel: Record<string, string> = {
+  paid: "Paid", pending: "Not paid yet", refunded: "Refunded", partially_refunded: "Partly refunded", disputed: "Disputed",
+  failed: "Failed", void: "Cancelled", unknown: "Not confirmed. Check the payment record",
+};
+
+function paymentRows(payment: VerificationPayment | null): [string, ReactNode][] {
+  if (!payment) return [["Payment", "No payment details found"]];
+  const rows: [string, ReactNode][] = [];
+  const amount = payment.amountPence != null ? ` · ${money(payment.amountPence)}` : "";
+  rows.push(["Payment", `${paymentStatusLabel[payment.status] ?? payment.status.replaceAll("_", " ")}${amount}`]);
+  rows.push(["Method", payment.method ? paymentMethodName(payment.method).replace(/^./, (c) => c.toUpperCase()) : "Not recorded"]);
+  if (payment.refundedPence > 0) rows.push(["Refunded", money(payment.refundedPence)]);
+  if (payment.year) rows.push(["Membership year", String(payment.year)]);
+  if (payment.reference) rows.push(["Reference", <span key="ref" className={styles.mono}>{payment.reference}</span>]);
+  if (payment.receivedOn) rows.push([payment.method === "stripe" ? "Paid on" : "Received", dateLabel(payment.receivedOn)]);
+  if (payment.clearedOn) rows.push(["Cleared", dateLabel(payment.clearedOn)]);
+  if (payment.stripe) {
+    const { paymentIntent, checkoutSession, invoice, dashboardUrl } = payment.stripe;
+    if (paymentIntent) rows.push(["Stripe payment", <span key="pi"><span className={styles.mono}>{paymentIntent}</span>{dashboardUrl ? <> · <a className={styles.inlineLink} href={dashboardUrl} target="_blank" rel="noreferrer">Open in Stripe<span className="sr-only"> (opens in a new tab)</span></a></> : null}</span>]);
+    if (checkoutSession) rows.push(["Checkout session", <span key="cs" className={styles.mono}>{checkoutSession}</span>]);
+    if (invoice) rows.push(["Stripe invoice", <span key="inv" className={styles.mono}>{invoice}</span>]);
+  }
+  return rows;
+}
+
+function verificationSections(task: Extract<InboxTask, { type: "verification" }>): { sections: Section[]; warning: string | null } {
+  const { application, planName, payment } = task;
+  const today = londonToday();
+  const age = ageOn(application.date_of_birth, today);
+  const turns18 = age !== null && age < 18 ? eighteenthBirthday(application.date_of_birth) : null;
+  const person: [string, ReactNode][] = [
+    ["Membership type", application.student_declaration ? `${planName} · student declaration made` : planName],
+    ["Date of birth", application.date_of_birth ? `${dateLabel(application.date_of_birth)} · ${age !== null ? `age ${age}` : ""}`.replace(/ · $/, "") : "Not recorded"],
+    ...(turns18 ? [["Turns 18", dateLabel(turns18)] as [string, ReactNode]] : []),
+    ["Email", application.contact_email || "None given"],
+    ...(application.contact_number ? [["Phone", application.contact_number] as [string, ReactNode]] : []),
+    ["Applied", dateLabel(application.applied_at)],
+  ];
+  const guardian: [string, ReactNode][] = application.guardian_name ? [
+    ["Guardian", application.guardian_name],
+    ...(application.guardian_email || application.guardian_contact_number ? [["Contact", [application.guardian_email, application.guardian_contact_number].filter(Boolean).join(" · ")] as [string, ReactNode]] : []),
+    ...(application.guardian_consent_version ? [["Consent", `Declaration ${application.guardian_consent_version} · ${application.guardian_verified_at ? `email verified ${new Date(application.guardian_verified_at).toLocaleDateString("en-GB")}` : "email verification pending"}`] as [string, ReactNode]] : []),
+  ] : [];
+  const sections: Section[] = [{ title: "Applicant", rows: person }];
+  if (guardian.length) sections.push({ title: "Guardian", rows: guardian });
+  sections.push({ title: "Payment", rows: paymentRows(payment) });
+  const warning = age !== null && age < 18 && !application.guardian_name ? "Under 18, but no guardian details are on file." : null;
+  return { sections, warning };
 }
 
 const memberLink = (id: string, label: string) => <Link className={styles.linkButton} href={`/admin/memberships/members/${id}`}>{label}</Link>;
@@ -64,7 +111,7 @@ function Form({ task }: { task: InboxTask }) {
     }
     case "renewal-payment": return <form action={confirmExistingMemberOfflineRenewal} className="stack-form"><input type="hidden" name="member_id" value={task.memberId ?? ""}/><input type="hidden" name="membership_year" value={task.year}/><input type="hidden" name="payment_method" value={task.method || "cash"}/><label>Receipt or payment reference<input name="payment_reference" required minLength={2} maxLength={120}/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label>{task.method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<PendingSubmitButton pendingLabel="Activating…">Mark paid and activate</PendingSubmitButton></form>;
     case "verification": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>{task.application.guardian_name ? "Payment is received and the membership is already active. Check the details and guardian consent above, then record the outcome." : "Payment is received and the membership is already active. Record that the routine eligibility check is done, or, rarely, deny the membership."}</p>
+      <p className={styles.panelNote}>{task.application.guardian_name ? "This member has paid and is already active. Check their age, guardian details and consent above, then confirm the membership or deny it." : "This member has paid and is already active. Check the details above match the membership type, then confirm the membership or deny it."}</p>
       <form action={reviewPaidMembership} className="stack-form"><input type="hidden" name="application_id" value={task.application.id}/><label>Decision<select name="decision"><option value="approved">Confirm membership</option><option value="denied">Deny membership — arrange refund manually</option></select></label><label>Reason<textarea name="reason" rows={4} minLength={5} maxLength={500} placeholder="Record what was checked and any supporting details." required/></label><PendingSubmitButton pendingLabel="Saving…">Record verification</PendingSubmitButton></form>
     </div>;
     case "student-request": return <div className={styles.panelForms}>
@@ -102,10 +149,16 @@ function Form({ task }: { task: InboxTask }) {
 
 export function InboxTaskPanel({ task, closeHref }: { task: InboxTask; closeHref: string }) {
   const rows = facts(task);
+  const verification = task.type === "verification" ? verificationSections(task) : null;
   return <SidePanel closeHref={closeHref} label={`${kindPillLabel[task.kind]}: ${task.name}`} eyebrow={kindPillLabel[task.kind]} eyebrowClassName={pillClass[task.kind]} title={task.name}>
-    {rows.length ? <dl className={styles.facts}>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
+    {verification ? <>
+      {verification.warning ? <p className={styles.panelWarn} role="note">{verification.warning}</p> : null}
+      {verification.sections.map((section) => <section key={section.title} className={styles.factsGroup}>
+        <h3 className={styles.factsTitle}>{section.title}</h3>
+        <dl className={styles.facts}>{section.rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+      </section>)}
+    </> : rows.length ? <dl className={styles.facts}>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
     <Form task={task}/>
     {task.memberId && task.type !== "refund" && task.type !== "email-retry" ? memberLink(task.memberId, "Open full membership record") : null}
   </SidePanel>;
 }
-

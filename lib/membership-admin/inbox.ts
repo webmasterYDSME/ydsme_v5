@@ -38,10 +38,24 @@ type Base = {
   memberId: string | null;
 };
 
+/** What the officer needs to see about the money behind a paid membership that is waiting for its eligibility check. */
+export type VerificationPayment = {
+  method: string | null;
+  /** paid, pending, refunded, partially_refunded, disputed and so on, as stored on the payment. */
+  status: string;
+  amountPence: number | null;
+  refundedPence: number;
+  year: number | null;
+  reference: string | null;
+  receivedOn: string | null;
+  clearedOn: string | null;
+  stripe: { paymentIntent: string | null; checkoutSession: string | null; invoice: string | null; dashboardUrl: string | null } | null;
+};
+
 export type InboxTask = Base & (
   | { type: "application-payment"; application: { id: string; full_name: string; contact_email: string | null; date_of_birth: string; payment_method: string | null; status: string; guardian_name: string | null }; planName: string; received: { payment_reference: string | null; received_on: string | null } | null }
   | { type: "renewal-payment"; termId: string; year: number; amountDuePence: number; method: string | null }
-  | { type: "verification"; application: { id: string; full_name: string; date_of_birth: string; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null } }
+  | { type: "verification"; planName: string; application: { id: string; full_name: string; contact_email: string | null; contact_number: string | null; student_declaration: boolean; date_of_birth: string | null; applied_at: string | null; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null }; payment: VerificationPayment | null }
   | { type: "student-request"; transitionId: string; year: number }
   | { type: "manual-contact"; notificationId: string; body: string }
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
@@ -94,6 +108,49 @@ type Row = any;
 function fail(what: string, error: unknown): never {
   if (error) console.error(`Membership inbox: ${what}`, error);
   throw new Error(`Unable to load ${what}.`);
+}
+
+const stripeDashboard = (path: string) => `https://dashboard.stripe.com${/^(sk|rk)_test_/.test(process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_SECRET_KEY || "") ? "/test" : ""}/${path}`;
+
+/** Payment details for paid applications that still need an eligibility check, keyed by application. */
+async function loadVerificationPayments(admin: Admin, applicationIds: string[]) {
+  const result = new Map<string, VerificationPayment>();
+  if (!applicationIds.length) return result;
+  const [termResult, offlineResult] = await Promise.all([
+    admin.from("membership_terms")
+      .select("application_id,membership_year,amount_due_pence,amount_paid_pence,membership_payments(method,status,amount_pence,refunded_pence,stripe_checkout_session_id,stripe_payment_intent_id,stripe_invoice_id,cash_receipt_reference,received_at)")
+      .in("application_id", applicationIds),
+    admin.from("membership_offline_payment_records")
+      .select("application_id,method,status,payment_reference,received_on,cleared_on")
+      .in("application_id", applicationIds).in("status", ["received", "cleared"]),
+  ]);
+  if (termResult.error) fail("payment details", termResult.error);
+  if (offlineResult.error) fail("offline payment details", offlineResult.error);
+  const offline = new Map(((offlineResult.data ?? []) as Row[]).map((record) => [record.application_id as string, record]));
+  for (const term of (termResult.data ?? []) as Row[]) {
+    const payments = (term.membership_payments ?? []) as Row[];
+    const payment = payments.find((row) => row.status !== "void" && row.status !== "failed") ?? payments[0] ?? null;
+    const record = offline.get(term.application_id) ?? null;
+    const method = payment?.method ?? record?.method ?? null;
+    const hasStripe = Boolean(payment?.stripe_payment_intent_id || payment?.stripe_checkout_session_id || payment?.stripe_invoice_id);
+    result.set(term.application_id, {
+      method,
+      status: payment?.status ?? (term.amount_paid_pence >= term.amount_due_pence && term.amount_due_pence > 0 ? "paid" : "unknown"),
+      amountPence: payment?.amount_pence ?? (term.amount_paid_pence || null),
+      refundedPence: payment?.refunded_pence ?? 0,
+      year: term.membership_year ?? null,
+      reference: record?.payment_reference ?? payment?.cash_receipt_reference ?? null,
+      receivedOn: record?.received_on ?? (payment?.received_at ? String(payment.received_at).slice(0, 10) : null),
+      clearedOn: record?.cleared_on ?? null,
+      stripe: hasStripe ? {
+        paymentIntent: payment.stripe_payment_intent_id ?? null,
+        checkoutSession: payment.stripe_checkout_session_id ?? null,
+        invoice: payment.stripe_invoice_id ?? null,
+        dashboardUrl: payment.stripe_payment_intent_id ? stripeDashboard(`payments/${payment.stripe_payment_intent_id}`) : null,
+      } : null,
+    });
+  }
+  return result;
 }
 
 /** People whose membership was denied after payment, where money still has to be handed back. */
@@ -165,7 +222,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.applications("id,full_name,contact_email,date_of_birth,payment_method,status,guardian_name,created_at,requested_plan_id,membership_offline_payment_records(id,status,payment_reference,received_on)"),
     admin.from("membership_plans").select("id,name"),
     from.renewalPayments("id,member_id,membership_year,amount_due_pence,expected_payment_method,created_at"),
-    from.verifications("id,full_name,guardian_name,guardian_email,guardian_contact_number,guardian_consent_version,guardian_verified_at,date_of_birth,created_at"),
+    from.verifications("id,full_name,contact_email,contact_number,student_declaration,requested_plan_id,payment_method,guardian_name,guardian_email,guardian_contact_number,guardian_consent_version,guardian_verified_at,date_of_birth,created_at,converted_member_id"),
     from.studentRequests("id,member_id,membership_year,requested_at"),
     from.manualContact("id,member_id,body,created_at").order("created_at"),
     from.paymentReviews("id,member_id,membership_year,amount_due_pence,amount_paid_pence,updated_at"),
@@ -185,6 +242,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     ["automatic renewal changes", commandResult], ["email problems", emailFailureResult], ["email delivery problems", deliveryResult],
   ] as const) if (result.error) fail(what, result.error);
 
+  const verificationPayments = await loadVerificationPayments(admin, ((verificationResult.data ?? []) as Row[]).map((row) => row.id));
   const contact = onePerMember((contactResult.data ?? []) as Row[]);
   const memberIds = Array.from(new Set([
     ...((renewalResult.data ?? []) as Row[]).map((row) => row.member_id),
@@ -235,8 +293,15 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     add({
       key: `verification.${application.id}`, type: "verification", kind: "verify", name: application.full_name,
       summary: application.guardian_name ? "Junior member · check eligibility and guardian consent" : "Active member · routine eligibility check",
-      since: application.created_at, cta: "Verify", memberId: null,
-      application: { id: application.id, full_name: application.full_name, date_of_birth: application.date_of_birth, guardian_name: application.guardian_name, guardian_email: application.guardian_email, guardian_contact_number: application.guardian_contact_number, guardian_consent_version: application.guardian_consent_version, guardian_verified_at: application.guardian_verified_at },
+      since: application.created_at, cta: "Verify", memberId: application.converted_member_id ?? null,
+      planName: planName.get(application.requested_plan_id) || "Membership type not found",
+      application: {
+        id: application.id, full_name: application.full_name, contact_email: application.contact_email ?? null, contact_number: application.contact_number ?? null,
+        student_declaration: Boolean(application.student_declaration), date_of_birth: application.date_of_birth ?? null, applied_at: application.created_at ?? null,
+        guardian_name: application.guardian_name, guardian_email: application.guardian_email, guardian_contact_number: application.guardian_contact_number,
+        guardian_consent_version: application.guardian_consent_version, guardian_verified_at: application.guardian_verified_at,
+      },
+      payment: verificationPayments.get(application.id) ?? (application.payment_method ? { method: application.payment_method, status: "unknown", amountPence: null, refundedPence: 0, year: null, reference: null, receivedOn: null, clearedOn: null, stripe: null } : null),
     });
   }
   for (const transition of (studentResult.data ?? []) as Row[]) {

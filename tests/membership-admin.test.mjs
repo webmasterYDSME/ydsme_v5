@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
-import { dateLabel, memberStateName, money, paymentMethodName, waitingLabel } from "../lib/membership-admin/format.ts";
+import { ageOn, dateLabel, eighteenthBirthday, memberStateName, money, paymentMethodName, waitingLabel } from "../lib/membership-admin/format.ts";
 import { buildRenewalChoices, renewableMembers } from "../lib/membership-rules.ts";
 
 const memberId = "0f6f2a3c-1b7d-4e55-8c1a-5d2f7b9e4a10";
@@ -137,4 +137,18 @@ test("ending honorary membership part-way through a year reduces that year's fee
   });
   assert.equal(forYear(list, 2027).amount_pence, Math.round(4500 * 6 / 12));
   assert.match(forYear(list, 2027).note, /Reduced from the £45\.00 annual fee/);
+});
+
+test("works out age and the 18th birthday from a date of birth", () => {
+  assert.equal(ageOn("2009-03-03", "2026-09-19"), 17);
+  assert.equal(ageOn("2009-09-19", "2026-09-19"), 17);
+  assert.equal(ageOn("2008-09-19", "2026-09-19"), 18);
+  assert.equal(ageOn("2008-09-20", "2026-09-19"), 17);
+  assert.equal(ageOn("2008-02-29", "2026-02-28"), 17);
+  assert.equal(ageOn("2008-02-29", "2026-03-01"), 18);
+  assert.equal(ageOn(null, "2026-09-19"), null);
+  assert.equal(ageOn("", "2026-09-19"), null);
+  assert.equal(eighteenthBirthday("2009-03-03"), "2027-03-03");
+  assert.equal(eighteenthBirthday("2008-02-29"), "2026-03-01");
+  assert.equal(eighteenthBirthday(undefined), null);
 });
