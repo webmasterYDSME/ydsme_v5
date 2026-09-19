@@ -28,10 +28,10 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
         <section className={styles.formSection}>
           <h3 className={styles.formTitle}>Contact details</h3>
           <div className={styles.fieldGrid}><label>Email address <em>Optional</em><input type="email" name="contact_email"/></label><label>Telephone number <em>Optional</em><input name="contact_number"/></label></div>
-          <details className={styles.more}><summary>Add a postal address</summary><div className={styles.fieldGrid}><label>Address line 1<input name="address_line_one"/></label><label>Address line 2<input name="address_line_two"/></label><label>Town or city<input name="city"/></label><label>Postcode<input name="postcode"/></label></div></details>
+          <details className={styles.disclosure}><summary>Add a postal address</summary><div className={styles.fieldGrid}><label>Address line 1<input name="address_line_one"/></label><label>Address line 2<input name="address_line_two"/></label><label>Town or city<input name="city"/></label><label>Postcode<input name="postcode"/></label></div></details>
         </section>
         <section className={styles.formSection}>
-          <details className={styles.more}><summary>Junior member? Add guardian details</summary>
+          <details className={styles.disclosure}><summary>Junior member? Add guardian details</summary>
             <p className={styles.panelNote}>Record how the guardian agreed to the membership. Their email address is optional when an officer adds the member.</p>
             <div className={styles.fieldGrid}><label>Guardian’s name<input name="guardian_name"/></label><label>Guardian’s email <em>Optional</em><input type="email" name="guardian_email"/></label></div>
             <label>How consent was given<textarea name="guardian_consent_note" rows={2} placeholder="For example: signed paper form witnessed on 20 August 2026."/></label>
