@@ -25,7 +25,7 @@ export type OfficerMemberCreated = {
 export const emptyOfficerMemberState: OfficerMemberState = { error: null, attempt: 0, values: {}, created: null };
 
 /** A person already on the register who may be the same as the one being added. */
-export type PossibleDuplicate = { id: string; name: string; state: string; matchedOn: "email" | "name and date of birth" };
+export type PossibleDuplicate = { id: string; name: string; state: string; matchedOn: "email" | "name and date of birth" | "name" };
 
 export const guardianConsentMethods = {
   paper_form: "Signed paper form",
@@ -49,3 +49,8 @@ export function submittedValues(formData: FormData): Record<string, string> {
   }
   return values;
 }
+
+/** What the Add an honorary member form sends back after a failed attempt. */
+export type HonoraryMemberState = { error: string | null; attempt: number; values: Record<string, string> };
+
+export const emptyHonoraryMemberState: HonoraryMemberState = { error: null, attempt: 0, values: {} };

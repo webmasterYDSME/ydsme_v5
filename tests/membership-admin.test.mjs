@@ -167,7 +167,7 @@ test("keeps what an officer typed when adding a member fails", () => {
   form.set("upload", new File(["x"], "x.txt"));
   assert.deepEqual(submittedValues(form), { full_name: "Ada Lovelace", payment_received: "on" });
   assert.deepEqual(emptyOfficerMemberState, { error: null, attempt: 0, values: {}, created: null });
-  assert.match(membershipErrorMessage("possible-duplicate"), /Already on the register/);
+  assert.match(membershipErrorMessage("possible-duplicate"), /highlighted box/);
   assert.equal(membershipErrorMessage("something-unknown"), null);
   assert.equal(membershipErrorMessage(null), null);
 });

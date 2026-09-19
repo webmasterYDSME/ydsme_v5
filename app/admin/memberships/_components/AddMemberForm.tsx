@@ -2,18 +2,18 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { createOfficerManagedMembership, findPossibleDuplicateMembers } from "@/lib/actions/membership";
+import { createOfficerManagedMembership } from "@/lib/actions/membership";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
-import { dateLabel, memberStateName, money } from "@/lib/membership-admin/format";
+import { dateLabel, money } from "@/lib/membership-admin/format";
 import { membershipErrorMessage } from "@/lib/membership-admin/messages";
 import {
   emptyOfficerMemberState,
   guardianConsentMethods,
   newsletterConsentSources,
   type OfficerMemberState,
-  type PossibleDuplicate,
 } from "@/lib/membership-admin/officer-member";
 import { membershipPhoneHint, membershipPhonePattern } from "@/lib/membership-phone";
+import { DuplicateWarning, usePossibleDuplicates } from "./PossibleDuplicates";
 import { OfficerFeeSummary, OfficerMembershipEligibilityFields, useOfficerEligibility } from "../OfficerMembershipEligibilityFields";
 import styles from "../memberships.module.css";
 
@@ -73,7 +73,6 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
   const [newsletter, setNewsletter] = useState(values.newsletter_opt_in === "on");
   const [paid, setPaid] = useState(values.payment_received === "on");
   const [method, setMethod] = useState<keyof typeof paymentMethods>((value("payment_method") || "cash") as keyof typeof paymentMethods);
-  const [matches, setMatches] = useState<PossibleDuplicate[]>([]);
   // The newsletter is emailed, so it can only be offered once there is an address (and is dropped if the address is cleared).
   const hasEmail = email.trim() !== "";
   const newsletterOn = hasEmail && newsletter;
@@ -82,23 +81,8 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
   const alert = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (state.error) alert.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [state.error, state.attempt]);
 
-  // Looks for someone already on the register once there is enough to compare, so a duplicate is caught before the form is sent.
   const { dateOfBirth } = eligibility;
-  useEffect(() => {
-    let current = true;
-    const timer = setTimeout(async () => {
-      // Nothing to compare yet: a name needs a date of birth alongside it.
-      if (!email.trim() && !(name.trim().length > 1 && dateOfBirth)) { if (current) setMatches([]); return; }
-      try {
-        const found = await findPossibleDuplicateMembers({ full_name: name, date_of_birth: dateOfBirth, contact_email: email });
-        if (current) setMatches(found);
-      } catch {
-        if (current) setMatches([]);
-      }
-    }, 500);
-    return () => { current = false; clearTimeout(timer); };
-  }, [name, dateOfBirth, email]);
-  const duplicate = matches.length > 0 || state.error === "possible-duplicate";
+  const matches = usePossibleDuplicates({ name, dateOfBirth, email });
 
   return <form action={formAction} className={`editor-form ${styles.addForm} membership-manual-create-form`}>
     <section className={styles.formSection}>
@@ -108,15 +92,7 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
         <label>Title <em>Optional</em><input name="title" defaultValue={value("title")} maxLength={10}/></label>
       </div>
       <OfficerMembershipEligibilityFields eligibility={eligibility}/>
-      {duplicate ? <div className={styles.panelWarn} role="status">
-        {matches.length ? <>
-          <p>Already on the register:</p>
-          <ul>{matches.map((match) => <li key={match.id}>
-            <Link href={`/admin/memberships/members/${match.id}`} target="_blank" rel="noreferrer">{match.name}<span className="sr-only"> (opens in a new tab)</span></Link> · {memberStateName(match.state)} · same {match.matchedOn}
-          </li>)}</ul>
-        </> : <p>Someone with the same email address, or the same name and date of birth, is already on the register.</p>}
-        <label>If this is a different person, say why<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500} defaultValue={value("duplicate_override_reason")} placeholder="They share the same email address" required/></label>
-      </div> : null}
+      <DuplicateWarning matches={matches} forced={state.error === "possible-duplicate"} defaultReason={value("duplicate_override_reason")}/>
     </section>
 
     <section className={styles.formSection}>

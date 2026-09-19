@@ -2,7 +2,7 @@
 
 import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
 import { dateLabel } from "@/lib/membership-admin/format";
-import { guardianConsentMethods, submittedValues, type OfficerMemberState, type PossibleDuplicate } from "@/lib/membership-admin/officer-member";
+import { guardianConsentMethods, submittedValues, type HonoraryMemberState, type OfficerMemberState, type PossibleDuplicate } from "@/lib/membership-admin/officer-member";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -621,34 +621,54 @@ export async function createOfficerManagedMembership(previous: OfficerMemberStat
   };
 }
 
-/** Looks for people already on the register who may be the person being added, before the form is submitted. */
-export async function findPossibleDuplicateMembers(input: { full_name: string; date_of_birth: string; contact_email: string }): Promise<PossibleDuplicate[]> {
-  await requireCapability("memberships.manage");
-  const parsed = z.object({
-    full_name: z.string().trim().min(2).max(180).catch(""),
-    date_of_birth: z.iso.date().catch(""),
-    contact_email: z.email().max(254).catch(""),
-  }).safeParse(input);
-  if (!parsed.success) return [];
-  const { full_name: name, date_of_birth: dateOfBirth, contact_email: email } = parsed.data;
+/**
+ * People already on the register who may be the person being added: the same email address, the same
+ * name and date of birth, or (only when asked, as a warning) just the same name.
+ */
+async function lookupPossibleDuplicates(name: string, dateOfBirth: string, email: string, includeNameOnly: boolean): Promise<PossibleDuplicate[]> {
   const admin = createServiceClient();
   const columns = "id,full_name,effective_state";
-  const [byEmail, byName] = await Promise.all([
+  const titleCased = name.replace(/\S+/g, (word) => word.charAt(0).toLocaleUpperCase("en-GB") + word.slice(1).toLocaleLowerCase("en-GB"));
+  const [byEmail, byNameAndBirth, byName] = await Promise.all([
     email ? admin.from("members").select(columns).ilike("contact_email", postgrestLikeLiteral(email)).neq("effective_state", "archived").limit(5) : null,
     dateOfBirth ? admin.from("members").select(columns).eq("date_of_birth", dateOfBirth).neq("effective_state", "archived").limit(200) : null,
+    // Exact spellings only, never a pattern: a name-only match is a best-effort warning.
+    includeNameOnly && name ? admin.from("members").select(columns).in("full_name", [name, titleCased]).neq("effective_state", "archived").limit(10) : null,
   ]);
   const seen = new Set<string>();
   const matches: PossibleDuplicate[] = [];
-  for (const [rows, matchedOn] of [[byEmail?.data, "email"], [byName?.data, "name and date of birth"]] as const) {
+  for (const [rows, matchedOn] of [[byEmail?.data, "email"], [byNameAndBirth?.data, "name and date of birth"], [byName?.data, "name"]] as const) {
     for (const row of rows ?? []) {
       if (seen.has(row.id)) continue;
       // Names are compared here, not with a database pattern, so nothing typed can act as a wildcard.
-      if (matchedOn === "name and date of birth" && (!name || normalizeIdentityName(row.full_name) !== normalizeIdentityName(name))) continue;
+      if (matchedOn !== "email" && (!name || normalizeIdentityName(row.full_name) !== normalizeIdentityName(name))) continue;
       seen.add(row.id);
       matches.push({ id: row.id, name: row.full_name, state: row.effective_state, matchedOn });
     }
   }
   return matches;
+}
+
+/** Looks for people already on the register who may be the person being added, before the form is submitted. */
+export async function findPossibleDuplicateMembers(input: { full_name: string; date_of_birth: string; contact_email: string; include_name_only?: boolean }): Promise<PossibleDuplicate[]> {
+  await requireCapability("memberships.manage");
+  const parsed = z.object({
+    full_name: z.string().trim().min(2).max(180).catch(""),
+    date_of_birth: z.iso.date().catch(""),
+    contact_email: z.email().max(254).catch(""),
+    include_name_only: z.boolean().catch(false),
+  }).safeParse(input);
+  if (!parsed.success) return [];
+  const { full_name: name, date_of_birth: dateOfBirth, contact_email: email, include_name_only: includeNameOnly } = parsed.data;
+  return lookupPossibleDuplicates(name, dateOfBirth, email, includeNameOnly);
+}
+
+/** What follows a granted honorary membership: provider commands and, when it has started, the portal invitation. */
+async function finishHonoraryGrant(memberId: string, effectiveFrom: string) {
+  await processMembershipProviderCommands(memberId);
+  if (effectiveFrom <= new Date().toISOString().slice(0, 10)) {
+    await ensureMemberPortalInvitation(memberId);
+  }
 }
 
 export async function grantHonoraryMembership(formData: FormData) {
@@ -664,31 +684,66 @@ export async function grantHonoraryMembership(formData: FormData) {
     p_member_id: memberId, p_effective_from: effectiveFrom, p_reason: reason, p_actor_id: user.id,
   });
   if (error || !data) redirect("/admin/memberships?error=honorary-grant-failed");
-  await processMembershipProviderCommands(memberId);
-  if (effectiveFrom <= new Date().toISOString().slice(0, 10)) {
-    await ensureMemberPortalInvitation(memberId);
-  }
+  await finishHonoraryGrant(memberId, effectiveFrom);
   revalidatePath("/admin/memberships");
   redirect("/admin/memberships?notice=honorary-scheduled");
 }
 
-export async function createHonoraryMember(formData: FormData) {
-  await requireCapability("memberships.manage");
-  const fullName = z.string().trim().min(2).max(180).parse(formData.get("full_name"));
-  const emailValue = String(formData.get("contact_email") || "").trim();
-  const email = emailValue ? z.string().email().max(254).parse(emailValue).toLowerCase() : null;
-  const contactNumber = z.string().trim().max(40).parse(String(formData.get("contact_number") || "")) || null;
-  const { data, error } = await createServiceClient().from("members").insert({
-    full_name: fullName, contact_email: email, contact_number: contactNumber,
-    preferred_contact_method: email ? "email" : contactNumber ? "telephone" : "officer",
+export async function createHonoraryMember(previous: HonoraryMemberState, formData: FormData): Promise<HonoraryMemberState> {
+  const { user, role } = await requireCapability("memberships.manage");
+  // A failed attempt goes back to the open drawer with what was typed, and nothing is left half-created.
+  const fail = (error: string): HonoraryMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData) });
+  const text = (name: string) => String(formData.get(name) ?? "").trim();
+  const fullName = z.string().min(2).max(180).safeParse(text("full_name"));
+  const email = text("contact_email") ? z.email().max(254).safeParse(text("contact_email")) : null;
+  const birth = text("date_of_birth") ? z.iso.date().safeParse(text("date_of_birth")) : null;
+  const effectiveFrom = z.iso.date().safeParse(text("effective_from"));
+  const reason = z.string().min(5).max(500).safeParse(text("reason"));
+  if (!fullName.success || (email && !email.success) || (birth && (!birth.success || birth.data > londonToday())) || !effectiveFrom.success || !reason.success) {
+    return fail("honorary-member-details-invalid");
+  }
+  if (!validMembershipPhone(text("contact_number"))) return fail("phone-invalid");
+  const contactEmail = email?.success ? email.data.toLowerCase() : null;
+  const contactNumber = text("contact_number") || null;
+  const dateOfBirth = birth?.success ? birth.data : null;
+
+  // The same rule as adding a regular member: the same email, or the same name and date of birth, needs a reason.
+  const matches = await lookupPossibleDuplicates(fullName.data, dateOfBirth ?? "", contactEmail ?? "", false);
+  const override = text("duplicate_override_reason").slice(0, 500);
+  if (matches.length && override.length < 5) return fail("possible-duplicate");
+
+  const admin = createServiceClient();
+  const { data: member, error } = await admin.from("members").insert({
+    full_name: fullName.data, contact_email: contactEmail, contact_number: contactNumber, date_of_birth: dateOfBirth,
+    preferred_contact_method: contactEmail ? "email" : contactNumber ? "telephone" : "officer",
     effective_state: "active", source: "officer",
   }).select("id").single();
-  if (error || !data) redirect("/admin/memberships?error=honorary-member-create-failed");
-  const forwarded = new FormData();
-  forwarded.set("member_id", data.id);
-  forwarded.set("effective_from", String(formData.get("effective_from") || ""));
-  forwarded.set("reason", String(formData.get("reason") || ""));
-  return grantHonoraryMembership(forwarded);
+  if (error || !member) return fail("honorary-member-create-failed");
+
+  let granted = false;
+  try {
+    const result = await admin.rpc("grant_lifetime_honorary_membership", {
+      p_member_id: member.id, p_effective_from: effectiveFrom.data, p_reason: reason.data, p_actor_id: user.id,
+    });
+    granted = !result.error && Boolean(result.data);
+  } catch {
+    granted = false;
+  }
+  if (!granted) {
+    // Take back the person just added so a failed grant does not leave a member with no membership.
+    await admin.from("members").delete().eq("id", member.id);
+    return fail("honorary-grant-failed");
+  }
+  if (matches.length) {
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.honorary-duplicate-override",
+      entityType: "member", entityId: member.id, summary: override,
+      after: { matched: matches.map((match) => ({ member_id: match.id, matched_on: match.matchedOn })) },
+    });
+  }
+  await finishHonoraryGrant(member.id, effectiveFrom.data);
+  revalidatePath("/admin/memberships", "layout");
+  redirect("/admin/memberships?notice=honorary-scheduled");
 }
 
 export async function revokeHonoraryMembership(formData: FormData) {

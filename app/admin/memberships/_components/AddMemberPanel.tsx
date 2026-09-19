@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { createHonoraryMember } from "@/lib/actions/membership";
-import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { londonToday } from "@/lib/membership-admin/format";
 import { loadPlansAndPrices } from "@/lib/membership-admin/records";
+import { AddHonoraryForm } from "./AddHonoraryForm";
 import { AddMemberForm } from "./AddMemberForm";
 import { SidePanel } from "./SidePanel";
 import styles from "../memberships.module.css";
@@ -27,13 +26,7 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
       />
     </> : <>
       <p className={styles.panelNote}>Payment-free lifetime membership. Every change needs a reason and is kept in the member’s history.</p>
-      <form action={createHonoraryMember} className="stack-form">
-        <label>Full name<input name="full_name" required/></label>
-        <div className={styles.fieldGrid}><label>Email address <em>Optional</em><input name="contact_email" type="email"/></label><label>Telephone number <em>Optional</em><input name="contact_number"/></label></div>
-        <label>Start date<input name="effective_from" type="date" min={today} defaultValue={nextYearStart} required/></label>
-        <label>Reason for honorary membership<textarea name="reason" rows={3} minLength={5} maxLength={500} required/></label>
-        <div className={styles.actionRow}><span/><PendingSubmitButton pendingLabel="Adding…">Add honorary member</PendingSubmitButton></div>
-      </form>
+      <AddHonoraryForm today={today} nextYearStart={nextYearStart}/>
     </>}
   </SidePanel>;
 }
