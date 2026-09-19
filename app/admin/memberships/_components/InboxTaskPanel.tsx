@@ -25,12 +25,20 @@ const pillClass: Record<InboxTask["kind"], string> = {
 
 function facts(task: InboxTask): [string, string][] {
   switch (task.type) {
-    case "application-payment": return [
-      ["Membership", task.planName], ["Payment method", paymentMethodName(task.application.payment_method)],
-      ["Email", task.application.contact_email || "None given"], ["Date of birth", dateLabel(task.application.date_of_birth)],
-      ...(task.application.guardian_name ? [["Guardian", `${task.application.guardian_name} · consent is checked after payment`] as [string, string]] : []),
-      ...(task.received?.received_on ? [["Cheque received", dateLabel(task.received.received_on)] as [string, string]] : []),
-    ];
+    case "application-payment": {
+      const { application, received, amountDuePence, planName } = task;
+      const age = ageOn(application.date_of_birth, londonToday());
+      return [
+        ["Membership type", planName],
+        ...(amountDuePence != null ? [["Amount due", money(amountDuePence)] as [string, string]] : []),
+        ["Payment method", paymentMethodName(application.payment_method).replace(/^./, (c) => c.toUpperCase())],
+        ["Date of birth", application.date_of_birth ? `${dateLabel(application.date_of_birth)}${age !== null ? ` · ${age}yo` : ""}` : "Not recorded"],
+        // On a guardian-led application the address on file is the guardian's.
+        ...(application.guardian_led ? [] : [[application.guardian_name ? "Member’s email" : "Email", application.contact_email || "None given"] as [string, string]]),
+        ...(application.guardian_name ? [["Guardian", application.guardian_name] as [string, string]] : []),
+        ...(received?.received_on ? [["Cheque received", dateLabel(received.received_on)] as [string, string]] : []),
+      ];
+    }
     case "renewal-payment": return [["Membership year", String(task.year)], ["Payment method", paymentMethodName(task.method)], ["Amount due", money(task.amountDuePence)]];
     case "student-request": return [["Requested for", String(task.year)], ["Membership until decided", "Adult"]];
     case "payment-review": return [["Membership year", String(task.year)], ["Paid", `${money(task.paidPence)} of ${money(task.duePence)}`]];
@@ -87,48 +95,63 @@ function verificationSections(task: Extract<InboxTask, { type: "verification" }>
 
 const memberLink = (id: string, label: string) => <Link className={styles.linkButton} href={`/admin/memberships/members/${id}`}>{label}</Link>;
 
+/** The link to the full record on the left and the main button on the right, on one row. */
+function Actions({ task, link = true, children }: { task: InboxTask; link?: boolean; children: ReactNode }) {
+  return <div className={styles.actionRow}>{link && task.memberId ? memberLink(task.memberId, "Open full membership record") : <span/>}{children}</div>;
+}
+
+/** Drawers whose form already carries the record link, so it is not repeated below. */
+const recordLinkInForm = new Set<InboxTask["type"]>(["verification", "renewal-payment", "payment-review", "honorary-conflict", "manual-contact"]);
+
 function Form({ task }: { task: InboxTask }) {
   const today = londonToday();
   switch (task.type) {
     case "application-payment": {
       const { application, received } = task;
       if (application.status === "awaiting_approval") return <div className={styles.panelForms}>
-        <form action={reviewMembershipApplication} className="stack-form"><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="decision" value="approve"/><label>Reason for approval<input name="reason" required minLength={5} defaultValue="Membership details checked by an officer."/></label><PendingSubmitButton pendingLabel="Approving…">Approve application</PendingSubmitButton></form>
-        <form action={reviewMembershipApplication} className="stack-form"><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="decision" value="reject"/><label>Reason for declining<input name="reason" required minLength={5}/></label><PendingSubmitButton className="danger-button" pendingLabel="Declining…">Decline application</PendingSubmitButton></form>
+        <p className={styles.panelNote}>This is an older application that still needs a decision before payment.</p>
+        <form action={reviewMembershipApplication} className="stack-form"><h3 className={styles.formTitle}>Approve</h3><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="decision" value="approve"/><label>Reason for approval<input name="reason" required minLength={5} defaultValue="Membership details checked by an officer."/></label><Actions task={task} link={false}><PendingSubmitButton pendingLabel="Approving…">Approve application</PendingSubmitButton></Actions></form>
+        <form action={reviewMembershipApplication} className="stack-form"><h3 className={styles.formTitle}>Decline</h3><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="decision" value="reject"/><label>Reason for declining<input name="reason" required minLength={5}/></label><Actions task={task} link={false}><PendingSubmitButton className="danger-button" pendingLabel="Declining…">Decline application</PendingSubmitButton></Actions></form>
       </div>;
+      const cheque = application.payment_method === "cheque";
       return <div className={styles.panelForms}>
-        {application.payment_method === "cheque" && !received ? <form action={recordOfflineApplicationPayment} className="stack-form"><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="event" value="received"/><label>Cheque reference<input name="payment_reference" required/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label><PendingSubmitButton pendingLabel="Saving…">Mark cheque as received</PendingSubmitButton></form> : null}
-        <form action={confirmOfflineMembership} className="stack-form"><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="payment_method" value={application.payment_method ?? ""}/><label>Receipt or payment reference<input name="payment_reference" defaultValue={received?.payment_reference || ""} required/></label><label>Date received<input type="date" name="received_on" defaultValue={received?.received_on || today} max={today} required/></label>{application.payment_method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<PendingSubmitButton pendingLabel="Confirming…"><Banknote/>Mark paid and activate</PendingSubmitButton></form>
+        {cheque && !received ? <form action={recordOfflineApplicationPayment} className="stack-form"><h3 className={styles.formTitle}>Cheque received</h3><p className={styles.panelNote}>Use this when the cheque arrives but has not cleared yet.</p><input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="event" value="received"/><label>Cheque reference<input name="payment_reference" required/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label><Actions task={task} link={false}><PendingSubmitButton pendingLabel="Saving…">Mark cheque as received</PendingSubmitButton></Actions></form> : null}
+        <form action={confirmOfflineMembership} className="stack-form">{cheque && !received ? <><h3 className={styles.formTitle}>Payment complete</h3><p className={styles.panelNote}>Use this once the payment has cleared.</p></> : null}<input type="hidden" name="application_id" value={application.id}/><input type="hidden" name="payment_method" value={application.payment_method ?? ""}/><label>Receipt or payment reference<input name="payment_reference" defaultValue={received?.payment_reference || ""} required/></label><label>Date received<input type="date" name="received_on" defaultValue={received?.received_on || today} max={today} required/></label>{cheque ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<Actions task={task}><PendingSubmitButton pendingLabel="Confirming…"><Banknote/>Mark paid and activate</PendingSubmitButton></Actions></form>
       </div>;
     }
-    case "renewal-payment": return <form action={confirmExistingMemberOfflineRenewal} className="stack-form"><input type="hidden" name="member_id" value={task.memberId ?? ""}/><input type="hidden" name="membership_year" value={task.year}/><input type="hidden" name="payment_method" value={task.method || "cash"}/><label>Receipt or payment reference<input name="payment_reference" required minLength={2} maxLength={120}/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label>{task.method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<PendingSubmitButton pendingLabel="Activating…">Mark paid and activate</PendingSubmitButton></form>;
+    case "renewal-payment": return <form action={confirmExistingMemberOfflineRenewal} className="stack-form"><input type="hidden" name="member_id" value={task.memberId ?? ""}/><input type="hidden" name="membership_year" value={task.year}/><input type="hidden" name="payment_method" value={task.method || "cash"}/><label>Receipt or payment reference<input name="payment_reference" required minLength={2} maxLength={120}/></label><label>Date received<input type="date" name="received_on" defaultValue={today} max={today} required/></label>{task.method === "cheque" ? <label className="checkbox-row"><input type="checkbox" name="cleared" required/>Cheque cleared</label> : null}<Actions task={task}><PendingSubmitButton pendingLabel="Activating…">Mark paid and activate</PendingSubmitButton></Actions></form>;
     case "verification": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>{task.application.guardian_name ? "This member has paid and is already active. Check their age, guardian details and consent above, then confirm the membership or deny it." : "This member has paid and is already active. Check the details above match the membership type, then confirm the membership or deny it."}</p>
-      <form action={reviewPaidMembership} className="stack-form"><input type="hidden" name="application_id" value={task.application.id}/><label>Decision<select name="decision"><option value="approved">Confirm membership</option><option value="denied">Deny membership — arrange refund manually</option></select></label><label>Reason<textarea name="reason" rows={4} minLength={5} maxLength={500} placeholder="Record what was checked and any supporting details." required/></label><div className={styles.actionRow}>{task.memberId ? memberLink(task.memberId, "Open full membership record") : <span/>}<PendingSubmitButton pendingLabel="Saving…">Record verification</PendingSubmitButton></div></form>
+      <form action={reviewPaidMembership} className="stack-form"><input type="hidden" name="application_id" value={task.application.id}/><label>Decision<select name="decision"><option value="approved">Confirm membership</option><option value="denied">Deny membership — arrange refund manually</option></select></label><label>Reason<textarea name="reason" rows={4} minLength={5} maxLength={500} placeholder="Record what was checked and any supporting details." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Record verification</PendingSubmitButton></Actions></form>
     </div>;
     case "student-request": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>Adult membership stays selected until this request is approved. The member cannot pay the renewal fee until it is decided.</p>
-      <form action={reviewStudentMembershipRequest} className="stack-form"><input type="hidden" name="transition_id" value={task.transitionId}/><input type="hidden" name="decision" value="approve"/><label>Reason for approval<input name="reason" minLength={5} maxLength={500} defaultValue="Student declaration reviewed by a membership officer." required/></label><PendingSubmitButton pendingLabel="Approving…">Approve Student membership</PendingSubmitButton></form>
-      <form action={reviewStudentMembershipRequest} className="stack-form"><input type="hidden" name="transition_id" value={task.transitionId}/><input type="hidden" name="decision" value="reject"/><label>Reason for declining<input name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton className="danger-button" pendingLabel="Declining…">Keep Adult membership</PendingSubmitButton></form>
+      <form action={reviewStudentMembershipRequest} className="stack-form"><h3 className={styles.formTitle}>Approve</h3><input type="hidden" name="transition_id" value={task.transitionId}/><input type="hidden" name="decision" value="approve"/><label>Reason for approval<input name="reason" minLength={5} maxLength={500} defaultValue="Student declaration reviewed by a membership officer." required/></label><Actions task={task} link={false}><PendingSubmitButton pendingLabel="Approving…">Approve Student membership</PendingSubmitButton></Actions></form>
+      <form action={reviewStudentMembershipRequest} className="stack-form"><h3 className={styles.formTitle}>Decline</h3><input type="hidden" name="transition_id" value={task.transitionId}/><input type="hidden" name="decision" value="reject"/><label>Reason for declining<input name="reason" minLength={5} maxLength={500} required/></label><Actions task={task} link={false}><PendingSubmitButton className="danger-button" pendingLabel="Declining…">Keep Adult membership</PendingSubmitButton></Actions></form>
     </div>;
     case "manual-contact": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>{task.body}</p>
+      <p className={styles.callout}>{task.body}</p>
       <p className={styles.panelNote}>Each person appears once, even when several updates need to be shared with them.</p>
-      <form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><label>Contact note<textarea name="reason" minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><PendingSubmitButton pendingLabel="Saving…">Mark all updates as contacted</PendingSubmitButton></form>
+      <form action={completeManualMembershipContact} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><label>Contact note<textarea name="reason" rows={3} minLength={5} maxLength={500} placeholder="For example: phoned on 20 August and spoke to the member." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark all updates as contacted</PendingSubmitButton></Actions></form>
     </div>;
-    case "payment-review": return <form action={resolveMembershipPaymentReview} className="stack-form"><p className={styles.panelNote}>A full refund or disputed payment was reported. Access stays available until a decision is recorded. Any refund must be issued through the online payment service.</p><input type="hidden" name="term_id" value={task.termId}/><label>Decision<select name="resolution"><option value="retain">Keep the membership active</option><option value="replace">Ask for another payment</option><option value="lapse">End the membership</option></select></label><label>Reason for the decision<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save decision</PendingSubmitButton></form>;
+    case "payment-review": return <div className={styles.panelForms}>
+      <p className={styles.panelNote}>A full refund or disputed payment was reported. Access stays available until a decision is recorded. Any refund must be issued through the online payment service.</p>
+      <form action={resolveMembershipPaymentReview} className="stack-form"><input type="hidden" name="term_id" value={task.termId}/><label>Decision<select name="resolution"><option value="retain">Keep the membership active</option><option value="replace">Ask for another payment</option><option value="lapse">End the membership</option></select></label><label>Reason for the decision<textarea name="reason" rows={3} minLength={5} maxLength={500} required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Save decision</PendingSubmitButton></Actions></form>
+    </div>;
     case "honorary-conflict": return task.memberId
-      ? <form action={resolveHonoraryPaymentConflict} className="stack-form"><p className={styles.panelNote}>{task.body} Refunds are never issued automatically.</p><input type="hidden" name="member_id" value={task.memberId}/><label>Decision<select name="decision"><option value="retain">Keep the payment on record; no refund</option><option value="handled-in-stripe">Payment handled through the online payment service</option></select></label><label>Reason for the decision<textarea name="reason" minLength={5} maxLength={500} required/></label><PendingSubmitButton pendingLabel="Saving…">Save decision</PendingSubmitButton></form>
+      ? <div className={styles.panelForms}>
+        <p className={styles.panelNote}>{task.body} Refunds are never issued automatically.</p>
+        <form action={resolveHonoraryPaymentConflict} className="stack-form"><input type="hidden" name="member_id" value={task.memberId}/><label>Decision<select name="decision"><option value="retain">Keep the payment on record; no refund</option><option value="handled-in-stripe">Payment handled through the online payment service</option></select></label><label>Reason for the decision<textarea name="reason" rows={3} minLength={5} maxLength={500} required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Save decision</PendingSubmitButton></Actions></form>
+      </div>
       : <p className={styles.panelNote}>{task.body}</p>;
     case "refund": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>{task.reason || "Membership was denied after payment."} Arrange the refund through the payment service, then it drops out of this list once nothing is left to refund.</p>
+      <p className={styles.panelNote}>{task.reason || "Membership was denied after payment."} Arrange the refund through the payment service. It drops out of this list once nothing is left to refund.</p>
       {task.memberId ? memberLink(task.memberId, "View payment") : null}
     </div>;
     case "email-retry": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>The email could not be delivered. Correct the address, retry delivery, or contact the member another way.</p>
       {task.error ? <details className={styles.technical}><summary>Technical details</summary><small>{task.error}</small></details> : null}
-      <form action={retryMembershipNotification}><input type="hidden" name="notification_id" value={task.notificationId}/><PendingSubmitButton pendingLabel="Requesting retry…">Retry email</PendingSubmitButton></form>
-      {task.memberId ? memberLink(task.memberId, "Correct this member’s contact details") : null}
+      <div className={styles.actionRow}>{task.memberId ? memberLink(task.memberId, "Correct this member’s contact details") : <span/>}<form action={retryMembershipNotification}><input type="hidden" name="notification_id" value={task.notificationId}/><PendingSubmitButton pendingLabel="Requesting retry…">Retry email</PendingSubmitButton></form></div>
     </div>;
     case "notice": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>{task.body}</p>
@@ -151,6 +174,6 @@ export function InboxTaskPanel({ task, closeHref }: { task: InboxTask; closeHref
       </section>)}
     </> : rows.length ? <dl className={styles.facts}>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
     <Form task={task}/>
-    {task.memberId && task.type !== "refund" && task.type !== "email-retry" && task.type !== "verification" ? memberLink(task.memberId, "Open full membership record") : null}
+    {task.memberId && task.type !== "refund" && task.type !== "email-retry" && !recordLinkInForm.has(task.type) ? memberLink(task.memberId, "Open full membership record") : null}
   </SidePanel>;
 }

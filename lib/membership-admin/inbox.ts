@@ -53,7 +53,7 @@ export type VerificationPayment = {
 };
 
 export type InboxTask = Base & (
-  | { type: "application-payment"; application: { id: string; full_name: string; contact_email: string | null; date_of_birth: string; payment_method: string | null; status: string; guardian_name: string | null }; planName: string; received: { payment_reference: string | null; received_on: string | null } | null }
+  | { type: "application-payment"; application: { id: string; full_name: string; contact_email: string | null; date_of_birth: string; payment_method: string | null; status: string; guardian_name: string | null; guardian_led: boolean }; planName: string; amountDuePence: number | null; received: { payment_reference: string | null; received_on: string | null } | null }
   | { type: "renewal-payment"; termId: string; year: number; amountDuePence: number; method: string | null }
   | { type: "verification"; planName: string; application: { id: string; full_name: string; contact_email: string | null; contact_number: string | null; guardian_led: boolean; student_declaration: boolean; date_of_birth: string | null; applied_at: string | null; guardian_name: string | null; guardian_email: string | null; guardian_contact_number: string | null; guardian_consent_version: string | null; guardian_verified_at: string | null }; payment: VerificationPayment | null }
   | { type: "student-request"; transitionId: string; year: number }
@@ -219,7 +219,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     applicationResult, planResult, renewalResult, verificationResult, studentResult, contactResult, reviewResult,
     conflictResult, checkoutNoticeResult, attemptResult, webhookResult, commandResult, emailFailureResult, deliveryResult, refunds,
   ] = await Promise.all([
-    from.applications("id,full_name,contact_email,date_of_birth,payment_method,status,guardian_name,created_at,requested_plan_id,membership_offline_payment_records(id,status,payment_reference,received_on)"),
+    from.applications("id,full_name,contact_email,date_of_birth,payment_method,status,guardian_name,guardian_led,created_at,requested_plan_id,membership_offline_payment_records(id,status,expected_amount_pence,payment_reference,received_on)"),
     admin.from("membership_plans").select("id,name"),
     from.renewalPayments("id,member_id,membership_year,amount_due_pence,expected_payment_method,created_at"),
     from.verifications("id,full_name,contact_email,contact_number,guardian_led,student_declaration,requested_plan_id,payment_method,guardian_name,guardian_email,guardian_contact_number,guardian_consent_version,guardian_verified_at,date_of_birth,created_at,converted_member_id"),
@@ -271,14 +271,15 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
 
   for (const application of (applicationResult.data ?? []) as Row[]) {
     const received = ((application.membership_offline_payment_records ?? []) as Row[]).find((record) => record.status === "received") ?? null;
+    const openRecord = ((application.membership_offline_payment_records ?? []) as Row[]).find((record) => record.status === "awaiting" || record.status === "received") ?? null;
     const legacy = application.status === "awaiting_approval";
     const plan = planName.get(application.requested_plan_id) || "Membership type not found";
     add({
       key: `application-payment.${application.id}`, type: "application-payment", kind: "payment", name: application.full_name,
       summary: legacy ? `${plan} · older application awaiting a decision` : `${plan} · ${methodWord(application.payment_method)}${received ? " · cheque received, not yet cleared" : " · awaiting payment"}`,
       since: application.created_at, cta: legacy ? "Review application" : received ? "Complete payment" : "Record payment", memberId: null,
-      application: { id: application.id, full_name: application.full_name, contact_email: application.contact_email, date_of_birth: application.date_of_birth, payment_method: application.payment_method, status: application.status, guardian_name: application.guardian_name },
-      planName: plan, received: received ? { payment_reference: received.payment_reference, received_on: received.received_on } : null,
+      application: { id: application.id, full_name: application.full_name, contact_email: application.contact_email, date_of_birth: application.date_of_birth, payment_method: application.payment_method, status: application.status, guardian_name: application.guardian_name, guardian_led: Boolean(application.guardian_led) },
+      planName: plan, amountDuePence: openRecord?.expected_amount_pence ?? null, received: received ? { payment_reference: received.payment_reference, received_on: received.received_on } : null,
     });
   }
   for (const term of (renewalResult.data ?? []) as Row[]) {

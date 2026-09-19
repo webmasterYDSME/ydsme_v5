@@ -63,7 +63,7 @@
 .inlineLink { color: var(--forest); font-weight: 700; }
 .panelWarn { margin: 0; padding: 10px 14px; border-left: 4px solid #b4531a; background: #fbeee2; color: #7a3410; font-size: 14px; font-weight: 700; line-height: 1.5; }
 .panelNote { margin: 0; color: #56625b; font-size: 13px; line-height: 1.55; }
-.panelForms { display: grid; gap: 22px; }
+.panelForms { display: grid; gap: 14px; }
 .technical { font-size: 13px; }
 .technical summary { cursor: pointer; font-weight: 700; color: var(--forest); }
 .technical small { display: block; margin-top: 6px; color: #56625b; overflow-wrap: anywhere; }
@@ -172,3 +172,22 @@
   .health { font-size: 12px; }
   .tabNote { margin-bottom: 12px; }
 }
+
+/* Drawers. Every form in a drawer gets one clean, single-column layout, whatever older form class it carries. */
+.panelBody.panelBody :global(.stack-form), .panelBody.panelBody :global(.editor-form) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; width: 100%; margin: 0; padding: 16px; border: 1px solid rgba(16,24,20,.14); border-radius: 8px; background: #fbf8f0; }
+.panelBody.panelBody :global(.membership-manual-create-form) { padding: 0; border: 0; background: none; gap: 14px; }
+.panelBody.panelBody :global(.stack-form) label, .panelBody.panelBody :global(.editor-form) label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; line-height: 1.4; text-transform: none; letter-spacing: 0; color: #2b342f; }
+.panelBody.panelBody :global(.stack-form) label em, .panelBody.panelBody :global(.editor-form) label em { font-size: 12px; font-style: normal; font-weight: 400; color: #56625b; }
+.panelBody.panelBody :global(.stack-form) :is(input, select, textarea), .panelBody.panelBody :global(.editor-form) :is(input, select, textarea) { min-height: 44px; }
+.panelBody.panelBody :global(.stack-form) textarea, .panelBody.panelBody :global(.editor-form) textarea { min-height: 84px; }
+.formTitle { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #56625b; }
+.callout { margin: 0; padding: 12px 14px; border-left: 4px solid var(--brass); background: #f7f1e0; color: var(--ink); font-size: 14px; line-height: 1.55; }
+
+/* The Add a membership drawer keeps its numbered sections, but smaller. */
+.panelBody :global(.membership-form-block) { padding: 16px; gap: 14px; border-radius: 8px; }
+.panelBody :global(.membership-form-block-heading) { padding-bottom: 12px; }
+.panelBody :global(.membership-form-block-heading h3) { margin: 0 0 3px; font-size: 19px; }
+.panelBody :global(.membership-form-block-heading p) { font-size: 12px; }
+.panelBody :global(.membership-form-block .settings-fieldset) { padding: 14px; }
+.panelBody :global(.membership-form-block .settings-fieldset legend) { font-size: 16px; }
+.panelBody :global(.membership-form-submit) { padding: 14px 16px; border-radius: 8px; }

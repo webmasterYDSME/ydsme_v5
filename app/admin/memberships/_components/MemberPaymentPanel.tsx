@@ -39,7 +39,7 @@ export function MemberPaymentPanel({ memberId, name, planName, renewable, choice
         <label>Receipt or payment reference<input name="payment_reference" minLength={2} maxLength={120} required/></label>
         <label>Date received<input type="date" name="received_on" max={today} defaultValue={today} required/></label>
         <label className="checkbox-row"><input type="checkbox" name="cleared"/>Cheque cleared <em>Cheque payments only</em></label>
-        <PendingSubmitButton disabled={!canRecord} pendingLabel="Saving payment…">Record payment</PendingSubmitButton>
+        <div className={styles.actionRow}><span/><PendingSubmitButton disabled={!canRecord} pendingLabel="Saving payment…">Record payment</PendingSubmitButton></div>
       </form>
     </> : <p className={styles.panelNote}>Payments cannot be recorded for this membership. It may be suspended, honorary, or have no membership type set.</p>}
   </SidePanel>;
