@@ -76,7 +76,7 @@ function verificationSections(task: Extract<InboxTask, { type: "verification" }>
   const guardian: [string, ReactNode][] = application.guardian_name ? [
     ["Guardian", application.guardian_name],
     ...(application.guardian_email || application.guardian_contact_number ? [["Contact", [application.guardian_email, application.guardian_contact_number].filter(Boolean).join(" · ")] as [string, ReactNode]] : []),
-    ...(application.guardian_consent_version ? [["Consent", <span key="consent" className={styles.lines}><span>Declaration {application.guardian_consent_version}</span><span>{application.guardian_verified_at ? `Email verified ${timestampDateLabel(application.guardian_verified_at)}` : "Email verification pending"}</span></span>] as [string, ReactNode]] : []),
+    ...(application.guardian_consent_version ? [["Consent", <span key="consent" className={styles.lines}><span>Declaration {/^\d{4}-\d{2}-\d{2}$/.test(application.guardian_consent_version) ? dateLabel(application.guardian_consent_version) : application.guardian_consent_version}</span><span>{application.guardian_verified_at ? `Email verified ${timestampDateLabel(application.guardian_verified_at)}` : "Email verification pending"}</span></span>] as [string, ReactNode]] : []),
   ] : [];
   const sections: Section[] = [{ title: "Applicant", rows: person }];
   if (guardian.length) sections.push({ title: "Guardian", rows: guardian });
