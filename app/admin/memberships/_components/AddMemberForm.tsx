@@ -127,7 +127,7 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
       </div>
       <p className={styles.panelNote}>{hasEmail
         ? paid ? "An invitation to the member portal is emailed as soon as the member is added." : "An invitation to the member portal is emailed once payment is recorded."
-        : "Without an email address, this member cannot be given access to the member portal."}</p>
+        : "If no email address is entered, this member will not have access to the member portal."}</p>
       {hasEmail ? <label className="checkbox-row"><input type="checkbox" name="newsletter_opt_in" checked={newsletter} onChange={(event) => setNewsletter(event.target.checked)}/>They would like the Society newsletter <em>Optional</em></label> : null}
       {newsletterOn ? <div className={styles.consentBox}>
         <p className={styles.panelNote}>Only tick this if they have agreed. How and when they agreed is kept as their consent record.</p>
