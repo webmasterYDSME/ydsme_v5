@@ -9,7 +9,6 @@ import styles from "../memberships.module.css";
 /** Adds someone who applied in person, or a new honorary member, in a side panel over the register. */
 export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "honorary"; closeHref: string }) {
   const today = londonToday();
-  const nextYearStart = `${Number(today.slice(0, 4)) + 1}-01-01`;
   const { plans, prices } = mode === "member" ? await loadPlansAndPrices() : { plans: [], prices: [] };
   return <SidePanel wide key={mode} closeHref={closeHref} label="Add a member" eyebrow="Offline application" eyebrowClassName={styles.pillMute} title={mode === "member" ? "Add a membership" : "Add an honorary member"}>
     <nav className={styles.chips} aria-label="Type of member">
@@ -26,7 +25,7 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
       />
     </> : <>
       <p className={styles.panelNote}>Payment-free lifetime membership. Every change needs a reason and is kept in the member’s history.</p>
-      <AddHonoraryForm today={today} nextYearStart={nextYearStart}/>
+      <AddHonoraryForm today={today}/>
     </>}
   </SidePanel>;
 }
