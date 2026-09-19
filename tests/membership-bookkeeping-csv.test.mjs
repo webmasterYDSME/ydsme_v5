@@ -6,6 +6,7 @@ import {
   membershipBookkeepingCsvCell,
   membershipPaymentTransactionDate,
 } from "../lib/membership-bookkeeping-csv.ts";
+import { readMembershipAdminSource } from "./membership-admin-source.mjs";
 
 const payment = {
   paymentId: "payment-1",
@@ -57,7 +58,7 @@ test("queues complete ZIP reports and protects the private download", async () =
   const root = new URL("../", import.meta.url);
   const [route, page, worker, actions] = await Promise.all([
     readFile(new URL("app/admin/memberships/export/route.ts", root), "utf8"),
-    readFile(new URL("app/admin/memberships/page.tsx", root), "utf8"),
+    readMembershipAdminSource(),
     readFile(new URL("supabase/functions/generate-membership-report/index.ts", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
   ]);

@@ -2,6 +2,8 @@
 
 This checklist governs the replacement of MemberMojo by the website membership platform. The platform must remain in `membermojo` mode until every launch gate marked **Required** has passed and the named approvers have signed the release record.
 
+> **Update, 19 September 2026.** There are now only two modes: `membermojo` and `website`. Wherever this checklist says `pilot` or `live`, read `website`; wherever it says `drain` or an emergency fallback, read `membermojo` (public apply, checkout and renew go to MemberMojo and the membership area is hidden). MemberMojo's list is brought in with Administrator > Import MemberMojo list, which reads only name, email and the Membership column and makes everyone in the file a full member for the current year.
+
 ## Readiness decision
 
 **Current decision (21 August 2026): NO-GO.**

@@ -1057,6 +1057,10 @@ export type Database = {
           legacy_membership_record_id: string | null
           legal_hold: boolean
           newsletter_opt_in: boolean
+          newsletter_consent_given_on: string | null
+          newsletter_consent_recorded_at: string | null
+          newsletter_consent_recorded_by_actor_id: string | null
+          newsletter_consent_source: string | null
           portal_invitation_status: string
           postal_address: Json | null
           preferred_contact_method: string
@@ -1088,6 +1092,10 @@ export type Database = {
           legacy_membership_record_id?: string | null
           legal_hold?: boolean
           newsletter_opt_in?: boolean
+          newsletter_consent_given_on?: string | null
+          newsletter_consent_recorded_at?: string | null
+          newsletter_consent_recorded_by_actor_id?: string | null
+          newsletter_consent_source?: string | null
           portal_invitation_status?: string
           postal_address?: Json | null
           preferred_contact_method?: string
@@ -1119,6 +1127,10 @@ export type Database = {
           legacy_membership_record_id?: string | null
           legal_hold?: boolean
           newsletter_opt_in?: boolean
+          newsletter_consent_given_on?: string | null
+          newsletter_consent_recorded_at?: string | null
+          newsletter_consent_recorded_by_actor_id?: string | null
+          newsletter_consent_source?: string | null
           portal_invitation_status?: string
           postal_address?: Json | null
           preferred_contact_method?: string
@@ -3603,6 +3615,9 @@ export type Database = {
           p_guardian_consent_note?: string
           p_guardian_email?: string
           p_guardian_name?: string
+          p_newsletter_consent_given_on?: string
+          p_newsletter_consent_source?: string
+          p_newsletter_opt_in?: boolean
           p_payment_method: string
           p_payment_received: boolean
           p_payment_reference: string
@@ -3659,6 +3674,8 @@ export type Database = {
           title: string
         }[]
       }
+      get_own_member_details: { Args: never; Returns: Json }
+      get_own_newsletter_preference: { Args: never; Returns: Json }
       grant_lifetime_honorary_membership: {
         Args: {
           p_actor_id: string
@@ -3916,11 +3933,22 @@ export type Database = {
         Args: { p_today?: string }
         Returns: Json
       }
+      set_own_newsletter_preference: { Args: { p_subscribe: boolean }; Returns: Json }
       stage_membermojo_membership_cutover: {
         Args: { p_actor_id: string }
         Returns: Json
       }
       target_donation_total_pence: { Args: never; Returns: number }
+      update_own_member_details: {
+        Args: {
+          p_address_line_one: string
+          p_address_line_two: string
+          p_city: string
+          p_date_of_birth?: string
+          p_postcode: string
+        }
+        Returns: undefined
+      }
       update_own_member_profile: {
         Args: { p_contact_number: string; p_full_name: string; p_title: string }
         Returns: undefined

@@ -6,9 +6,12 @@ import { requireCapability } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { membershipToken, membershipTokenHash, createMemberRenewalCheckout, ensureMembershipPlanPrice } from "@/lib/membership";
 import { membershipBillingEnabled } from "@/lib/features";
+import { writeAudit } from "@/lib/audit";
+
+const RENEWALS = "/admin/memberships/renewals";
 
 export async function openRenewalCampaign(form: FormData) {
-  if (!membershipBillingEnabled()) redirect("/admin/memberships?error=renewals-unavailable");
+  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
   const { user } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   const admin = createServiceClient();
@@ -35,7 +38,27 @@ export async function openRenewalCampaign(form: FormData) {
   }
   await admin.rpc("request_membership_notification_delivery");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?view=payments&notice=renewals-opened");
+  redirect(`${RENEWALS}?year=${year}&notice=renewals-opened`);
+}
+
+/** Emails a reminder to invited members who have not paid. The database limits this to one reminder per member every seven days. */
+export async function sendRenewalReminders(form: FormData) {
+  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  const { user, role } = await requireCapability("memberships.manage");
+  const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
+  const admin = createServiceClient();
+  const { data: sent, error } = await admin.rpc("queue_membership_renewal_reminders", { p_year: year, p_actor: user.id });
+  if (error) redirect(`${RENEWALS}?year=${year}&error=renewal-reminders-failed`);
+  const count = Number(sent ?? 0);
+  if (count > 0) {
+    await admin.rpc("request_membership_notification_delivery");
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.renewal-reminders-sent",
+      entityType: "membership-renewal-campaign", entityId: String(year), summary: `${count} renewal reminders queued for ${year}`,
+    });
+  }
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${RENEWALS}?year=${year}&notice=${count > 0 ? "renewal-reminders-sent" : "renewal-reminders-none"}`);
 }
 export async function payRenewalInvitation(form: FormData) {
   if (!membershipBillingEnabled()) redirect("/membership");

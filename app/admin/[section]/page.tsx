@@ -295,7 +295,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
         <button className="button dark" type="submit">Search members</button>
         {search && <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear</Link>}
       </div>
-      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator && <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link>}</div>}
+      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships/members">Membership register</Link> : null}{administrator ? <Link prefetch={false} href="/administrator/member-import">Import MemberMojo list</Link> : null}</div>}
     </form>
     <div className={`member-table people-member-table ${status === "active" || status === "honorary" ? "people-active-table" : ""}`}>
       <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Website access</span>{status !== "active" && status !== "honorary" && <span>Actions</span>}</div>
@@ -306,7 +306,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
         return <div className={`member-row is-${member.membership_status}`} key={member.id}>
           <div className="member-identity">
             <div className="member-identity-heading"><strong>{member.full_name ? [member.title?.trim(), member.full_name].filter(Boolean).join(" ") : "Name not set"}</strong><span className={`member-status is-${member.membership_status}`}>{status === "honorary" ? "honorary" : member.membership_status}{member.legal_hold || membershipHoldUserIds.has(member.id) ? " · legal hold (deletion blocked)" : ""}</span></div>
-            {canonicalMember && session.membershipOfficer ? <Link href={`/admin/memberships?member=${canonicalMember.id}`}>Membership and payment history</Link> : null}
+            {canonicalMember && session.membershipOfficer ? <Link href={`/admin/memberships/members/${canonicalMember.id}`}>Membership and payment history</Link> : null}
             {member.retention_purge_claimed_at ? <small>Automatic deletion in progress</small> : member.retention_until ? <small>{member.membership_status === "archived" ? (new Date(member.retention_until) < new Date() ? "Automatic deletion is due" : "Automatic deletion after") : "Details kept until"} {new Date(member.retention_until).toLocaleDateString("en-GB")}</small> : null}
             {member.retention_purge_attempts > 0 && member.retention_purge_last_attempt_at ? <small>Automatic deletion attempts: {member.retention_purge_attempts} · last {new Date(member.retention_purge_last_attempt_at).toLocaleDateString("en-GB")}</small> : null}
             {member.membership_status === "archived" && (memberRole !== "member" || committeeUserIds.has(member.id)) ? <small>Restore the account, remove its privileged role and current committee listing, then archive it again.</small> : null}

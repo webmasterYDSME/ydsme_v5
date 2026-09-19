@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { inviteMember } from "@/lib/actions/content";
 import { EditorDialog } from "./EditorDialog";
+import { nameFieldProps } from "@/app/components/nameField";
 
 export function InviteMemberDialog() {
   const [dirty, setDirty] = useState(false);
@@ -50,7 +51,7 @@ function InviteForm({ requestClose, setDirty, setBusy }: {
   return <form className="editor-form event-editor-form event-editor-simple" onSubmit={submit} onChange={() => { setDirty(true); setError(""); }}>
     <div className="event-editor-panel"><fieldset className="event-editor-fields" disabled={pending}>
       <div className="event-editor-details-grid">
-        <label className="wide">Full name<input name="full_name" autoComplete="name" minLength={2} maxLength={180} placeholder="e.g. Alex Smith" required/></label>
+        <label className="wide">Full name<input name="full_name" {...nameFieldProps} autoComplete="name" minLength={2} maxLength={180} placeholder="e.g. Alex Smith" required/></label>
         <label className="wide">Email address<input type="email" name="email" autoComplete="email" maxLength={254} placeholder="alex@example.com" required/></label>
       </div>
     </fieldset></div>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
+import { readAccountSource } from "./account-source.mjs";
 
 const root = new URL("../", import.meta.url);
 const read = (path) => readFile(new URL(path, root), "utf8");
@@ -201,11 +202,11 @@ test("separates member-register viewing, status management and role administrati
     read("lib/auth.ts"),
     read("app/admin/[section]/page.tsx"),
     read("lib/actions/content.ts"),
-    read("app/components/PortalNavigation.tsx"),
+    read("lib/portal-nav.ts"),
   ]);
   assert.match(auth, /committee: new Set\([\s\S]*"members\.view"/);
   assert.match(adminPage, /section === "workshops" \? "workshops\.manage" : "members\.view"/);
-  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: administrator \? "People" : "Member register"/);
+  assert.match(navigation, /role !== "member"[\s\S]*href: "\/admin\/members", label: "Website accounts"/);
   assert.match(adminPage, /const administrator = session\.role === "administrator"/);
   assert.match(adminPage, /const canManageMemberStatus = administrator \|\| session\.membershipOfficer/);
   assert.match(adminPage, /administrator && member.membership_status === "active" && <PeopleEditorDialog/);
@@ -308,16 +309,14 @@ test("keeps online renewals free of legacy offline payment evidence", async () =
 });
 
 test("retires bulk member archiving in favour of reviewed lifecycle controls", async () => {
-  const [admin, actions, memberImport] = await Promise.all([
+  const [admin, actions] = await Promise.all([
     read("app/admin/[section]/page.tsx"),
     read("lib/actions/content.ts"),
-    read("app/administrator/member-import/page.tsx"),
   ]);
   assert.doesNotMatch(admin, /Bulk archive|\/administrator\/delete-members/);
   assert.doesNotMatch(actions, /bulkDeleteMembers|members\.bulk-archived|ARCHIVE MEMBERS/);
   assert.match(actions, /export async function deleteMember/);
   assert.match(actions, /export async function restoreMember/);
-  assert.match(memberImport, /resolveMemberMojoPortalAccessReview/);
   await assert.rejects(stat(new URL("app/administrator/delete-members/page.tsx", root)), { code: "ENOENT" });
 });
 
@@ -349,7 +348,7 @@ test("ships database and HTTP defence in depth", async () => {
 test("reports denied navigation clearly and keeps account controls labelled", async () => {
   const [dashboard, account, eventEditor] = await Promise.all([
     read("app/dashboard/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("app/components/EventEditorDialog.tsx"),
   ]);
   assert.match(dashboard, /"not-authorised": \{ message: "You do not have permission to open that page\.", tone: "error" \}/);
@@ -365,7 +364,7 @@ test("bounds portal reads and synchronizes member profile updates", async () => 
   const [adminPage, settings, account, profileAction, audit, summaries, profileSync] = await Promise.all([
     read("app/admin/[section]/page.tsx"),
     read("app/settings/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("lib/actions/content.ts"),
     read("app/admin/audit/page.tsx"),
     read("supabase/migrations/202608180024_portal_management_summaries.sql"),
@@ -831,7 +830,7 @@ test("enables the complete membership platform with one flag and otherwise falls
     read("lib/features.ts"),
     read("app/membership/page.tsx"),
     read("app/membership/apply/page.tsx"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("app/membership/checkout/page.tsx"),
     read("app/membership/verify/route.ts"),
     read("app/membership/guardian-consent/page.tsx"),
@@ -844,19 +843,19 @@ test("enables the complete membership platform with one flag and otherwise falls
   assert.doesNotMatch(features, /process\.env\.ENABLE_MEMBERSHIP/);
   assert.match(features, /membershipBillingEnabled/);
   assert.match(features, /membershipAdministrationEnabled/);
-  assert.match(features, /\["pilot", "live"\]\.includes\(membershipMode\(\)\)/);
-  assert.match(features, /membershipMode\(\) !== "membermojo"/);
+  assert.match(features, /membershipMode\(\) === "website"/);
+  assert.match(features, /membershipAdministrationEnabled = membershipPlatformEnabled/);
   assert.match(membershipPage, /href=\{enabled \? "\/membership\/apply" : MEMBERMOJO_MEMBERSHIP_URL\}/);
   assert.doesNotMatch(membershipPage, /id="membership-application"|submitMembershipApplication/);
   assert.match(applicationPage, /if \(!enabled\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
-  assert.match(accountPage, /\{!membershipEnabled \? <div className="billing-panel">/);
+  assert.match(accountPage, /memberMojoLink=\{!membershipEnabled\}/);
   assert.match(accountPage, /href=\{MEMBERMOJO_MEMBERSHIP_URL\}/);
   for (const guardedRoute of [checkout, verification, guardian]) {
     assert.match(guardedRoute, /if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   }
   assert.match(switchAccount, /membershipBillingEnabled/);
   assert.match(settings, /query.tab === "membership"/);
-  assert.match(settings, /section: "payment-settings"/);
+  assert.match(settings, /tab: "payment"[\s\S]*?\/admin\/memberships\/setup/);
   assert.match(settings, /requireCapability\("settings.manage"\)/);
   assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!membershipAdministrationEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
@@ -900,7 +899,7 @@ test("links member-facing activation notices to newly created portal accounts", 
     read("supabase/migrations/202608200032_membership_activation_notice_wording.sql"),
     read("supabase/migrations/202608200033_membership_guardian_notification_isolation.sql"),
     read("supabase/migrations/202608210004_member_notification_ownership.sql"),
-    read("app/account/page.tsx"),
+    readAccountSource(),
     read("lib/actions/membership.ts"),
   ]);
   assert.match(routing, /route_membership_notification_to_portal/);

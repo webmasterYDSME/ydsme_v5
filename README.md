@@ -18,7 +18,7 @@ This project's Supabase services use the dedicated `55320–55329` port range: A
 
 Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Use only Stripe test-mode credentials locally. Facebook, production SMTP and production webhooks should remain disabled during local development.
 
-Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables the website journeys in an isolated test environment; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
+Set `MEMBERSHIP_MODE` to `membermojo` or `website`. `membermojo` keeps all public journeys on MemberMojo and hides the membership area; administrators update the register from MemberMojo's member list at `/administrator/member-import`. `website` enables the full website membership platform. The older values `pilot`, `live` and `drain` are read as `website`.
 
 `npm run supabase:start` also installs local-only Vault values used by scheduled jobs. Membership emails are sent to Mailpit immediately after they are queued; a one-minute job retries any delivery interrupted by a transient failure.
 
@@ -35,11 +35,13 @@ npm run stripe:listen-local
 
 Keep the listener running in a separate terminal alongside `npm run dev`. It saves the CLI signing secret as `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` in the ignored `.env.local` file and forwards test events to the local website. Restart the dev server if it has not reloaded the environment. Restart the listener whenever starting a new testing session.
 
+If you paid in test mode while the listener was not running, the membership will not update, and paying again is refused ("Your payment is being confirmed"). Replay the missed event instead: `node --env-file=.env.local scripts/replay-local-stripe-event.mjs` lists recent test checkouts, and adding a `cs_test_…` or `evt_…` id replays that one into the local webhook (the dev server must be running).
+
 The setup command connects only to the local Supabase stack and creates/reuses four test products. Membership amounts come from the website's fee records and are passed as one-time Checkout prices; no recurring prices or subscriptions are configured. No manual Stripe dashboard product setup is needed.
 
 For local CAPTCHA testing, use Cloudflare’s documented test sitekey and matching test secret in `.env.local` (see https://developers.cloudflare.com/turnstile/troubleshooting/testing/). Keep production keys in deployment configuration.
 
-Open `/membership/apply`. In `MEMBERSHIP_MODE=pilot`, any valid email address can use the isolated membership journey. Read verification codes and account invitations in local Mailpit at http://127.0.0.1:55324. Pay using Stripe's test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC. Confirm the member becomes active in `/admin/memberships`, with manual review still pending where applicable. For queued membership notices, keep `npx supabase functions serve deliver-membership-notifications` running in another terminal. Its local configuration sends only to Mailpit. Supabase Auth invitations and signup codes use local Mailpit directly.
+Open `/membership/apply`. In `MEMBERSHIP_MODE=website`, any valid email address can use the isolated membership journey. Read verification codes and account invitations in local Mailpit at http://127.0.0.1:55324. Pay using Stripe's test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC. Confirm the member becomes active in `/admin/memberships`, with manual review still pending where applicable. For queued membership notices, keep `npx supabase functions serve deliver-membership-notifications` running in another terminal. Its local configuration sends only to Mailpit. Supabase Auth invitations and signup codes use local Mailpit directly.
 
 The automated `test:stripe-membership` runner manages its own server and signed fixtures; stop the manual listener before running it to avoid concurrent delivery into the shared local database.
 

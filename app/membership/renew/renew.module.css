@@ -1,0 +1,62 @@
+/* The renewal page reuses the shared confirmation card and adds the fee summary. */
+.summary {
+  display: grid;
+  margin: 28px 0 0;
+  border: 1px solid #d1c8b7;
+  background: #f7f3e9;
+}
+
+.summary > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #ddd5c5;
+  font-size: 15px;
+}
+
+.summary > div:last-child { border-bottom: 0; }
+.summary dt { color: #626c66; }
+.summary dd { margin: 0; color: var(--deep); font-weight: 700; text-align: right; }
+
+.total {
+  align-items: center !important;
+  padding-block: 20px !important;
+  background: #fffdfa;
+}
+
+.total dt { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.total dd { font: 500 44px/1 var(--font-display); letter-spacing: -.02em; }
+
+/* The finished state: a green edge and icon, and a larger first line. */
+.done { border-top: 4px solid #4f865b; }
+.doneIcon { background: #d5e6d3 !important; color: #27533a !important; }
+.lead { margin: 0 !important; max-width: none !important; color: var(--deep) !important; font-size: 20px !important; line-height: 1.5 !important; }
+
+.alert {
+  margin: 24px 0 0;
+  padding: 16px 20px;
+  border: 1px solid #e0b3a8;
+  background: #fbeeea;
+  color: #84241a;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pay { margin-top: 28px; }
+.pay :global(.button) { width: 100%; }
+
+.other {
+  margin: 20px 0 0;
+  color: #626c66;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.other a { color: var(--deep); font-weight: 700; text-underline-offset: 3px; }
+
+@media (max-width: 600px) {
+  .summary > div { padding-inline: 16px; }
+  .total dd { font-size: 38px; }
+}

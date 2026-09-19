@@ -4,6 +4,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { unstable_cache } from "next/cache";
 import { PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG } from "@/lib/cache-tags";
 import { membershipCheckoutWindow, membershipCheckoutQuoteKey } from "@/lib/membership-checkout-policy";
+import { likeLiteral } from "@/lib/like-literal";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
@@ -336,6 +337,37 @@ async function reserveCheckoutAttempt(input: {
   return { attempt, existingUrl: null };
 }
 
+/**
+ * Once an officer has recorded a cash, cheque or bank payment, any card payment page the member
+ * left open must stop working, otherwise they can pay twice. Best effort: it never blocks the officer,
+ * and a card payment that still arrives is caught by the duplicate-payment check.
+ */
+export async function closeOpenMembershipCheckouts(target: { applicationId?: string; memberId?: string; membershipYear?: number }) {
+  try {
+    const admin = createServiceClient();
+    let query = admin.from("membership_checkout_attempts")
+      .select("id,stripe_checkout_session_id").in("status", ["creating", "open"]);
+    if (target.applicationId) query = query.eq("application_id", target.applicationId);
+    else if (target.memberId) {
+      query = query.eq("member_id", target.memberId);
+      if (target.membershipYear) query = query.eq("membership_year", target.membershipYear);
+    } else return;
+    const { data } = await query;
+    for (const attempt of data ?? []) {
+      if (attempt.stripe_checkout_session_id) {
+        const session = await getStripe().checkout.sessions.retrieve(attempt.stripe_checkout_session_id);
+        // A payment that has already gone through is left for the webhook to record.
+        if (session.status === "complete") continue;
+        if (session.status === "open") await getStripe().checkout.sessions.expire(session.id);
+      }
+      await admin.from("membership_checkout_attempts").update({ status: "expired", updated_at: new Date().toISOString() })
+        .eq("id", attempt.id).in("status", ["creating", "open"]);
+    }
+  } catch (error) {
+    console.error("Open card payment pages could not be closed after an offline payment", error instanceof Error ? error.message : error);
+  }
+}
+
 async function attachCheckoutSession(attemptId: string, sessionId: string, expiresAt: number) {
   const { data, error } = await createServiceClient().rpc("attach_membership_checkout_session", {
     p_attempt_id: attemptId,
@@ -450,8 +482,8 @@ async function recordApplicationCheckoutProblem(
       title: isConfigurationProblem ? "Online payment setup needed" : "Online payment could not be started",
       body: officerBody,
       action_href: isConfigurationProblem
-        ? "/admin/memberships?section=plans#plans"
-        : "/admin/memberships?section=online-payment-problems#online-payment-problems",
+        ? "/admin/memberships/renewals"
+        : "/admin/memberships?kind=problem",
       email_status: "cancelled",
       deduplication_key: `membership-checkout-${reason}-${application.id}-${recipientUserId}`,
     })), { onConflict: "deduplication_key", ignoreDuplicates: true });
@@ -507,7 +539,7 @@ export async function createApplicationCheckout(applicationId: string, resumeHre
       kind: "membership.plan-reassignment-required",
       title: "Membership type needs reassignment",
       body: `${checkoutApplication.full_name}'s eligibility changed before payment. Choose the correct membership type before issuing another payment link.`,
-      action_href: "/admin/memberships?section=applications#applications",
+      action_href: "/admin/memberships?kind=payment",
       email_status: "cancelled",
       deduplication_key: `membership-plan-reassignment-${checkoutApplication.id}-${paymentAge}`,
     });
@@ -688,6 +720,10 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew = fa
   const transitionDate = honoraryTransition?.revoked_effective_on
     ? new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`) : null;
   const membershipYear = requestedYear ?? transitionDate?.getUTCFullYear() ?? campaign.membership_year;
+  if (!honoraryTransition) {
+    const { error: ageChangeError } = await admin.rpc("ensure_membership_age_transition", { p_member_id: member.id, p_year: membershipYear });
+    if (ageChangeError) throw new Error("This membership is not available for online renewal.");
+  }
   const { data: transition } = honoraryTransition ? { data: null } : await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", member.id).eq("membership_year", membershipYear)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
@@ -755,6 +791,10 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew = fa
   return session.url;
 }
 
+// The two things a member may need to be told alongside "your membership is active" when no website login was created.
+const PORTAL_EMAIL_ALREADY_USED = "There is no website login for this membership yet, because this email address is already used for another login. If you would like one, please give the membership officer a different email address.";
+const NO_PORTAL_LOGIN_YET = "No website login has been set up for this membership. If the member gets their own email address later, please tell the membership officer.";
+
 /**
  * Link an existing portal profile or send the first Supabase invitation after
  * payment/honorary activation. Safe to call repeatedly from webhook retries.
@@ -775,14 +815,14 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   const releaseActivationEmail = async (authUserId: string | null, actionHref: string | null, extraBody?: string) => {
     const { data: notices, error: noticeError } = await admin.from("membership_notifications")
       .select("id,body").eq("member_id", member.id).eq("kind", "membership.activated")
-      .ilike("recipient_email", member.contact_email ?? "").in("email_status", ["cancelled", "failed"]);
+      .ilike("recipient_email", likeLiteral(member.contact_email ?? "")).in("email_status", ["cancelled", "failed"]);
     if (noticeError) throw new Error("Unable to prepare the membership activation email.");
     for (const notice of notices ?? []) {
       const { error } = await admin.from("membership_notifications").update({
         recipient_user_id: authUserId,
         portal_visible: Boolean(authUserId),
         action_href: actionHref,
-        body: extraBody ? `${notice.body} ${extraBody}` : notice.body,
+        body: extraBody ? `${notice.body}\n\n${extraBody}` : notice.body,
         email_status: "queued",
         scheduled_for: new Date().toISOString(),
         last_email_error: null,
@@ -817,7 +857,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   }
   if (member.contact_role === "guardian" || member.portal_invitation_status === "declined") {
     await admin.from("members").update({ portal_invitation_status: "not_requested" }).eq("id", member.id);
-    await releaseActivationEmail(null, null, "A personal portal account has not been created. Contact the membership officer if the member later has a unique login email.");
+    await releaseActivationEmail(null, null, NO_PORTAL_LOGIN_YET);
     return;
   }
 
@@ -827,7 +867,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   const { data: ownsMailbox, error: claimError } = await admin.rpc("claim_membership_portal_email", { p_member_id: member.id });
   if (claimError) throw new Error("Unable to check portal email ownership.");
   const { data: profile, error: profileError } = await admin.from("users")
-    .select("id").ilike("email", member.contact_email).maybeSingle();
+    .select("id").ilike("email", likeLiteral(member.contact_email)).maybeSingle();
   if (profileError) throw new Error("Unable to check the member portal account.");
   if (profile && ownsMailbox) {
     // Recover only an invitation signed by this server for this exact member.
@@ -846,7 +886,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
     // An email match is only a correspondence signal. It is never sufficient
     // evidence that this Auth account belongs to this canonical member.
     await admin.from("members").update({ portal_invitation_status: "blocked_shared" }).eq("id", member.id);
-    await releaseActivationEmail(null, null, "This correspondence email already has a website login. Membership is active, but a different email or an officer-confirmed portal assignment is needed for this member's personal portal access.");
+    await releaseActivationEmail(null, null, PORTAL_EMAIL_ALREADY_USED);
     return;
   }
 
