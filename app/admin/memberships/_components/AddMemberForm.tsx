@@ -115,7 +115,7 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
             <Link href={`/admin/memberships/members/${match.id}`} target="_blank" rel="noreferrer">{match.name}<span className="sr-only"> (opens in a new tab)</span></Link> · {memberStateName(match.state)} · same {match.matchedOn}
           </li>)}</ul>
         </> : <p>Someone with the same email address, or the same name and date of birth, is already on the register.</p>}
-        <label>If this is a different person, say why<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500} defaultValue={value("duplicate_override_reason")} required/></label>
+        <label>If this is a different person, say why<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500} defaultValue={value("duplicate_override_reason")} placeholder="They share the same email address" required/></label>
       </div> : null}
     </section>
 
