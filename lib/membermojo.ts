@@ -54,6 +54,8 @@ export type MemberImportPreview = {
     withPhone: number;
     withAddress: number;
     withTitle: number;
+    /** New people who will be subscribed to the newsletter. */
+    newsletter: number;
   };
   /** Things worth a look, none of which stop the import. */
   flagged: ImportPreviewItem[];
@@ -69,6 +71,7 @@ export type MemberImportResult = {
   needInvitation: number;
   detailsFilled: number;
   honorary: number;
+  newsletter: number;
 };
 
 export function currentMembershipYear(now = new Date()) {
@@ -78,6 +81,7 @@ export function currentMembershipYear(now = new Date()) {
 const toJson = (rows: MemberListRow[]) => rows.map((row) => ({
   full_name: row.fullName, email: row.email, membership_type: row.membershipType,
   title: row.title, date_of_birth: row.dateOfBirth, contact_number: row.phone,
+  group_email_unsubscribed: row.groupEmailUnsubscribed,
   address_line_one: row.addressLineOne, address_line_two: row.addressLineTwo, city: row.city, postcode: row.postcode,
 }));
 
@@ -135,6 +139,8 @@ export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberI
       withPhone: doneRows.filter((person) => person.phone).length,
       withAddress: doneRows.filter((person) => person.addressLineOne || person.city || person.postcode).length,
       withTitle: doneRows.filter((person) => person.title).length,
+      newsletter: done.filter((row) => row.action === "add" && row.email && row.plan_slug !== "junior"
+        && parsed.rows[row.row_no - 1].groupEmailUnsubscribed === "no").length,
     },
     flagged: flagged.slice(0, 300),
     skipped: plan.filter((row) => row.action === "skip").map((row) => ({ name: row.full_name || "(no name)", detail: row.note ?? "Left out" })),
@@ -170,6 +176,7 @@ export async function applyMemberListImport(actorId: string, bytes: Uint8Array, 
     skipped: result.skipped ?? 0, loginsLinked: result.logins_linked ?? 0, needInvitation: result.needs_invitation ?? 0,
     detailsFilled: result.details_filled ?? 0,
     honorary: result.honorary ?? 0,
+    newsletter: result.newsletter ?? 0,
   };
 }
 

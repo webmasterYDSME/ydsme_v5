@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CreditCard, PoundSterling } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
-import { newsletterConsentSources } from "@/lib/membership-admin/officer-member";
+import { newsletterConsentLabels } from "@/lib/membership-admin/officer-member";
 import { ageOn, dateLabel, londonToday, memberStateName, money, paymentMethodName, timestampDateLabel } from "@/lib/membership-admin/format";
 import { loadMemberRecord } from "@/lib/membership-admin/records";
 import { MemberBirthdatePanel, MemberContactPanel, MemberLoginPanel, PaymentProblemPanel } from "../../_components/MemberRecordPanels";
@@ -27,7 +27,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
 /** Whether the member gets the newsletter and, for officer-recorded consent, how and when it was given. */
 function newsletterLabel(member: { newsletter_opt_in?: boolean | null; newsletter_consent_source?: string | null; newsletter_consent_given_on?: string | null }) {
   if (!member.newsletter_opt_in) return "Not subscribed";
-  const how = member.newsletter_consent_source ? newsletterConsentSources[member.newsletter_consent_source as keyof typeof newsletterConsentSources] : null;
+  const how = member.newsletter_consent_source ? newsletterConsentLabels[member.newsletter_consent_source as keyof typeof newsletterConsentLabels] : null;
   return how && member.newsletter_consent_given_on ? `Subscribed · ${how}, ${dateLabel(member.newsletter_consent_given_on)}` : "Subscribed · agreed on the website application";
 }
 

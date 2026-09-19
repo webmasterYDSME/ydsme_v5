@@ -40,6 +40,12 @@ export const newsletterConsentSources = {
   phone: "Asked by phone",
 } as const;
 
+/** How consent is shown on a record. The extra one is set only by the MemberMojo list import, never chosen by an officer. */
+export const newsletterConsentLabels = {
+  ...newsletterConsentSources,
+  membermojo_list: "Had not unsubscribed from MemberMojo group emails when the list was imported",
+} as const;
+
 /** The submitted fields as plain text, without the framework's hidden action fields or uploaded files. */
 export function submittedValues(formData: FormData): Record<string, string> {
   const values: Record<string, string> = {};

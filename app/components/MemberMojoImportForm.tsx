@@ -28,6 +28,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
       <h3>{plural(result.added, "person", "people")} added, {plural(result.renewed, "member")} renewed for {preview.year}</h3>
       <p>{result.alreadyPaid} already paid for {preview.year} · {result.skipped} left out · {result.loginsLinked} linked to an existing website login.</p>
       {result.honorary ? <p>{plural(result.honorary, "person", "people")} became lifetime honorary members (Life or Associate Volunteer): no fee, no renewal.</p> : null}
+      <p>{plural(result.newsletter, "new person", "new people")} subscribed to the newsletter.</p>
       <p>{plural(result.detailsFilled, "existing member")} had missing details (title, date of birth, phone or address) filled in.</p>
       <p>{plural(result.needInvitation, "person", "people")} can now be invited to the website. Use the invitations section below.</p>
     </div></section>;
@@ -40,6 +41,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
         <li>Add {plural(preview.totals.add, "new person", "new people")}{preview.totals.honorary ? `, of whom ${preview.totals.honorary} become lifetime honorary members (no fee),` : ""} and mark the rest as full members for {preview.year}, paid through MemberMojo.</li>
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
         <li>Fill in each person’s title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
+        <li>Subscribe {plural(preview.totals.newsletter, "new person", "new people")} to the newsletter: everyone with an email address (not Juniors) who has not unsubscribed from MemberMojo's group emails. The club treats that as their agreement. Existing members are not changed, and each record shows where the consent came from.</li>
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
       </ul><strong>This will not:</strong><ul>
         <li>Remove or change anyone who is not in this file.</li>
@@ -78,7 +80,7 @@ export function MemberMojoImportForm() {
         <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>{preview.totals.honorary ? `${preview.totals.honorary} honorary · ${preview.totals.add - preview.totals.honorary} full members` : "added as full members"}</small></article>
         <article><Check/><span>Existing members</span><strong>{preview.totals.renew} renewed</strong><small>{preview.totals.alreadyPaid} already paid for {preview.year}</small></article>
         <article><Mail/><span>Website login</span><strong>{preview.totals.needInvitation} to invite</strong><small>{preview.totals.loginsToLink} already have a login and are linked</small></article>
-        <article className={preview.totals.noBirthDate ? "has-warning" : ""}><Database/><span>Personal details</span><strong>{preview.totals.noBirthDate} without a date of birth</strong><small>{preview.totals.withPhone} phone · {preview.totals.withAddress} address · {preview.totals.withTitle} title</small></article>
+        <article className={preview.totals.noBirthDate ? "has-warning" : ""}><Database/><span>Personal details</span><strong>{preview.totals.noBirthDate} without a date of birth</strong><small>{preview.totals.withPhone} phone · {preview.totals.withAddress} address · {preview.totals.withTitle} title · {preview.totals.newsletter} newsletter</small></article>
         <article className={preview.totals.skipped || preview.flagged.length ? "has-warning" : ""}><AlertTriangle/><span>To look at</span><strong>{preview.flagged.length + preview.totals.skipped}</strong><small>{preview.totals.skipped} left out</small></article>
       </div>
       {preview.skipped.length ? <details className="member-import-details" open>

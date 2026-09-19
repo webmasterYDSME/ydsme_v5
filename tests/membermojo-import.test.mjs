@@ -31,15 +31,17 @@ test("reads the simple email and full_name layout and ignores every other column
 
 test("reads title, month and year of birth, phone and address from MemberMojo's layout", () => {
   const parsed = parseMemberList(bytes(
-    "Title,First name,Last name,Month and Year of Birth,Email,Contact number,Address line 1,Address line 2,Address line 3,Address line 4,Postcode,Membership\n"
-    + "Dr,Ann,Example,1958-04-01,a@example.test,t:01904 123456,1 High Street,Heslington,Fulford,York,yo10  5dd,Adult\n"
-    + "Mr,Bob,Sample,,b@example.test,t:+447700900123,2 Low Road,,,York,,Adult\n"
-    + "Ms,Cat,Nowhere,15/13/1990,c@example.test,,,,,,,Adult\n",
+    "Title,First name,Last name,Month and Year of Birth,Email,Contact number,Address line 1,Address line 2,Address line 3,Address line 4,Postcode,Membership,Unsubscribe group email\n"
+    + "Dr,Ann,Example,1958-04-01,a@example.test,t:01904 123456,1 High Street,Heslington,Fulford,York,yo10  5dd,Adult,no\n"
+    + "Mr,Bob,Sample,,b@example.test,t:+447700900123,2 Low Road,,,York,,Adult,YES\n"
+    + "Ms,Cat,Nowhere,15/13/1990,c@example.test,,,,,,,Adult,\n",
   ));
   assert.deepEqual(parsed.rows[0], {
     fullName: "Ann Example", email: "a@example.test", membershipType: "Adult", title: "Dr", dateOfBirth: "1958-04-01",
     phone: "01904 123456", addressLineOne: "1 High Street", addressLineTwo: "Heslington, Fulford", city: "York", postcode: "YO10 5DD",
+    groupEmailUnsubscribed: "no",
   });
+  assert.deepEqual(parsed.rows.map((row) => row.groupEmailUnsubscribed), ["no", "yes", ""]);
   assert.equal(parsed.rows[1].dateOfBirth, "");
   assert.equal(parsed.rows[1].phone, "+447700900123");
   assert.equal(parsed.rows[1].addressLineTwo, "");

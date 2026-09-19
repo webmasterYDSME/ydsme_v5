@@ -40,24 +40,24 @@ begin
 
   rows := jsonb_build_array(
     jsonb_build_object('full_name','Lapsed Person','email','LAPSED-'||tag||'@example.test','membership_type','Adult member',
-      'title','Mrs','date_of_birth','1970-01-01','contact_number','01234 000000','address_line_one','5 Mill Lane','city','Selby','postcode','YO8 4AA'),
+      'group_email_unsubscribed','no','title','Mrs','date_of_birth','1970-01-01','contact_number','01234 000000','address_line_one','5 Mill Lane','city','Selby','postcode','YO8 4AA'),
     jsonb_build_object('full_name','Paid Person','email','paid-'||tag||'@example.test','membership_type','Adult member',
       'title','Mr','date_of_birth','1990-01-01','contact_number','07999 999999'),
     jsonb_build_object('full_name','Archived Person','email','archived-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member',
-      'title','Dr','date_of_birth','1958-04-01','contact_number','01904 123456','address_line_one','1 High Street',
+      'group_email_unsubscribed','no','title','Dr','date_of_birth','1958-04-01','contact_number','01904 123456','address_line_one','1 High Street',
       'address_line_two','Heslington','city','York','postcode','YO10 5DD'),
-    jsonb_build_object('full_name','New Student','email','student-'||tag||'@example.test','membership_type','Student member'),
-    jsonb_build_object('full_name','New Junior','email','family-'||tag||'@example.test','membership_type','Junior member','date_of_birth','2010-06-01'),
+    jsonb_build_object('full_name','New Student','email','student-'||tag||'@example.test','membership_type','Student member','group_email_unsubscribed','yes'),
+    jsonb_build_object('full_name','New Junior','email','family-'||tag||'@example.test','membership_type','Junior member','date_of_birth','2010-06-01','group_email_unsubscribed','no'),
     jsonb_build_object('full_name','Parent One','email','family-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Shared One','email','shared-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Shared Two','email','shared-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Has Login','email','has-login-'||tag||'@example.test','membership_type','Adult member'),
-    jsonb_build_object('full_name','No Email','email','','membership_type','Adult member'),
+    jsonb_build_object('full_name','No Email','email','','membership_type','Adult member','group_email_unsubscribed','no'),
     jsonb_build_object('full_name','Bad Email','email','not-an-email','membership_type','Adult member'),
     jsonb_build_object('full_name','New Adult','email','new-'||tag||'@example.test','membership_type','Adult member'),
     jsonb_build_object('full_name','Old Life','email','old-life-'||tag||'@example.test','membership_type','Life (Honorary)'),
-    jsonb_build_object('full_name','Volunteer One','email','volunteer-'||tag||'@example.test','membership_type','Associate Volunteer*'),
+    jsonb_build_object('full_name','Volunteer One','email','volunteer-'||tag||'@example.test','membership_type','Associate Volunteer*','group_email_unsubscribed','no'),
     jsonb_build_object('full_name','Life One','email','life-'||tag||'@example.test','membership_type','Life (Honorary)','date_of_birth','2031-02-30','contact_number','x')
   );
 
@@ -75,7 +75,7 @@ begin
   end;
 
   r := public.apply_membermojo_import(officer, rows, yr, repeat('a',64));
-  if (r->>'added')::int<>10 or (r->>'renewed')::int<>1 or (r->>'already_paid')::int<>1 or (r->>'skipped')::int<>4 or (r->>'honorary')::int<>2 then
+  if (r->>'added')::int<>10 or (r->>'renewed')::int<>1 or (r->>'already_paid')::int<>1 or (r->>'skipped')::int<>4 or (r->>'honorary')::int<>2 or (r->>'newsletter')::int<>2 then
     raise exception 'unexpected result %', r;
   end if;
   if (r->>'logins_linked')::int<>1 then raise exception 'existing login not linked: %', r; end if;
@@ -96,6 +96,12 @@ begin
     or m.postal_address<>jsonb_build_object('address_line_one','1 High Street','address_line_two','Heslington','city','York','postcode','YO10 5DD','country','United Kingdom') then
     raise exception 'new adult details wrong: %', m;
   end if;
+  -- Newsletter: only new adults with an email who had not unsubscribed.
+  select * into m from public.members where full_name='New Adult';
+  if not m.newsletter_opt_in or m.newsletter_consent_source<>'membermojo_list' or m.newsletter_consent_given_on<>current_date or m.newsletter_consent_recorded_at is null then raise exception 'new adult not subscribed with a record: %', m; end if;
+  if (select newsletter_opt_in from public.members where full_name='Volunteer One')<>true then raise exception 'honorary volunteer not subscribed'; end if;
+  if exists(select 1 from public.members where full_name in ('New Student','New Junior','No Email','Parent One') and newsletter_opt_in) then raise exception 'someone was subscribed who should not be'; end if;
+  if (select newsletter_opt_in from public.members where id=lapsed) then raise exception 'an existing member was subscribed by the import'; end if;
   select * into m from public.members where full_name='Life One';
   if m.effective_state<>'honorary' or m.current_plan_id<>adult then raise exception 'life member not honorary: %', m; end if;
   if not exists(select 1 from public.honorary_memberships h where h.member_id=m.id and h.status='active' and h.reason like 'Life (Honorary)%') then raise exception 'no honorary record'; end if;

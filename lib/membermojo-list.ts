@@ -19,6 +19,8 @@ export type MemberListRow = {
   addressLineTwo: string;
   city: string;
   postcode: string;
+  /** MemberMojo's "Unsubscribe group email" column: "yes", "no", or "" when the file has no such column or value. */
+  groupEmailUnsubscribed: "yes" | "no" | "";
 };
 
 export type ParsedMemberList = {
@@ -99,6 +101,11 @@ export function readBirthDate(value: string, today = new Date()) {
   return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+export function readYesNo(value: string | undefined): "yes" | "no" | "" {
+  const text = clean(value).toLowerCase();
+  return text === "yes" || text === "no" ? text : "";
+}
+
 /** MemberMojo writes numbers as "t:01904 123456"; the label is dropped and spacing tidied. */
 export function readPhone(value: string) {
   return clean(value).replace(/^[A-Za-z]{1,3}\s*:\s*/, "").slice(0, 40);
@@ -130,6 +137,7 @@ export function parseMemberList(bytes: Uint8Array): ParsedMemberList {
   const phoneAt = at("contact number", "phone", "telephone", "mobile", "phone number");
   const lineAts = [1, 2, 3, 4].map((number) => at(`address line ${number}`, `address_line_${number}`));
   const postcodeAt = at("postcode", "post code", "postal code");
+  const groupEmailAt = at("unsubscribe group email");
   if (emailAt < 0) throw new MemberListError("This file has no Email column. Download the member list from MemberMojo again.");
   if (fullNameAt < 0 && (firstAt < 0 || lastAt < 0)) throw new MemberListError("This file needs a full_name column, or First name and Last name columns.");
 
@@ -161,6 +169,7 @@ export function parseMemberList(bytes: Uint8Array): ParsedMemberList {
       addressLineTwo: others.slice(0, -1).join(", ").slice(0, 180),
       city,
       postcode: postcodeAt >= 0 ? readPostcode(values[postcodeAt] ?? "") : "",
+      groupEmailUnsubscribed: groupEmailAt >= 0 ? readYesNo(values[groupEmailAt]) : "",
     });
   }
   if (!people.length) throw new MemberListError(notActive ? "Nobody in this file is marked Active." : "This file does not contain any members.");
@@ -173,6 +182,7 @@ export function parseMemberList(bytes: Uint8Array): ParsedMemberList {
     ...(titleAt >= 0 ? ["Title"] : []),
     ...(birthAt >= 0 ? [clean(rows[0][birthAt])] : []),
     ...(phoneAt >= 0 ? ["Contact number"] : []),
+    ...(groupEmailAt >= 0 ? ["Unsubscribe group email"] : []),
     ...(lineAts.some((index) => index >= 0) || postcodeAt >= 0 ? ["Address"] : []),
   ];
   return {
