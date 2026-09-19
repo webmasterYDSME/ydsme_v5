@@ -89,3 +89,35 @@ test("the daily membership job catches up on days it missed and tells officers w
   assert.match(read("supabase/functions/run-membership-automation/index.ts"), /rpc\("run_membership_daily_catch_up"/);
   assert.match(read("lib/membership-admin/inbox.ts"), /Daily membership updates have stopped/);
 });
+
+test("email addresses are matched as exact text, never as patterns", () => {
+  for (const path of ["lib/membership.ts", "lib/actions/membership.ts"]) {
+    const source = read(path);
+    for (const match of source.matchAll(/\.ilike\(\s*"(?:contact_email|recipient_email|email)",\s*([^)]*)\)/g)) {
+      assert.match(match[1], /likeLiteral|postgrestLikeLiteral|escapedEmail/, `${path}: ${match[0]}`);
+    }
+  }
+  assert.match(read("supabase/functions/run-membership-automation/index.ts"), /replaceAll\("_", "\\\\_"\)/);
+});
+
+test("unsubscribing from the newsletter never re-enables email that was blocked for bouncing or complaints", () => {
+  const source = read("lib/actions/membership.ts");
+  const start = source.indexOf("export async function unsubscribeMembershipNewsletter");
+  const body = source.slice(start, source.indexOf("export async function", start + 10));
+  // An existing row only has its newsletter flag changed; only a brand-new row is inserted with the other flag off.
+  assert.match(body, /\.update\(\{ newsletter_suppressed: true, updated_at/);
+  assert.doesNotMatch(body, /upsert\(/);
+});
+
+test("officer review notices that used to be invisible now appear in the Inbox and can be cleared", () => {
+  const { MEMBER_REVIEW_KINDS } = { MEMBER_REVIEW_KINDS: read("lib/membership-admin/review-notices.ts") };
+  assert.match(MEMBER_REVIEW_KINDS, /membership\.possible-duplicate-officer/);
+  assert.match(MEMBER_REVIEW_KINDS, /membership\.junior-adult-officer/);
+  assert.match(read("lib/membership-admin/inbox.ts"), /type: "member-review"/);
+  assert.match(read("lib/actions/membership.ts"), /export async function completeMembershipReviewNotice/);
+});
+
+test("a Junior's guardian is copied on the renewal invitation and reminder", () => {
+  const migration = read("supabase/migrations/202609190015_membership_guardian_copy_renewal_requests.sql");
+  assert.match(migration, /'membership\.renewal-invitation','membership\.renewal-reminder'/);
+});

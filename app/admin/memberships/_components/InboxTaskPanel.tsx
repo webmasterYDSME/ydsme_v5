@@ -7,6 +7,7 @@ import {
   recordDeniedMembershipRefund,
   resolveMembershipDeliveryProblem,
   resolveUnappliedMembershipPayment,
+  completeMembershipReviewNotice,
   confirmExistingMemberOfflineRenewal,
   confirmOfflineMembership,
   recordOfflineApplicationPayment,
@@ -107,7 +108,7 @@ function Actions({ task, link = true, children }: { task: InboxTask; link?: bool
 }
 
 /** Drawers whose form already carries the record link, so it is not repeated below. */
-const recordLinkInForm = new Set<InboxTask["type"]>(["verification", "renewal-payment", "payment-review", "honorary-conflict", "manual-contact", "refund", "email-delivery", "unapplied-payment"]);
+const recordLinkInForm = new Set<InboxTask["type"]>(["verification", "renewal-payment", "payment-review", "honorary-conflict", "manual-contact", "refund", "email-delivery", "unapplied-payment", "member-review"]);
 
 function Form({ task }: { task: InboxTask }) {
   const today = londonToday();
@@ -156,6 +157,10 @@ function Form({ task }: { task: InboxTask }) {
     case "refund": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>Membership was denied after payment. Hand the money back, then record it here.</p>
       <form action={recordDeniedMembershipRefund} className="stack-form"><input type="hidden" name="application_id" value={task.applicationId}/><label>How it was refunded<textarea name="note" rows={3} minLength={5} maxLength={400} placeholder="For example: handed back £20 in cash on 20 September." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as refunded</PendingSubmitButton></Actions></form>
+    </div>;
+    case "member-review": return <div className={styles.panelForms}>
+      <p className={styles.callout}>{task.body}</p>
+      <form action={completeMembershipReviewNotice} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as dealt with</PendingSubmitButton></Actions></form>
     </div>;
     case "unapplied-payment": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>This person paid by card, but their membership was not updated. {task.reason}</p>

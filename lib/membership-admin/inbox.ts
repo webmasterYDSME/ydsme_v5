@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { money, timestampDateLabel, waitingLabel } from "@/lib/membership-admin/format";
+import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
 import { isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
 
 type Admin = ReturnType<typeof createServiceClient>;
@@ -61,6 +62,7 @@ export type InboxTask = Base & (
   | { type: "manual-contact"; notificationId: string; items: string[] }
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
   | { type: "honorary-conflict"; body: string }
+  | { type: "member-review"; notificationId: string; title: string; body: string }
   | { type: "refund"; applicationId: string; reason: string | null; outstandingPence: number }
   | { type: "unapplied-payment"; attemptId: string; reason: string; amountPence: number | null; year: number | null; technical: string | null }
   | { type: "email-delivery"; eventId: string; recipient: string | null; event: "bounced" | "complained" | "suppressed"; subject: string | null }
@@ -89,6 +91,7 @@ function sources(admin: Admin) {
     studentRequests: (columns: string, options?: typeof HEAD) => admin.from("membership_plan_transitions").select(columns, options).eq("status", "awaiting_student_review"),
     manualContact: (columns: string) => notifications().select(columns).eq("kind", "membership.manual-contact-officer").is("read_at", null),
     paymentReviews: (columns: string, options?: typeof HEAD) => admin.from("membership_terms").select(columns, options).eq("status", "payment_review"),
+    memberReviews: (columns: string) => notifications().select(columns).in("kind", MEMBER_REVIEW_KINDS).is("read_at", null),
     honoraryConflicts: (columns: string, options?: typeof HEAD) => notifications().select(columns, options).eq("kind", "membership.honorary-payment-review-officer").is("read_at", null),
     checkoutNotices: (columns: string, options?: typeof HEAD) => notifications().select(columns, options).eq("kind", "membership.application-payment-attention-officer").is("read_at", null),
     checkoutAttempts: (columns: string) => admin.from("membership_checkout_attempts").select(columns).in("status", ["failed", "payment_review"]).is("resolved_at", null).limit(LIMIT.checkoutAttempts),
@@ -201,6 +204,11 @@ function contactTasks(rows: Row[]) {
   return Array.from(byMember.values());
 }
 
+/** Every officer gets their own copy of a review notice; the task appears once per person and kind. */
+function onePerMemberAndKind(rows: Row[]) {
+  return Array.from(new Map(rows.filter((row) => row.member_id).map((row) => [`${row.member_id}.${row.kind}`, row])).values());
+}
+
 function onePerMember(rows: Row[]) {
   return Array.from(new Map(rows.filter((row) => row.member_id).map((row) => [row.member_id as string, row])).values());
 }
@@ -219,13 +227,14 @@ export const countInboxTasks = cache(async (): Promise<number> => {
     return data ?? [];
   };
   const [
-    applications, renewals, verifications, students, contact, reviews, conflicts, checkoutNotices,
+    applications, renewals, verifications, students, contact, reviews, conflicts, checkoutNotices, memberReviewCount,
     attempts, webhooks, commands, emailFailures, deliveryEvents, refunds,
   ] = await Promise.all([
     head(from.applications("id", HEAD)), head(from.renewalPayments("id", HEAD)), head(from.verifications("id", HEAD)),
     head(from.studentRequests("id", HEAD)),
     rows(from.manualContact("id,member_id")).then((list) => onePerMember(list as Row[]).length),
     head(from.paymentReviews("id", HEAD)), head(from.honoraryConflicts("id", HEAD)), head(from.checkoutNotices("id", HEAD)),
+    rows(from.memberReviews("id,member_id,kind")).then((list) => onePerMemberAndKind(list as Row[]).length),
     rows(from.checkoutAttempts("id")).then((list) => list.length),
     rows(from.webhookFailures("stripe_event_id")).then((list) => list.length),
     rows(from.providerCommands("id")).then((list) => list.length),
@@ -235,7 +244,7 @@ export const countInboxTasks = cache(async (): Promise<number> => {
   ]);
   const ready = configuration();
   const stale = await staleDailyRun(admin);
-  return applications + renewals + verifications + students + contact + reviews + conflicts + checkoutNotices
+  return applications + renewals + verifications + students + contact + reviews + conflicts + checkoutNotices + memberReviewCount
     + attempts + webhooks + commands + emailFailures + deliveryEvents + refunds
     + Number(!ready.payments) + Number(!ready.email) + Number(Boolean(stale));
 });
@@ -245,7 +254,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
   const from = sources(admin);
   const [
     applicationResult, planResult, renewalResult, verificationResult, studentResult, contactResult, reviewResult,
-    conflictResult, checkoutNoticeResult, attemptResult, webhookResult, commandResult, emailFailureResult, deliveryResult, refunds,
+    conflictResult, checkoutNoticeResult, memberReviewResult, attemptResult, webhookResult, commandResult, emailFailureResult, deliveryResult, refunds,
   ] = await Promise.all([
     from.applications("id,full_name,contact_email,date_of_birth,payment_method,status,guardian_name,guardian_led,created_at,requested_plan_id,membership_offline_payment_records(id,status,expected_amount_pence,payment_reference,received_on)"),
     admin.from("membership_plans").select("id,name"),
@@ -256,6 +265,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.paymentReviews("id,member_id,membership_year,amount_due_pence,amount_paid_pence,updated_at"),
     from.honoraryConflicts("id,member_id,body,created_at").order("created_at"),
     from.checkoutNotices("id,title,body,action_href,created_at").order("created_at"),
+    from.memberReviews("id,member_id,kind,title,body,created_at").order("created_at"),
     from.checkoutAttempts("id,status,last_error,updated_at,application_id,member_id,amount_pence,membership_year"),
     from.webhookFailures("stripe_event_id,event_type,last_error,claimed_at"),
     from.providerCommands("id,command_type,attempts,last_error,updated_at"),
@@ -266,7 +276,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
   for (const [what, result] of [
     ["applications", applicationResult], ["membership types", planResult], ["renewal payments", renewalResult], ["verification work", verificationResult],
     ["student requests", studentResult], ["contact tasks", contactResult], ["payment reviews", reviewResult], ["honorary payment checks", conflictResult],
-    ["online payment problems", checkoutNoticeResult], ["online payment attempts", attemptResult], ["payment confirmations", webhookResult],
+    ["online payment problems", checkoutNoticeResult], ["member review notices", memberReviewResult], ["online payment attempts", attemptResult], ["payment confirmations", webhookResult],
     ["automatic renewal changes", commandResult], ["email problems", emailFailureResult], ["email delivery problems", deliveryResult],
   ] as const) if (result.error) fail(what, result.error);
 
@@ -279,6 +289,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     ...((reviewResult.data ?? []) as Row[]).map((row) => row.member_id),
     ...((conflictResult.data ?? []) as Row[]).map((row) => row.member_id),
     ...((attemptResult.data ?? []) as Row[]).map((row) => row.member_id),
+    ...((memberReviewResult.data ?? []) as Row[]).map((row) => row.member_id),
   ].filter(Boolean)));
   const names = new Map<string, string>();
   if (memberIds.length) {
@@ -367,6 +378,13 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
       summary: `Refund or disputed payment for ${term.membership_year} · access stays active until you decide`,
       since: term.updated_at, cta: "Decide", memberId: term.member_id,
       termId: term.id, year: term.membership_year, paidPence: term.amount_paid_pence, duePence: term.amount_due_pence,
+    });
+  }
+  for (const notice of onePerMemberAndKind((memberReviewResult.data ?? []) as Row[])) {
+    add({
+      key: `member-review.${notice.member_id}.${notice.kind}`, type: "member-review", kind: "verify", name: memberName(notice.member_id),
+      summary: notice.title, since: notice.created_at, cta: "Review", memberId: notice.member_id,
+      notificationId: notice.id, title: notice.title, body: notice.body ?? "",
     });
   }
   for (const conflict of (conflictResult.data ?? []) as Row[]) {

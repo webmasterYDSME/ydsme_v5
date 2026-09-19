@@ -99,7 +99,7 @@ export default {
     const siteUrl = (Deno.env.get("SITE_URL") || "").replace(/\/$/, "");
     for (const member of honoraryMembers ?? []) {
       const { data: existing } = await context.supabaseAdmin.from("users")
-        .select("id").ilike("email", member.contact_email).limit(1).maybeSingle();
+        .select("id").ilike("email", member.contact_email.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")).limit(1).maybeSingle();
       if (existing) {
         await context.supabaseAdmin.from("members").update({ portal_invitation_status: "blocked_shared" }).eq("id", member.id);
         continue;

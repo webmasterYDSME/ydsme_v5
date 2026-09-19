@@ -15,6 +15,8 @@ import { closeOpenMembershipCheckouts, refreshMembershipApplicationPaymentLink }
 import { clearSignupVerification, getSignupVerification } from "@/lib/membership-signup-session";
 import { normaliseAccountNumber, normaliseSortCode } from "@/lib/membership-admin/bank";
 import { writeAudit } from "@/lib/audit";
+import { likeLiteral } from "@/lib/like-literal";
+import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
 import {
   MEMBERMOJO_MEMBERSHIP_URL,
   membershipAdministrationEnabled,
@@ -57,7 +59,7 @@ const londonToday = () => new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date());
 const normalizeIdentityName = (value: string) => value.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
-const postgrestLikeLiteral = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+const postgrestLikeLiteral = likeLiteral;
 const normalizeApplicationDate = (value: unknown) => {
   if (typeof value !== "string") return value;
   const match = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
@@ -233,13 +235,22 @@ export async function unsubscribeMembershipNewsletter(formData: FormData) {
   const token = z.string().min(20).max(1000).parse(formData.get("token"));
   const email = emailFromNewsletterUnsubscribeToken(token);
   if (!email) redirect("/membership/newsletter/unsubscribe?result=invalid");
-  const { error } = await createServiceClient().from("membership_email_suppressions").upsert({
-    normalized_email: email,
-    newsletter_suppressed: true,
-    transactional_suppressed: false,
-    reason: "The shared mailbox used the newsletter unsubscribe link.",
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "normalized_email" });
+  // Unsubscribing from the newsletter must not undo a block placed because emails to this address bounced
+  // or were reported, so an existing row only has its newsletter flag changed.
+  const admin = createServiceClient();
+  const { data: existing, error: lookupError } = await admin.from("membership_email_suppressions")
+    .select("normalized_email").eq("normalized_email", email).maybeSingle();
+  if (lookupError) redirect("/membership/newsletter/unsubscribe?result=invalid");
+  const { error } = existing
+    ? await admin.from("membership_email_suppressions")
+      .update({ newsletter_suppressed: true, updated_at: new Date().toISOString() }).eq("normalized_email", email)
+    : await admin.from("membership_email_suppressions").insert({
+      normalized_email: email,
+      newsletter_suppressed: true,
+      transactional_suppressed: false,
+      reason: "The shared mailbox used the newsletter unsubscribe link.",
+      updated_at: new Date().toISOString(),
+    });
   if (error) redirect("/membership/newsletter/unsubscribe?result=invalid");
   redirect("/membership/newsletter/unsubscribe?result=confirmed");
 }
@@ -316,7 +327,7 @@ export async function resendMembershipVerification(formData: FormData) {
   const admin = createServiceClient();
   const { data: applications } = await admin.from("membership_applications")
     .select("id,status,contact_email,full_name,guardian_email")
-    .ilike("contact_email", email.data)
+    .ilike("contact_email", likeLiteral(email.data))
     .in("status", ["email_verification_pending", "guardian_verification_pending"])
     .gt("expires_at", new Date().toISOString()).order("created_at", { ascending: false }).limit(10);
   for (const application of applications ?? []) {
@@ -1004,6 +1015,26 @@ export async function completeManualMembershipContact(formData: FormData) {
   redirect("/admin/memberships?notice=manual-contact-completed");
 }
 
+/** Clears a "needs review" notice (possible duplicate member, Junior turning adult) once an officer has dealt with it. */
+export async function completeMembershipReviewNotice(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const notificationId = idSchema.parse(formData.get("notification_id"));
+  const admin = createServiceClient();
+  const { data: notification } = await admin.from("membership_notifications")
+    .select("id,member_id,kind").eq("id", notificationId).in("kind", MEMBER_REVIEW_KINDS).is("read_at", null).maybeSingle();
+  if (!notification?.member_id) redirect("/admin/memberships?error=review-notice-unavailable");
+  const { error } = await admin.from("membership_notifications").update({
+    read_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  }).eq("member_id", notification.member_id).eq("kind", notification.kind).is("read_at", null);
+  if (error) redirect("/admin/memberships?error=review-notice-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.review-notice-completed",
+    entityType: "member", entityId: notification.member_id, summary: "Officer marked a membership review notice as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=review-notice-cleared");
+}
+
 /** Records that a refund owed after a denied membership was handed back by hand (usually cash). */
 export async function recordDeniedMembershipRefund(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
@@ -1229,7 +1260,7 @@ export async function assignMemberPortalLogin(formData: FormData) {
   const { data: member } = await admin.from("members").select("id,full_name,auth_user_id")
     .eq("id", memberId).maybeSingle();
   if (!member) redirect(`${record}&error=member-unavailable`);
-  const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", email).maybeSingle();
+  const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", likeLiteral(email)).maybeSingle();
   if (profileError) redirect(`${record}&error=portal-login-check-failed`);
   let authUserId = profile?.id ?? null;
   if (authUserId) {

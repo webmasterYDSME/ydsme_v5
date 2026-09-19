@@ -4,6 +4,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { unstable_cache } from "next/cache";
 import { PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG } from "@/lib/cache-tags";
 import { membershipCheckoutWindow, membershipCheckoutQuoteKey } from "@/lib/membership-checkout-policy";
+import { likeLiteral } from "@/lib/like-literal";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { getTrustedAppOrigin } from "@/lib/trusted-origin";
@@ -814,7 +815,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   const releaseActivationEmail = async (authUserId: string | null, actionHref: string | null, extraBody?: string) => {
     const { data: notices, error: noticeError } = await admin.from("membership_notifications")
       .select("id,body").eq("member_id", member.id).eq("kind", "membership.activated")
-      .ilike("recipient_email", member.contact_email ?? "").in("email_status", ["cancelled", "failed"]);
+      .ilike("recipient_email", likeLiteral(member.contact_email ?? "")).in("email_status", ["cancelled", "failed"]);
     if (noticeError) throw new Error("Unable to prepare the membership activation email.");
     for (const notice of notices ?? []) {
       const { error } = await admin.from("membership_notifications").update({
@@ -866,7 +867,7 @@ export async function ensureMemberPortalInvitation(memberId: string) {
   const { data: ownsMailbox, error: claimError } = await admin.rpc("claim_membership_portal_email", { p_member_id: member.id });
   if (claimError) throw new Error("Unable to check portal email ownership.");
   const { data: profile, error: profileError } = await admin.from("users")
-    .select("id").ilike("email", member.contact_email).maybeSingle();
+    .select("id").ilike("email", likeLiteral(member.contact_email)).maybeSingle();
   if (profileError) throw new Error("Unable to check the member portal account.");
   if (profile && ownsMailbox) {
     // Recover only an invitation signed by this server for this exact member.
