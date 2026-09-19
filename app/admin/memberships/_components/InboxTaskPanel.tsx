@@ -48,7 +48,7 @@ function facts(task: InboxTask): [string, string][] {
     case "student-request": return [["Requested for", String(task.year)], ["Membership until decided", "Adult"]];
     case "payment-review": return [["Membership year", String(task.year)], ["Paid", `${money(task.paidPence)} of ${money(task.duePence)}`]];
     case "refund": return [["To refund", money(task.outstandingPence)], ...(task.reason ? [["Reason for denial", task.reason] as [string, string]] : [])];
-    case "unapplied-payment": return [["Paid by card", task.amountPence != null ? money(task.amountPence) : "Amount not recorded"], ...(task.year ? [["Membership year", String(task.year)] as [string, string]] : [])];
+    case "unapplied-payment": return [["Paid by card", task.amountPence != null ? money(task.amountPence) : "Amount not recorded"], ...(task.year ? [["Membership year", String(task.year)] as [string, string]] : []), ...(task.paymentIntent ? [["Stripe payment", task.paymentIntent] as [string, string]] : [])];
     case "email-delivery": return [["Email", task.subject ?? "A membership email"], ["Sent to", task.recipient ?? "Not recorded"]];
     case "email-retry": return [["Sent to", task.recipient], ["Attempts", String(task.attempts)]];
     case "notice": return [["Area", task.area]];
@@ -166,8 +166,12 @@ function Form({ task }: { task: InboxTask }) {
       <form action={completeMembershipReviewNotice} className="stack-form"><input type="hidden" name="notification_id" value={task.notificationId}/><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as dealt with</PendingSubmitButton></Actions></form>
     </div>;
     case "unapplied-payment": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>This person paid by card, but their membership was not updated. {task.reason}</p>
-      <p className={styles.panelNote}>Either give them their membership by hand (record it as paid) and leave the card payment as it is, or refund the card payment in Stripe. Then mark this as dealt with.</p>
+      {task.duplicate
+        ? <><p className={styles.panelNote}>{task.reason} Their membership is already active and has not been changed.</p>
+          <p className={styles.panelNote}>Refund the second payment in Stripe, then mark this as dealt with.</p></>
+        : <><p className={styles.panelNote}>This person paid by card, but their membership was not updated. {task.reason}</p>
+          <p className={styles.panelNote}>Either give them their membership by hand (record it as paid) and leave the card payment as it is, or refund the card payment in Stripe. Then mark this as dealt with.</p></>}
+      {task.dashboardUrl ? <p className={styles.panelNote}><a className={styles.inlineLink} href={task.dashboardUrl} target="_blank" rel="noreferrer">Open the payment in Stripe<span className="sr-only"> (opens in a new tab)</span></a></p> : null}
       {task.technical ? <details className={styles.technical}><summary>Technical details</summary><small>{task.technical}</small></details> : null}
       <form action={resolveUnappliedMembershipPayment} className="stack-form"><input type="hidden" name="attempt_id" value={task.attemptId}/><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as dealt with</PendingSubmitButton></Actions></form>
     </div>;

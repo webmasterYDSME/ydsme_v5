@@ -66,6 +66,7 @@ const messages: Record<string, string> = {
   "payment-details-invalid": "Some payment details are missing or not valid. Check the treasurer details and the instructions. Nothing was saved.",
   "payment-details-save-failed": "The payment details could not be saved. Nothing was changed. Try again.",
   "refund-unavailable": "The refund could not be recorded. It may already be recorded, or the membership was not denied. Refresh and check.",
+  "portal-login-junior": "Members under 18 cannot have their own website login. Their guardian receives their emails. A login can be added once they turn 18.",
   "amount-received-invalid": "Enter the amount received in pounds and pence, for example 35 or 35.00.",
   "amount-short": "That is less than the fee, so nothing was recorded. Ask for the rest, then record the full payment.",
   "amount-difference-note": "They gave more than the fee. Say in the note what happens to the extra, for example kept as a donation or handed back.",

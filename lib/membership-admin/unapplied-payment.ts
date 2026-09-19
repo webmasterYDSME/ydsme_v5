@@ -43,3 +43,6 @@ export function unappliedPaymentReason(lastError: string | null | undefined): st
 export function isUnappliedPayment(lastError: string | null | undefined): boolean {
   return Boolean(lastError?.startsWith(UNAPPLIED_PREFIX));
 }
+
+/** A second successful card payment for someone whose membership was already active. */
+export const DUPLICATE_PAYMENT_REASON = "They had already paid, and a second card payment came through as well.";

@@ -123,3 +123,20 @@ test("a Junior's guardian is copied on the renewal invitation and reminder", () 
   const migration = read("supabase/migrations/202609190015_membership_guardian_copy_renewal_requests.sql");
   assert.match(migration, /'membership\.renewal-invitation','membership\.renewal-reminder'/);
 });
+
+test("a second card payment for someone already active can be cleared, with the refund steps shown", () => {
+  const inbox = read("lib/membership-admin/inbox.ts");
+  assert.match(inbox, /attempt\.status === "payment_review" && !isUnappliedPayment\(attempt\.last_error\)/);
+  assert.match(inbox, /DUPLICATE_PAYMENT_REASON/);
+  const panel = read("app/admin/memberships/_components/InboxTaskPanel.tsx");
+  assert.match(panel, /Refund the second payment in Stripe, then mark this as dealt with/);
+  assert.match(panel, /Open the payment in Stripe/);
+});
+
+test("members under 18 cannot be given a login of their own", () => {
+  const actions = read("lib/actions/membership.ts");
+  const start = actions.indexOf("export async function assignMemberPortalLogin");
+  const body = actions.slice(start, actions.indexOf("export async function removeMemberPortalLogin"));
+  assert.match(body, /ageOn\(member\.date_of_birth\) < 18\) redirect\(`\$\{record\}&error=portal-login-junior`\)/);
+  assert.match(read("lib/membership-admin/messages.ts"), /"portal-login-junior"/);
+});

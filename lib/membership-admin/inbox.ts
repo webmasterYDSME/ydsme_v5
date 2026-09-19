@@ -4,7 +4,7 @@ import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { money, timestampDateLabel, waitingLabel } from "@/lib/membership-admin/format";
 import { MEMBER_REVIEW_KINDS } from "@/lib/membership-admin/review-notices";
-import { isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
+import { DUPLICATE_PAYMENT_REASON, isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
 
 type Admin = ReturnType<typeof createServiceClient>;
 
@@ -64,7 +64,7 @@ export type InboxTask = Base & (
   | { type: "honorary-conflict"; body: string }
   | { type: "member-review"; notificationId: string; title: string; body: string }
   | { type: "refund"; applicationId: string; reason: string | null; outstandingPence: number }
-  | { type: "unapplied-payment"; attemptId: string; reason: string; amountPence: number | null; year: number | null; technical: string | null }
+  | { type: "unapplied-payment"; attemptId: string; duplicate: boolean; paymentIntent: string | null; dashboardUrl: string | null; reason: string; amountPence: number | null; year: number | null; technical: string | null }
   | { type: "email-delivery"; eventId: string; recipient: string | null; event: "bounced" | "complained" | "suppressed"; subject: string | null }
   | { type: "email-retry"; notificationId: string; recipient: string; attempts: number; error: string | null }
   | { type: "notice"; area: "Online payments" | "Email" | "Setup"; title: string; body: string; technical: string | null; href: string | null; hrefLabel: string | null }
@@ -266,7 +266,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.honoraryConflicts("id,member_id,body,created_at").order("created_at"),
     from.checkoutNotices("id,title,body,action_href,created_at").order("created_at"),
     from.memberReviews("id,member_id,kind,title,body,created_at").order("created_at"),
-    from.checkoutAttempts("id,status,last_error,updated_at,application_id,member_id,amount_pence,membership_year"),
+    from.checkoutAttempts("id,status,last_error,updated_at,application_id,member_id,amount_pence,membership_year,stripe_payment_intent_id"),
     from.webhookFailures("stripe_event_id,event_type,last_error,claimed_at"),
     from.providerCommands("id,command_type,attempts,last_error,updated_at"),
     from.emailFailures("id,member_id,title,recipient_email,email_attempts,last_email_error,created_at"),
@@ -409,13 +409,16 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     });
   }
   for (const attempt of (attemptResult.data ?? []) as Row[]) {
-    if (isUnappliedPayment(attempt.last_error)) {
+    // A second card payment for someone already converted is stored as payment_review without the unapplied marker.
+    const duplicate = attempt.status === "payment_review" && !isUnappliedPayment(attempt.last_error);
+    if (isUnappliedPayment(attempt.last_error) || duplicate) {
       const who = (attempt.member_id ? names.get(attempt.member_id) : null) ?? (attempt.application_id ? applicationNames.get(attempt.application_id) : null) ?? "A member";
       add({
         key: `unapplied-payment.${attempt.id}`, type: "unapplied-payment", kind: "problem", name: who,
-        summary: `Paid by card${attempt.amount_pence != null ? ` (${money(attempt.amount_pence)})` : ""} · membership was not updated`,
+        summary: `${duplicate ? "Paid by card twice" : "Paid by card"}${attempt.amount_pence != null ? ` (${money(attempt.amount_pence)})` : ""}${duplicate ? " · the second payment needs refunding" : " · membership was not updated"}`,
         since: attempt.updated_at, cta: "See details", memberId: attempt.member_id ?? null,
-        attemptId: attempt.id, reason: unappliedPaymentReason(attempt.last_error), amountPence: attempt.amount_pence ?? null,
+        attemptId: attempt.id, duplicate, paymentIntent: attempt.stripe_payment_intent_id ?? null,
+        dashboardUrl: attempt.stripe_payment_intent_id ? stripeDashboard(`payments/${attempt.stripe_payment_intent_id}`) : null, reason: duplicate ? DUPLICATE_PAYMENT_REASON : unappliedPaymentReason(attempt.last_error), amountPence: attempt.amount_pence ?? null,
         year: attempt.membership_year ?? null, technical: attempt.last_error,
       });
       continue;

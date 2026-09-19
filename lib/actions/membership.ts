@@ -26,6 +26,7 @@ import {
   membershipRecoveryEnabled,
 } from "@/lib/features";
 import {
+  ageOn,
   defaultMembershipPlan,
   eligibleMembershipPlans,
   membershipBillingYear,
@@ -1290,9 +1291,11 @@ export async function assignMemberPortalLogin(formData: FormData) {
   const reason = z.string().trim().min(5).max(500).parse(formData.get("reason"));
   const email = z.email().max(254).parse(String(formData.get("login_email") || "").trim().toLowerCase());
   const admin = createServiceClient();
-  const { data: member } = await admin.from("members").select("id,full_name,auth_user_id")
+  const { data: member } = await admin.from("members").select("id,full_name,auth_user_id,date_of_birth")
     .eq("id", memberId).maybeSingle();
   if (!member) redirect(`${record}&error=member-unavailable`);
+  // Under-18s never get a login of their own: their guardian receives their emails and uses the guardian's own account.
+  if (member.date_of_birth && ageOn(member.date_of_birth) < 18) redirect(`${record}&error=portal-login-junior`);
   const { data: profile, error: profileError } = await admin.from("users").select("id").ilike("email", likeLiteral(email)).maybeSingle();
   if (profileError) redirect(`${record}&error=portal-login-check-failed`);
   let authUserId = profile?.id ?? null;
