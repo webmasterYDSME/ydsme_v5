@@ -57,6 +57,7 @@
 .facts dd { margin: 0; font-weight: 700; text-align: right; overflow-wrap: anywhere; }
 .factsGroup { display: grid; gap: 7px; }
 .factsTitle { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #56625b; }
+.lines { display: grid; gap: 2px; }
 .mono { font: 500 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .inlineLink { color: var(--forest); font-weight: 700; }
 .panelWarn { margin: 0; padding: 10px 14px; border-left: 4px solid #b4531a; background: #fbeee2; color: #7a3410; font-size: 14px; font-weight: 700; line-height: 1.5; }
