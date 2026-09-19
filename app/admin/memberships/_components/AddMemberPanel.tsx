@@ -24,7 +24,7 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
         prices={prices.map((price) => ({ plan_id: price.plan_id, membership_year: price.membership_year, amount_pence: price.amount_pence }))}
       />
     </> : <>
-      <p className={styles.panelNote}>Payment-free lifetime membership. Every change needs a reason and is kept in the member’s history.</p>
+      <p className={styles.panelNote}>Payment-free lifetime membership.</p>
       <AddHonoraryForm today={today}/>
     </>}
   </SidePanel>;
