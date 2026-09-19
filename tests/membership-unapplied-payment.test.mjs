@@ -80,3 +80,12 @@ test("website access follows the membership record and never reopens or locks ou
   const config = read("supabase/config.toml");
   assert.doesNotMatch(config, /^enable_signup = true/m);
 });
+
+test("the daily membership job catches up on days it missed and tells officers when it has stopped", () => {
+  const migration = read("supabase/migrations/202609190014_membership_daily_catch_up.sql");
+  assert.match(migration, /create table if not exists public\.membership_daily_runs/);
+  assert.match(migration, /p_today - 60/);
+  assert.match(migration, /public\.run_membership_daily\(v_day\)/);
+  assert.match(read("supabase/functions/run-membership-automation/index.ts"), /rpc\("run_membership_daily_catch_up"/);
+  assert.match(read("lib/membership-admin/inbox.ts"), /Daily membership updates have stopped/);
+});

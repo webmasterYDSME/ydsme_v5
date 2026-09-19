@@ -85,7 +85,7 @@ export default {
     });
     if (month === 11) await context.supabaseAdmin.rpc("prepare_membership_age_transitions", { p_membership_year: year + 1 });
     await context.supabaseAdmin.rpc("apply_membership_plan_transitions", { p_today: today });
-    const { data, error } = await context.supabaseAdmin.rpc("run_membership_daily", { p_today: today });
+    const { data, error } = await context.supabaseAdmin.rpc("run_membership_daily_catch_up", { p_today: today });
     if (error) return Response.json({ ok: false }, { status: 500 });
     const { data: honoraryMembers, error: honoraryError } = await context.supabaseAdmin.from("members")
       .select("id,full_name,contact_email")

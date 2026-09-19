@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { money, waitingLabel } from "@/lib/membership-admin/format";
+import { money, timestampDateLabel, waitingLabel } from "@/lib/membership-admin/format";
 import { isUnappliedPayment, unappliedPaymentReason } from "@/lib/membership-admin/unapplied-payment";
 
 type Admin = ReturnType<typeof createServiceClient>;
@@ -71,6 +71,13 @@ export type InboxTask = Base & (
 const APPLICATION_WAITING = ["awaiting_approval", "awaiting_cash", "awaiting_bank_transfer", "awaiting_cheque"];
 const LIMIT = { checkoutAttempts: 100, webhookFailures: 100, providerCommands: 100, emailFailures: 50, deliveryEvents: 100 };
 const HEAD = { count: "exact", head: true } as const;
+
+/** When the daily membership job last finished, if it has run before but has been quiet for three days. */
+async function staleDailyRun(admin: Admin): Promise<string | null> {
+  const { data, error } = await admin.from("membership_daily_runs").select("completed_at").order("run_date", { ascending: false }).limit(1).maybeSingle();
+  if (error || !data?.completed_at) return null;
+  return Date.now() - new Date(data.completed_at).getTime() > 3 * 24 * 60 * 60 * 1000 ? data.completed_at : null;
+}
 
 function sources(admin: Admin) {
   const notifications = () => admin.from("membership_notifications");
@@ -227,9 +234,10 @@ export const countInboxTasks = cache(async (): Promise<number> => {
     refundsToArrange(admin).then((list) => list.length),
   ]);
   const ready = configuration();
+  const stale = await staleDailyRun(admin);
   return applications + renewals + verifications + students + contact + reviews + conflicts + checkoutNotices
     + attempts + webhooks + commands + emailFailures + deliveryEvents + refunds
-    + Number(!ready.payments) + Number(!ready.email);
+    + Number(!ready.payments) + Number(!ready.email) + Number(Boolean(stale));
 });
 
 export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
@@ -295,6 +303,8 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
   const methodWord = (method: string | null) => ({ cash: "cash", bank_transfer: "bank transfer", cheque: "cheque" } as Record<string, string>)[method || ""] || "payment";
 
   const ready = configuration();
+  const staleRun = await staleDailyRun(admin);
+  if (staleRun) add({ key: "notice.daily-run-stale", type: "notice", kind: "problem", name: "Daily membership updates have stopped", summary: `They last ran on ${timestampDateLabel(staleRun)}. Members are not being moved to grace or lapsed until they run again.`, since: staleRun, cta: "See details", memberId: null, area: "Setup", title: "Daily membership updates have stopped", body: `The daily job that moves members into their grace period and then lapses them last ran on ${timestampDateLabel(staleRun)}. Ask the website administrator to check it. When it runs again it catches up on the days it missed.`, technical: null, href: null, hrefLabel: null });
   if (!ready.payments) add({ key: "notice.payments-setup", type: "notice", kind: "problem", name: "Online payments are not fully set up", summary: "Ask the website administrator to finish the payment setup before accepting online payments.", since: null, cta: "See details", memberId: null, area: "Setup", title: "Online payments are not fully set up", body: "Ask the website administrator to finish the payment setup before accepting online membership payments.", technical: null, href: null, hrefLabel: null });
   if (!ready.email) add({ key: "notice.email-setup", type: "notice", kind: "problem", name: "Membership emails are not fully set up", summary: "Ask the website administrator to finish the email setup before launch.", since: null, cta: "See details", memberId: null, area: "Setup", title: "Membership emails are not fully set up", body: "Ask the website administrator to finish the email setup before launch.", technical: null, href: null, hrefLabel: null });
 
