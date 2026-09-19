@@ -61,9 +61,10 @@ test("membership workspace shows one job per screen and keeps old links working"
     await expect(panel).toHaveCount(0);
     await tabs.getByRole("link",{name:/^Renewals/}).click();
     await expect(page.locator("#renewals")).toBeVisible();
+    await expect(page.getByRole("heading",{name:"Membership types and fees"})).toBeVisible();
     await tabs.getByRole("link",{name:/^Setup/}).click();
-    await expect(page.getByRole("heading",{name:"Membership types and annual fees"})).toBeVisible();
     const setup = page.getByRole("navigation",{name:"Setup sections"});
+    await expect(setup.getByRole("link",{name:"Types and fees"})).toHaveCount(0);
     await setup.getByRole("link",{name:"Reports"}).click();
     await expect(page.getByRole("button",{name:"Prepare records download"})).toBeVisible();
     // Stored links from before the redesign still reach the right screen.
@@ -76,9 +77,8 @@ test("membership workspace shows one job per screen and keeps old links working"
     await page.goto("/admin/memberships?section=membermojo-import");
     await expect(page).toHaveURL(/\/admin\/memberships\/setup\?tab=import/);
     await page.goto("/admin/memberships?section=plans&notice=plan-updated");
-    await expect(page).toHaveURL(/\/admin\/memberships\/setup\?/);
+    await expect(page).toHaveURL(/\/admin\/memberships\/renewals\?/);
     const carried = new URL(page.url()).searchParams;
-    expect(carried.get("tab")).toBe("fees");
     expect(carried.get("notice")).toBe("plan-updated");
     await page.goto("/settings?tab=membership");
     await expect(page).toHaveURL(/\/admin\/memberships\/setup\?tab=payment/);

@@ -548,17 +548,16 @@ test.describe("membership public, member and officer journeys", () => {
     );
     expect(pendingMember.effective_state).toBe("active");
 
-    await page.goto("/admin/memberships/renewals");
-    const renewalForm = page.locator("form.membership-cash-renewal-form");
-    await renewalForm.locator('select[name="member_id"]').selectOption(linkedMember.id);
-    await expect(renewalForm.locator('select[name="membership_year"]')).toHaveValue(String(billingYear + 1));
-    await expect(renewalForm.getByText("£60.00", { exact: true })).toBeVisible();
-    await expect(renewalForm.getByText(`Full annual fee for ${billingYear + 1}.`, { exact: true })).toBeVisible();
-    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeEnabled();
-    await renewalForm.locator('select[name="membership_year"]').selectOption(String(billingYear));
-    await expect(renewalForm.getByText("No payment due", { exact: true })).toBeVisible();
-    await expect(renewalForm.getByText(`This member's ${billingYear} membership is already paid.`)).toBeVisible();
-    await expect(renewalForm.getByRole("button", { name: "Record renewal payment" })).toBeDisabled();
+    await page.goto(`/admin/memberships/renewals?year=${billingYear + 1}&q=${encodeURIComponent(`${fixtureNamePrefix} Linked Member`)}`);
+    await page.getByRole("link", { name: "Record payment" }).click();
+    const renewalPanel = page.getByRole("dialog");
+    await expect(renewalPanel.getByText("£60.00", { exact: true })).toBeVisible();
+    await expect(renewalPanel.getByText(`Full annual fee for ${billingYear + 1}.`, { exact: true })).toBeVisible();
+    await expect(renewalPanel.getByRole("button", { name: "Record payment" })).toBeEnabled();
+    await renewalPanel.getByRole("link", { name: String(billingYear), exact: true }).click();
+    await expect(renewalPanel.getByText("No payment due", { exact: true })).toBeVisible();
+    await expect(renewalPanel.getByText(`This member's ${billingYear} membership is already paid.`)).toBeVisible();
+    await expect(renewalPanel.getByRole("button", { name: "Record payment" })).toBeDisabled();
 
     await signIn(page, "journey.member@example.test", "/account");
     await expect(page.getByRole("heading", { name: "Account details" })).toBeVisible();

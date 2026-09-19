@@ -28,7 +28,7 @@ test("translates old section links into the new workspace and keeps the message"
     [{ queue: "payment-review" }, "/admin/memberships?kind=problem"],
     [{ queue: "delivery-failures" }, "/admin/memberships?kind=problem"],
     [{ section: "renewals" }, "/admin/memberships/renewals"],
-    [{ section: "plans", notice: "price-saved" }, "/admin/memberships/setup?notice=price-saved&tab=fees"],
+    [{ section: "plans", notice: "price-saved" }, "/admin/memberships/renewals?notice=price-saved"],
     [{ section: "payment-settings", notice: "membership-payment-settings-saved" }, "/admin/memberships/setup?notice=membership-payment-settings-saved&tab=payment"],
     [{ section: "reports" }, "/admin/memberships/setup?tab=reports"],
     [{ section: "membermojo-import", notice: "migration-review-saved" }, "/admin/memberships/setup?notice=migration-review-saved&tab=import"],
@@ -42,7 +42,7 @@ test("translates old section links into the new workspace and keeps the message"
 test("translates old view tabs", () => {
   assert.equal(legacyMembershipRedirect({ view: "members" }), "/admin/memberships/members");
   assert.equal(legacyMembershipRedirect({ view: "payments", notice: "renewals-opened" }), "/admin/memberships/renewals?notice=renewals-opened");
-  assert.equal(legacyMembershipRedirect({ view: "plans" }), "/admin/memberships/setup?tab=fees");
+  assert.equal(legacyMembershipRedirect({ view: "plans" }), "/admin/memberships/renewals");
   assert.equal(legacyMembershipRedirect({ view: "reports" }), "/admin/memberships/setup?tab=reports");
   assert.equal(legacyMembershipRedirect({ view: "attention" }), "/admin/memberships");
   assert.equal(legacyMembershipRedirect({ queue: "unknown" }), "/admin/memberships");
@@ -190,4 +190,59 @@ test("capitalises each part of a name without lowering letters already typed as 
   assert.equal(capitaliseName("Fiona McDonald"), "Fiona McDonald");
   assert.equal(capitaliseName("émile zola"), "Émile Zola");
   assert.equal(capitaliseName(""), "");
+});
+
+test("the renewals list shows who still has to renew and how the year is going", async () => {
+  const { buildRenewalRows, summariseRenewals, filterRenewalRows, defaultRenewalYear, renewalStatusLine } = await import("../lib/membership-admin/renewals.ts");
+  const member = (id, name, extra = {}) => ({ id, full_name: name, contact_email: `${id}@example.test`, effective_state: "active", plan_name: "Adult", ...extra });
+  const members = [
+    member("b", "Bea Waiting"), member("a", "Al Paid"), member("c", "Cy NoEmail", { contact_email: null }),
+    member("d", "Di Checking"), member("e", "Ed Honorary"), member("f", "Flo Lapsed", { effective_state: "lapsed" }), member("g", "Gus Uninvited"),
+  ];
+  const choice = (id, amount, note = "Full annual fee for 2027.") => ({ member_id: id, membership_year: 2027, amount_pence: amount, note });
+  const choices = [choice("a", null), choice("b", 4500), choice("c", 4500), choice("d", null), choice("e", null, "Honorary membership covers this year."), choice("f", 4500), choice("g", 4500),
+    { member_id: "b", membership_year: 2026, amount_pence: 4500, note: "" }];
+  const terms = [
+    { member_id: "a", membership_year: 2027, status: "paid", amount_due_pence: 4500, amount_paid_pence: 4500 },
+    { member_id: "d", membership_year: 2027, status: "payment_review", amount_due_pence: 4500, amount_paid_pence: 4500 },
+    { member_id: "b", membership_year: 2026, status: "paid", amount_due_pence: 4500, amount_paid_pence: 4500 },
+  ];
+  const rows = buildRenewalRows({ year: 2027, members, choices, terms, invitedIds: ["a", "b", "c", "d", "e", "f"] });
+  assert.deepEqual(rows.map((row) => [row.name, row.status]), [
+    ["Al Paid", "renewed"], ["Bea Waiting", "waiting"], ["Cy NoEmail", "waiting"], ["Di Checking", "checking"],
+    ["Ed Honorary", "blocked"], ["Flo Lapsed", "waiting"], ["Gus Uninvited", "waiting"],
+  ]);
+  const summary = summariseRenewals(rows);
+  assert.deepEqual(summary, { invited: 6, renewed: 1, waiting: 5, waitingWithoutEmail: 1, remindable: 2, toInvite: 1 });
+  assert.equal(renewalStatusLine({ open: true, summary }), "Open · 6 invited · 1 renewed · 5 waiting");
+  assert.equal(renewalStatusLine({ open: false, summary }), "Not opened yet");
+  assert.deepEqual(filterRenewalRows(rows, { show: "waiting", query: "" }).map((row) => row.id), ["b", "c", "d", "e", "f", "g"]);
+  assert.deepEqual(filterRenewalRows(rows, { show: "renewed", query: "" }).map((row) => row.id), ["a"]);
+  assert.deepEqual(filterRenewalRows(rows, { show: "all", query: "  NOEMAIL" }).map((row) => row.id), ["c"]);
+  assert.deepEqual(filterRenewalRows(rows, { show: "all", query: "b@example" }).map((row) => row.id), ["b"]);
+  assert.equal(defaultRenewalYear(2026, []), 2027);
+  assert.equal(defaultRenewalYear(2026, [2026]), 2026);
+  assert.equal(defaultRenewalYear(2026, [2026, 2027]), 2027);
+  assert.equal(defaultRenewalYear(2026, [], "2026"), 2026);
+  assert.equal(defaultRenewalYear(2026, [], "2030"), 2027);
+});
+
+test("the renewal reminder migration only reminds unpaid, invited members with an email", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609190001_membership_renewal_reminders.sql", import.meta.url), "utf8");
+  assert.match(sql, /membership_renewal_campaigns where membership_year=p_year and open/);
+  assert.match(sql, /m\.contact_email is not null/);
+  assert.match(sql, /t\.status='paid' or t\.amount_paid_pence>0/);
+  assert.match(sql, /interval '7 days'/);
+  assert.match(sql, /grant execute on function public\.queue_membership_renewal_reminders\(integer,uuid\) to service_role/);
+});
+
+test("the fee in force is the latest active fee starting in or before the year", async () => {
+  const { feeInForce } = await import("../lib/membership-admin/renewals.ts");
+  const fee = (year, pence, version = 1, active = true, plan = "adult") => ({ plan_id: plan, membership_year: year, amount_pence: pence, version, active });
+  const prices = [fee(2025, 4000), fee(2026, 4500), fee(2026, 4600, 2), fee(2028, 5000), fee(2026, 9900, 3, false), fee(2026, 100, 1, true, "junior")];
+  assert.equal(feeInForce(prices, "adult", 2026)?.amount_pence, 4600);
+  assert.equal(feeInForce(prices, "adult", 2027)?.amount_pence, 4600);
+  assert.equal(feeInForce(prices, "adult", 2028)?.amount_pence, 5000);
+  assert.equal(feeInForce(prices, "adult", 2024), null);
+  assert.equal(feeInForce(prices, "student", 2026), null);
 });

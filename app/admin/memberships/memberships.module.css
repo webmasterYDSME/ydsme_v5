@@ -88,6 +88,20 @@
 .rowAction svg { width: 15px; height: 15px; transition: transform .15s; }
 .rowAction:hover, .rowAction:focus-visible { background: #14302a; border-color: #14302a; color: #fff; }
 .rowAction:hover svg { transform: translateX(2px); }
+.feeRow { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px 170px; align-items: center; column-gap: 20px; padding: 12px 22px; border-bottom: 1px solid rgba(16,24,20,.12); }
+.feeRow:last-child { border-bottom: 0; }
+.feeRow small { display: block; margin-top: 3px; color: #56625b; font-size: 13px; }
+.feeRow strong { font: 500 21px/1.15 var(--font-display); }
+.feeRow .registerMeta > span { font-size: 15px; font-weight: 700; }
+.nameLink { color: inherit; text-decoration: none; }
+.nameLink:hover { text-decoration: underline; text-underline-offset: 3px; }
+.card > .search { padding: 0; border: 0; background: transparent; }
+.feeLinks { display: flex; justify-content: flex-end; gap: 16px; }
+.warnText { color: #84241a; font-style: normal; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.stats > div { padding: 12px 14px; border: 1px solid rgba(16,24,20,.14); border-radius: 6px; background: #f7f4ec; }
+.stats dt { color: #56625b; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.stats dd { margin: 2px 0 0; font: 500 30px/1.1 var(--font-display); }
 .registerNote { margin: 14px 2px 0; color: #56625b; font-size: 13px; }
 
 /* Member record */
@@ -142,6 +156,9 @@
   .taskRow > :nth-child(3) { grid-column: 2; grid-row: 1; justify-self: end; }
   .workspace .taskRow > a { grid-column: 2; grid-row: 2; align-self: center; width: auto; min-height: 40px; padding: 0 14px; }
   .registerHead { display: none; }
+  .feeRow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 13px 16px; }
+  .feeRow .registerMeta { grid-column: 1 / -1; grid-row: 2; }
+  .feeLinks { grid-column: 2; grid-row: 1; align-self: start; }
   /* Register rows: name and button on one line, plan, status and paid-until on the next. */
   .registerRow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 13px 16px; }
   .registerRow > :first-child { grid-column: 1; grid-row: 1; }

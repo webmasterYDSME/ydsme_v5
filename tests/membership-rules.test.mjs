@@ -137,17 +137,15 @@ test("keeps annual fees prominent while hiding rarely changed membership rules",
     readMembershipAdminSource(),
     readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(officerPage, /Membership types and annual fees/);
-  assert.match(officerPage, /current fee continues automatically each year/);
-  assert.match(officerPage, /Save fee change/);
-  assert.match(officerPage, /<details className="membership-plan-settings">/);
-  assert.match(officerPage, /Edit membership details/);
-  assert.match(officerPage, /Save membership details/);
+  assert.match(officerPage, /Membership types and fees/);
+  assert.match(officerPage, /A fee carries on from year to year/);
+  assert.match(officerPage, /Save fee/);
+  assert.match(officerPage, /Edit type/);
+  assert.match(officerPage, /Save membership type/);
   assert.doesNotMatch(officerPage, /Save new annual fee/);
-  assert.doesNotMatch(officerPage, /Save membership type/);
-  assert.match(actions, /section=plans&notice=price-saved#plans/);
-  assert.match(actions, /section=plans&notice=plan-updated#plans/);
-  assert.match(actions, /section=plans&error=price-save-failed#plans/);
+  assert.match(actions, /renewals\?notice=price-saved/);
+  assert.match(actions, /renewals\?notice=plan-updated/);
+  assert.match(actions, /renewals\?error=price-save-failed/);
 });
 
 test("carries unchanged annual fees forward and delays future Stripe price changes", async () => {
@@ -171,8 +169,8 @@ test("carries unchanged annual fees forward and delays future Stripe price chang
   assert.match(actions, /notice=price-unchanged/);
   assert.match(webhook, /ensureMembershipPlanPrice\(pricedMember\.current_plan_id, invoiceYear \+ 1\)/);
   assert.match(webhook, /proration_behavior: "none"/);
-  assert.match(officerPage, /Use this only when the amount changes/);
-  assert.match(officerPage, /Continued/);
+  assert.match(officerPage, /Change it only when the amount changes/);
+  assert.match(officerPage, /carried on/);
 });
 
 test("shows a single paid membership amount because partial payments are unsupported", async () => {
@@ -185,7 +183,7 @@ test("keeps officer contact and renewal work safe and understandable", async () 
   const root = new URL("../", import.meta.url);
   const [officerPage, renewalForm, actions] = await Promise.all([
     readMembershipAdminSource(),
-    readFile(new URL("app/admin/memberships/OfficerRenewalPaymentForm.tsx", root), "utf8"),
+    readFile(new URL("app/admin/memberships/_components/MemberPaymentPanel.tsx", root), "utf8"),
     readFile(new URL("lib/actions/membership.ts", root), "utf8"),
   ]);
   const inbox = await readFile(new URL("lib/membership-admin/inbox.ts", root), "utf8");

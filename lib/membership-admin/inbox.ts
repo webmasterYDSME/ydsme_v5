@@ -346,7 +346,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     add({
       key: `notice.checkout-${notice.id}`, type: "notice", kind: "problem", name: notice.title, summary: notice.body, since: notice.created_at, cta: "See details", memberId: null,
       area: "Online payments", title: notice.title, body: notice.body, technical: null,
-      href: notice.action_href || "/admin/memberships/setup?tab=fees", hrefLabel: "Review membership prices",
+      href: notice.action_href || "/admin/memberships/renewals", hrefLabel: "Review membership prices",
     });
   }
   for (const attempt of (attemptResult.data ?? []) as Row[]) {

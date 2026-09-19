@@ -169,12 +169,12 @@ test('officer opens annual renewal once and guardian can use a personal link wit
  await login.locator('[name="email"]').fill('journey.membership.officer@example.test');
  await login.locator('[name="password"]').fill(process.env.JOURNEY_TEST_PASSWORD);
  await login.getByRole('button',{name:/Sign in securely/}).click();await page.waitForURL(/\/admin\/memberships/);
+ page.once('dialog',(dialog)=>dialog.accept());
  await page.getByRole('button',{name:'Open renewals and send invitations'}).click();
  await page.waitForURL(/notice=renewals-opened/);
  const {data:member}=await admin.from('members').select('id').eq('full_name','Journey Membership Junior').single();
  const {data:notice,error}=await admin.from('membership_notifications').select('action_href').eq('member_id',member.id).eq('kind','membership.renewal-invitation').single();
  expect(error).toBeNull();
- await page.getByRole('button',{name:'Open renewals and send invitations'}).click();await page.waitForURL(/notice=renewals-opened/);
  expect((await admin.from('membership_notifications').select('id').eq('member_id',member.id).eq('kind','membership.renewal-invitation')).data).toHaveLength(1);
  await page.context().clearCookies();await page.goto(notice.action_href);
  await expect(page.getByRole('heading',{name:'Renew your membership'})).toBeVisible();

@@ -29,13 +29,12 @@ const inboxKindByQueue: Record<string, string> = {
 };
 
 const setupTabBySection: Record<string, string> = {
-  plans: "fees",
   "payment-settings": "payment",
   reports: "reports",
   "membermojo-import": "import",
 };
 
-const setupTabByView: Record<string, string> = { plans: "fees", reports: "reports" };
+const setupTabByView: Record<string, string> = { reports: "reports" };
 
 /**
  * Returns the current address for an old-style membership URL, or null when the query holds
@@ -66,7 +65,7 @@ export function legacyMembershipRedirect(query: Query): string | null {
   if (section) {
     if (inboxKindBySection[section]) return to(MEMBERSHIP_ADMIN_BASE, { kind: inboxKindBySection[section] });
     if (setupTabBySection[section]) return to(`${MEMBERSHIP_ADMIN_BASE}/setup`, { tab: setupTabBySection[section] });
-    if (section === "renewals") return to(`${MEMBERSHIP_ADMIN_BASE}/renewals`);
+    if (section === "renewals" || section === "plans") return to(`${MEMBERSHIP_ADMIN_BASE}/renewals`);
     if (section === "add-member") return to(`${MEMBERSHIP_ADMIN_BASE}/members`, { add: "member" });
     if (section === "honorary") return to(`${MEMBERSHIP_ADMIN_BASE}/members`, { status: "honorary" });
     if (section === "member-history") return to(`${MEMBERSHIP_ADMIN_BASE}/members`);
@@ -75,7 +74,7 @@ export function legacyMembershipRedirect(query: Query): string | null {
   if (queue && inboxKindByQueue[queue]) return to(MEMBERSHIP_ADMIN_BASE, { kind: inboxKindByQueue[queue] });
 
   if (view === "members") return to(`${MEMBERSHIP_ADMIN_BASE}/members`);
-  if (view === "payments") return to(`${MEMBERSHIP_ADMIN_BASE}/renewals`);
+  if (view === "payments" || view === "plans") return to(`${MEMBERSHIP_ADMIN_BASE}/renewals`);
   if (view && setupTabByView[view]) return to(`${MEMBERSHIP_ADMIN_BASE}/setup`, { tab: setupTabByView[view] });
 
   return to(MEMBERSHIP_ADMIN_BASE);

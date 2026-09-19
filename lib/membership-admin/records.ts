@@ -4,6 +4,7 @@ import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { buildRenewalChoices, renewableMembers, type RenewalMember } from "@/lib/membership-rules";
 import { money } from "@/lib/membership-admin/format";
+import { buildRenewalRows, defaultRenewalYear, summariseRenewals } from "@/lib/membership-admin/renewals";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = any;
@@ -104,27 +105,66 @@ export async function loadMemberRecord(memberId: string) {
 }
 
 /** Members and amounts for the officer-recorded renewal form. */
-export async function loadRenewalWorkspace() {
+/** Reads every row of a query, a page at a time, because one request is capped at 1,000 rows. */
+async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>, what: string): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error) fail(what, error);
+    rows.push(...(data ?? []));
+    if ((data?.length ?? 0) < 1000) return rows;
+  }
+}
+
+/** Everything the Renewals screen shows for one membership year. */
+export async function loadRenewalWorkspace(requestedYear?: string | null) {
   const admin = createServiceClient();
   const currentYear = new Date().getUTCFullYear();
-  const [members, prices, transitions, terms, plans] = await Promise.all([
-    admin.from("members").select("id,full_name,current_plan_id,effective_state,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name"),
+  const [memberRows, prices, transitions, terms, plans, campaigns] = await Promise.all([
+    readAll<Row>((from, to) => admin.from("members").select("id,full_name,contact_email,current_plan_id,effective_state,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").neq("effective_state", "archived").order("full_name").order("id").range(from, to), "renewals"),
     admin.from("membership_plan_prices").select("plan_id,membership_year,amount_pence").eq("active", true).order("membership_year", { ascending: false }),
     admin.from("membership_plan_transitions").select("member_id,membership_year,status,to_plan_id")
       .in("status", ["scheduled", "approved", "awaiting_student_review"]).gte("membership_year", currentYear).lte("membership_year", currentYear + 1),
-    admin.from("membership_terms").select("member_id,membership_year,status,amount_due_pence,amount_paid_pence,source").gte("membership_year", currentYear).lte("membership_year", currentYear + 1),
-    admin.from("membership_plans").select("id,name,membership_plan_prices(membership_year,amount_pence,version,active)").eq("active", true).order("sort_order"),
+    readAll<Row>((from, to) => admin.from("membership_terms").select("member_id,membership_year,status,amount_due_pence,amount_paid_pence,source").gte("membership_year", currentYear).lte("membership_year", currentYear + 1).order("id").range(from, to), "renewals"),
+    admin.from("membership_plans").select("id,name").order("sort_order"),
+    admin.from("membership_renewal_campaigns").select("membership_year,open,opened_at").gte("membership_year", currentYear).lte("membership_year", currentYear + 1),
   ]);
-  for (const result of [members, prices, transitions, terms, plans]) if (result.error) fail("renewals", result.error);
-  const memberRows = (members.data ?? []) as Row[];
+  for (const result of [prices, transitions, plans, campaigns]) if (result.error) fail("renewals", result.error);
+  const openYears = ((campaigns.data ?? []) as Row[]).filter((campaign) => campaign.open).map((campaign) => Number(campaign.membership_year));
+  const year = defaultRenewalYear(currentYear, openYears, requestedYear);
+  const [invitations, reminder] = await Promise.all([
+    readAll<Row>((from, to) => admin.from("membership_renewal_invitations").select("member_id").eq("membership_year", year).order("member_id").range(from, to), "renewal invitations"),
+    admin.from("membership_notifications").select("created_at").eq("kind", "membership.renewal-reminder")
+      .like("deduplication_key", `renewal-reminder-%-${year}-%`).order("created_at", { ascending: false }).limit(1),
+  ]);
+  if (reminder.error) fail("renewal reminders", reminder.error);
+  const planNames = new Map(((plans.data ?? []) as Row[]).map((plan) => [plan.id as string, plan.name as string]));
+  const choices = buildRenewalChoices({
+    members: memberRows as RenewalMember[], prices: (prices.data ?? []) as Row[], transitions: (transitions.data ?? []) as Row[],
+    terms: terms as Row[], currentYear, formatMoney: money,
+  });
+  const rows = buildRenewalRows({
+    year,
+    members: memberRows.map((member) => ({ id: member.id, full_name: member.full_name, contact_email: member.contact_email ?? null, effective_state: member.effective_state, plan_name: planNames.get(member.current_plan_id) ?? null })),
+    choices, terms: terms as Row[], invitedIds: invitations.map((invitation) => invitation.member_id as string),
+  });
+  // Members who would be told about a fee change, by membership type.
+  const affectedByPlan: Record<string, number> = {};
+  for (const member of memberRows) {
+    if (member.current_plan_id && ["active", "grace", "payment_review"].includes(member.effective_state)) {
+      affectedByPlan[member.current_plan_id] = (affectedByPlan[member.current_plan_id] ?? 0) + 1;
+    }
+  }
+  const campaign = ((campaigns.data ?? []) as Row[]).find((item) => Number(item.membership_year) === year) ?? null;
   return {
     currentYear,
-    plans: (plans.data ?? []) as Row[],
-    renewable: renewableMembers(memberRows as RenewalMember[]) as Row[],
-    choices: buildRenewalChoices({
-      members: memberRows as RenewalMember[], prices: (prices.data ?? []) as Row[], transitions: (transitions.data ?? []) as Row[],
-      terms: (terms.data ?? []) as Row[], currentYear, formatMoney: money,
-    }),
+    year,
+    campaignOpen: Boolean(campaign?.open),
+    lastReminderAt: ((reminder.data ?? []) as Row[])[0]?.created_at as string | null ?? null,
+    rows,
+    summary: summariseRenewals(rows),
+    affectedByPlan,
+    choices,
   };
 }
 

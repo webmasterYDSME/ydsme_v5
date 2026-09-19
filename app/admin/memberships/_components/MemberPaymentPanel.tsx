@@ -8,7 +8,7 @@ import { SidePanel } from "./SidePanel";
 import styles from "../memberships.module.css";
 
 /** Records a cash, bank-transfer or cheque renewal for the member whose page is open. */
-export function MemberPaymentPanel({ memberId, name, planName, renewable, choices, currentYear, year, closeHref, yearHref }: {
+export function MemberPaymentPanel({ memberId, name, planName, renewable, choices, currentYear, year, closeHref, yearHref, returnTo }: {
   memberId: string;
   name: string;
   planName: string | null;
@@ -18,6 +18,8 @@ export function MemberPaymentPanel({ memberId, name, planName, renewable, choice
   year: number;
   closeHref: string;
   yearHref: (year: number) => string;
+  /** Where the result should appear. Leave out to return to the member's own record. */
+  returnTo?: "renewals";
 }) {
   const today = londonToday();
   const choice = choices.find((item) => item.membership_year === year) ?? null;
@@ -31,6 +33,7 @@ export function MemberPaymentPanel({ memberId, name, planName, renewable, choice
       <form action={confirmExistingMemberOfflineRenewal} className="editor-form membership-cash-renewal-form">
         <input type="hidden" name="member_id" value={memberId}/>
         <input type="hidden" name="membership_year" value={year}/>
+        {returnTo ? <input type="hidden" name="return_to" value={returnTo}/> : null}
         <div className={`membership-renewal-charge ${canRecord ? "" : "is-unavailable"}`} aria-live="polite">
           <CirclePoundSterling aria-hidden="true"/>
           <div><span>Amount to record</span><strong>{canRecord ? money(choice!.amount_pence!) : "No payment due"}</strong><small>{choice?.note ?? "Choose a membership year."}</small></div>

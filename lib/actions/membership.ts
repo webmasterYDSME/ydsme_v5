@@ -872,21 +872,23 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const paymentMethod = z.enum(["cash", "bank_transfer", "cheque"]).parse(formData.get("payment_method"));
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear() + 1)
     .parse(formData.get("membership_year"));
+  // Results go back to where the officer started: the Renewals list, or else the member's own record.
+  const back = formData.get("return_to") === "renewals" ? `/admin/memberships/renewals?year=${year}` : `/admin/memberships?member=${memberId}`;
   const reference = z.string().trim().min(2).max(120).parse(formData.get("payment_reference"));
   const receivedOn = z.iso.date().parse(formData.get("received_on"));
-  if (receivedOn > londonToday()) redirect("/admin/memberships?error=future-payment-date");
+  if (receivedOn > londonToday()) redirect(`${back}&error=future-payment-date`);
   if (paymentMethod === "cheque" && formData.get("cleared") !== "on") {
-    redirect("/admin/memberships?error=cheque-clearance-required");
+    redirect(`${back}&error=cheque-clearance-required`);
   }
   const admin = createServiceClient();
   const { data: member } = await admin.from("members")
     .select("id,current_plan_id,effective_state,membership_subscriptions(stripe_subscription_id),honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)")
     .eq("id", memberId).maybeSingle();
-  if (!member?.current_plan_id) redirect("/admin/memberships?error=offline-member-unavailable");
+  if (!member?.current_plan_id) redirect(`${back}&error=offline-member-unavailable`);
   const { data: transition } = await admin.from("membership_plan_transitions")
     .select("to_plan_id,status").eq("member_id", memberId).eq("membership_year", year)
     .in("status", ["scheduled", "approved", "awaiting_student_review"]).maybeSingle();
-  if (transition?.status === "awaiting_student_review") redirect("/admin/memberships?error=student-request-pending");
+  if (transition?.status === "awaiting_student_review") redirect(`${back}&error=student-request-pending`);
   const honoraryRows = member.honorary_memberships as Array<{ status: string; effective_from: string; revoked_effective_on: string | null; replacement_plan_id: string | null }> | null;
   const honoraryTransition = member.effective_state === "honorary"
     ? honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
@@ -895,21 +897,21 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
   const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
     && item.effective_from <= `${year}-12-31`
     && (!item.revoked_effective_on || item.revoked_effective_on > `${year}-01-01`)) ?? null;
-  if (honoraryForYear && !honoraryTransition) redirect("/admin/memberships?error=honorary-year-no-payment");
+  if (honoraryForYear && !honoraryTransition) redirect(`${back}&error=honorary-year-no-payment`);
   const price = await ensureMembershipPlanPrice(
     honoraryTransition?.replacement_plan_id ?? transition?.to_plan_id ?? member.current_plan_id,
     year,
   ).catch(() => null);
-  if (!price) redirect("/admin/memberships?error=price-unavailable");
+  if (!price) redirect(`${back}&error=price-unavailable`);
   const transitionDate = honoraryTransition?.revoked_effective_on
     ? new Date(`${honoraryTransition.revoked_effective_on}T12:00:00Z`) : null;
   const { data: pendingInitialTerm } = await admin.from("membership_terms")
     .select("plan_price_id,status,source,amount_due_pence,amount_paid_pence")
     .eq("member_id", memberId).eq("membership_year", year).maybeSingle();
   if (pendingInitialTerm?.status === "paid" && pendingInitialTerm.amount_paid_pence >= pendingInitialTerm.amount_due_pence) {
-    redirect("/admin/memberships?error=membership-year-already-paid");
+    redirect(`${back}&error=membership-year-already-paid`);
   }
-  if (pendingInitialTerm?.status === "payment_review") redirect("/admin/memberships?error=payment-review-required");
+  if (pendingInitialTerm?.status === "payment_review") redirect(`${back}&error=payment-review-required`);
   const completesInitialTerm = pendingInitialTerm?.plan_price_id === price.id
     && pendingInitialTerm.status === "scheduled"
     && pendingInitialTerm.amount_paid_pence === 0
@@ -927,12 +929,12 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     p_actor_id: user.id,
     p_payment_reference: reference,
   });
-  if (error) redirect("/admin/memberships?error=offline-renewal-failed");
+  if (error) redirect(`${back}&error=offline-renewal-failed`);
   await processMembershipProviderCommands(memberId);
   await ensureMemberPortalInvitation(memberId);
   revalidatePath("/account");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=offline-renewal-confirmed");
+  redirect(`${back}&notice=offline-renewal-confirmed`);
 }
 
 export async function markMembershipNotificationRead(formData: FormData) {
@@ -1385,14 +1387,14 @@ export async function updateMembershipPlan(formData: FormData) {
     requires_approval: z.string().optional().transform((value) => value === "on"),
   }).parse(Object.fromEntries(formData));
   if (values.maximum_age < values.minimum_age) {
-    redirect("/admin/memberships?section=plans&error=plan-age-range-invalid#plans");
+    redirect("/admin/memberships/renewals?error=plan-age-range-invalid");
   }
   const admin = createServiceClient();
   const { data: before } = await admin.from("membership_plans")
     .select("description,minimum_age,maximum_age,active,requires_approval").eq("id", planId).maybeSingle();
-  if (!before) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
+  if (!before) redirect("/admin/memberships/renewals?error=plan-unavailable");
   const { error } = await admin.from("membership_plans").update({ ...values, updated_at: new Date().toISOString() }).eq("id", planId);
-  if (error) redirect("/admin/memberships?section=plans&error=plan-update-failed#plans");
+  if (error) redirect("/admin/memberships/renewals?error=plan-update-failed");
   await writeAudit({
     actorUserId: user.id, actorRole: role, action: "membership.plan-updated",
     entityType: "membership-plan", entityId: planId, before, after: values,
@@ -1400,7 +1402,7 @@ export async function updateMembershipPlan(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=plans&notice=plan-updated#plans");
+  redirect("/admin/memberships/renewals?notice=plan-updated");
 }
 
 export async function configureMembershipPrice(formData: FormData) {
@@ -1411,7 +1413,7 @@ export async function configureMembershipPrice(formData: FormData) {
   const admin = createServiceClient();
   const { data: plan } = await admin.from("membership_plans")
     .select("id,name,stripe_product_id").eq("id", planId).maybeSingle();
-  if (!plan) redirect("/admin/memberships?section=plans&error=plan-unavailable#plans");
+  if (!plan) redirect("/admin/memberships/renewals?error=plan-unavailable");
   const { data: effectivePrice } = await admin.from("membership_plan_prices")
     .select("amount_pence,stripe_price_id")
     .eq("plan_id", plan.id)
@@ -1422,7 +1424,7 @@ export async function configureMembershipPrice(formData: FormData) {
     .limit(1)
     .maybeSingle();
   if (effectivePrice?.amount_pence === amountPence && effectivePrice.stripe_price_id) {
-    redirect("/admin/memberships?notice=price-unchanged&section=plans#plans");
+    redirect("/admin/memberships/renewals?notice=price-unchanged");
   }
   const stripe = getStripe();
   let productId = plan.stripe_product_id;
@@ -1447,7 +1449,7 @@ export async function configureMembershipPrice(formData: FormData) {
     amount_pence: amountPence, currency: "gbp", stripe_price_id: stripePrice.id,
     active: true, created_by: user.id,
   });
-  if (error) redirect("/admin/memberships?section=plans&error=price-save-failed#plans");
+  if (error) redirect("/admin/memberships/renewals?error=price-save-failed");
   await admin.from("membership_plan_prices").update({ active: false })
     .eq("plan_id", plan.id)
     .gt("membership_year", year)
@@ -1461,7 +1463,7 @@ export async function configureMembershipPrice(formData: FormData) {
       .eq("current_plan_id", plan.id).in("effective_state", ["active", "grace", "payment_review"])
       .order("id").range(offset, offset + pageSize - 1);
     if (affectedError) {
-      redirect("/admin/memberships?section=plans&error=price-transition-queue-failed#plans");
+      redirect("/admin/memberships/renewals?error=price-transition-queue-failed");
     }
     for (const member of affectedMembers ?? []) {
       const subscriptions = member.membership_subscriptions as Array<{ stripe_subscription_id: string; next_charge_at: string | null }> | null;
@@ -1501,7 +1503,7 @@ export async function configureMembershipPrice(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=plans&notice=price-saved#plans");
+  redirect("/admin/memberships/renewals?notice=price-saved");
 }
 
 export async function stageMemberMojoCutover() {

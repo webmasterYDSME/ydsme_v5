@@ -450,7 +450,7 @@ async function recordApplicationCheckoutProblem(
       title: isConfigurationProblem ? "Online payment setup needed" : "Online payment could not be started",
       body: officerBody,
       action_href: isConfigurationProblem
-        ? "/admin/memberships/setup?tab=fees"
+        ? "/admin/memberships/renewals"
         : "/admin/memberships?kind=problem",
       email_status: "cancelled",
       deduplication_key: `membership-checkout-${reason}-${application.id}-${recipientUserId}`,
