@@ -74,6 +74,9 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
   const [paid, setPaid] = useState(values.payment_received === "on");
   const [method, setMethod] = useState<keyof typeof paymentMethods>((value("payment_method") || "cash") as keyof typeof paymentMethods);
   const [matches, setMatches] = useState<PossibleDuplicate[]>([]);
+  // The newsletter is emailed, so it can only be offered once there is an address (and is dropped if the address is cleared).
+  const hasEmail = email.trim() !== "";
+  const newsletterOn = hasEmail && newsletter;
   const junior = eligibility.selected?.slug === "junior";
   const message = state.error ? membershipErrorMessage(state.error) ?? "The membership could not be added. Check the details and try again." : null;
   const alert = useRef<HTMLParagraphElement>(null);
@@ -119,14 +122,14 @@ function Fields({ state, formAction, plans, prices, today }: { state: OfficerMem
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>Contact details</h3>
       <div className={styles.fieldGrid}>
-        <label>Email address <em>{newsletter ? "Needed for the newsletter" : "Optional"}</em><input type="email" name="contact_email" value={email} onChange={(event) => setEmail(event.target.value)} required={newsletter}/></label>
+        <label>Email address <em>Optional</em><input type="email" name="contact_email" value={email} onChange={(event) => setEmail(event.target.value)}/></label>
         <label>Telephone number <em>Optional</em><input type="tel" name="contact_number" defaultValue={value("contact_number")} pattern={membershipPhonePattern} title={membershipPhoneHint}/></label>
       </div>
-      <p className={styles.panelNote}>{email.trim()
-        ? paid ? "A website invitation is emailed as soon as the member is added." : "A website invitation is emailed once payment is recorded."
-        : "With no email address, no website invitation or newsletter can be sent."}</p>
-      <label className="checkbox-row"><input type="checkbox" name="newsletter_opt_in" checked={newsletter} onChange={(event) => setNewsletter(event.target.checked)}/>They would like the Society newsletter <em>Optional</em></label>
-      {newsletter ? <div className={styles.consentBox}>
+      <p className={styles.panelNote}>{hasEmail
+        ? paid ? "An invitation to the member portal is emailed as soon as the member is added." : "An invitation to the member portal is emailed once payment is recorded."
+        : "Without an email address, this member cannot be given access to the member portal."}</p>
+      {hasEmail ? <label className="checkbox-row"><input type="checkbox" name="newsletter_opt_in" checked={newsletter} onChange={(event) => setNewsletter(event.target.checked)}/>They would like the Society newsletter <em>Optional</em></label> : null}
+      {newsletterOn ? <div className={styles.consentBox}>
         <p className={styles.panelNote}>Only tick this if they have agreed. How and when they agreed is kept as their consent record.</p>
         <div className={styles.fieldGrid}>
           <label>How did they agree?<select name="newsletter_consent_source" defaultValue={value("newsletter_consent_source") || "paper_form"} required>{Object.entries(newsletterConsentSources).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>

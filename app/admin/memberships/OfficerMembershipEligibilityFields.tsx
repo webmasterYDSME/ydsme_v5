@@ -78,7 +78,7 @@ export function OfficerMembershipEligibilityFields({ eligibility: e }: { eligibi
       input.setCustomValidity(defaultMembershipPlan(matches.plans) ? "" : "No membership is available for this age.");
     }}/></label>
     <details className={styles.disclosure}>
-      <summary>Membership starts {dateLabel(e.startDate) || "today"} · change</summary>
+      <summary>Membership starts {dateLabel(e.startDate) || "today"}</summary>
       <label htmlFor="officer-membership-start-date">Membership start date<DatePicker id="officer-membership-start-date" name="received_on" required max={today} value={e.startDate} onValueChange={(value) => {
         e.setStartDate(value);
         e.setStudent(false);
