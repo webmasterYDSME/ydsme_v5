@@ -41,14 +41,18 @@ export default async function Renewal({ searchParams }: { searchParams: Promise<
   const { data: term } = await admin.from("membership_terms").select("status,amount_paid_pence").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).maybeSingle();
   if (term?.status === "paid") return <Card icon={<CircleCheck/>} title="Your membership is already paid"><p>{member.full_name} · {invitation.membership_year}</p><p>There is nothing more to do. Thank you.</p></Card>;
   if ((term?.amount_paid_pence ?? 0) > 0) return <Card icon={<ShieldAlert/>} title="Your payment needs review"><p>Contact the membership officer before making another payment.</p></Card>;
-  const { data: transition } = await admin.from("membership_plan_transitions").select("to_plan_id").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).in("status", ["approved", "scheduled"]).maybeSingle();
+  const { data: transition } = await admin.from("membership_plan_transitions").select("from_plan_id,to_plan_id,status").eq("member_id", invitation.member_id).eq("membership_year", invitation.membership_year).in("status", ["approved", "scheduled", "awaiting_student_review"]).maybeSingle();
+  // A pending Student request decides the fee, so nothing can be paid until the officer has answered it.
+  if (transition?.status === "awaiting_student_review") return <Card icon={<Clock/>} title="Your membership type is being reviewed"><p>Your Student membership request needs to be decided before you can renew. The membership officer will be in touch.</p></Card>;
   const price = await ensureMembershipPlanPrice(transition?.to_plan_id ?? member.current_plan_id, invitation.membership_year);
   const { data: plan } = await admin.from("membership_plans").select("name").eq("id", price.plan_id).single();
+  const { data: previousPlan } = transition?.from_plan_id && transition.from_plan_id !== transition.to_plan_id
+    ? await admin.from("membership_plans").select("name").eq("id", transition.from_plan_id).single() : { data: null };
   const year = invitation.membership_year;
   return <Card icon={<CreditCard/>} title="Renew your membership">
     <p>{member.full_name} · Membership for {year}</p>
     <dl className={styles.summary}>
-      <div><dt>Membership</dt><dd>{plan?.name}</dd></div>
+      <div><dt>Membership</dt><dd>{plan?.name}{previousPlan ? ` (was ${previousPlan.name})` : ""}</dd></div>
       <div><dt>Runs</dt><dd>1 January – 31 December {year}</dd></div>
       <div className={styles.total}><dt>To pay</dt><dd>{pounds(price.amount_pence)}</dd></div>
     </dl>

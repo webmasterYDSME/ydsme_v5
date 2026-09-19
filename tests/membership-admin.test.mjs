@@ -262,3 +262,23 @@ test("renewal emails say what the link is for and when it stops working", async 
   assert.match(worker, /Renew my membership/);
   assert.match(worker, /Open membership account/);
 });
+
+test("renewal emails quote the fee for the member's next type and list the other ways to pay", async () => {
+  const [sql, page] = await Promise.all([
+    readFile(new URL("../supabase/migrations/202609190003_membership_renewal_email_details.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/membership/renew/page.tsx", import.meta.url), "utf8"),
+  ]);
+  // The fee follows any scheduled or approved plan change, and a pending Student request quotes nothing.
+  assert.match(sql, /coalesce\(t\.to_plan_id,m\.current_plan_id\)/);
+  assert.match(sql, /awaiting_student_review/);
+  assert.match(sql, /Your membership type changes from/);
+  // Placeholder settings are never emailed.
+  assert.match(sql, /active and configured/);
+  assert.match(sql, /Bank transfer/);
+  assert.match(sql, /Cheque/);
+  assert.match(sql, /Cash/);
+  // Both the invitation and the reminder use them.
+  assert.equal((sql.match(/membership_renewal_other_ways_text\(/g) ?? []).length >= 3, true);
+  assert.match(page, /awaiting_student_review/);
+  assert.match(page, /Your membership type is being reviewed/);
+});
