@@ -4,13 +4,13 @@ import { FileUp } from "lucide-react";
 import { MemberMojoImportForm, SendInvitationsPanel } from "@/app/components/MemberMojoImportForm";
 import { requireRole } from "@/lib/auth";
 import { membershipMode } from "@/lib/features";
-import { countPendingInvitations } from "@/lib/membermojo";
+import { getMemberInvitationStatus } from "@/lib/membermojo";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export default async function MemberImportPage() {
   await requireRole(["administrator"]);
-  const [pending, lastImport] = await Promise.all([
-    countPendingInvitations(),
+  const [invitations, lastImport] = await Promise.all([
+    getMemberInvitationStatus(),
     createAdminClient().from("audit_logs").select("occurred_at,summary").eq("action", "membermojo.list-imported")
       .order("occurred_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
@@ -21,7 +21,7 @@ export default async function MemberImportPage() {
     {membermojoRuns ? <p className="form-message">MemberMojo is still the membership system. Until the website takes over, its apply and renew pages send people to MemberMojo and the membership area is hidden. Importing the list keeps the website register and sign-ins up to date.</p> : null}
     {lastImport.data ? <p className="form-help">Last import: {format(new Date(lastImport.data.occurred_at), "d MMMM yyyy 'at' HH:mm")}. {lastImport.data.summary}</p> : null}
     <MemberMojoImportForm/>
-    <SendInvitationsPanel pending={pending}/>
+    <SendInvitationsPanel status={invitations}/>
     <Link className="back-link" href="/admin/members">← Return to member register</Link>
   </div>;
 }

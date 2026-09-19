@@ -1,17 +1,20 @@
 "use client";
 
-import { useActionState } from "react";
-import { AlertTriangle, Check, Database, FileSearch, FileUp, Mail, ShieldCheck } from "lucide-react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { AlertTriangle, Check, Database, FileSearch, FileUp, Mail, Pause, ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import {
   applyMemberList,
   previewMemberList,
-  sendMemberInvitations,
+  pauseMemberInvitations,
+  startMemberInvitations,
   type MemberImportApplyState,
   type MemberImportPreviewState,
   type MemberInvitationState,
 } from "@/lib/actions/member-imports";
-import type { MemberImportPreview } from "@/lib/membermojo";
+import type { MemberImportPreview, MemberInvitationStatus } from "@/lib/membermojo";
 
 const previewInitial: MemberImportPreviewState = { status: "idle" };
 const applyInitial: MemberImportApplyState = { status: "idle" };
@@ -96,14 +99,40 @@ export function MemberMojoImportForm() {
   </div>;
 }
 
-export function SendInvitationsPanel({ pending }: { pending: number }) {
-  const [state, formAction] = useActionState(sendMemberInvitations, inviteInitial);
-  const remaining = state.remaining ?? pending;
+export function SendInvitationsPanel({ status }: { status: MemberInvitationStatus }) {
+  const router = useRouter();
+  const [startState, startAction] = useActionState(startMemberInvitations, inviteInitial);
+  const [pauseState, pauseAction] = useActionState(pauseMemberInvitations, inviteInitial);
+  // While the run is going, keep the numbers fresh without the administrator pressing anything.
+  useEffect(() => {
+    if (!status.enabled) return;
+    const timer = window.setInterval(() => router.refresh(), 30_000);
+    return () => window.clearInterval(timer);
+  }, [status.enabled, router]);
+
+  const waiting = status.enabled && status.pausedUntil;
+  const heading = status.enabled
+    ? waiting ? "Waiting for the email limit to reset" : "Sending invitations"
+    : status.pending ? `${plural(status.pending, "person", "people")} still to invite`
+    : status.finishedAt ? "Everyone imported has been invited" : "Nobody is waiting for an invitation";
+  const message = pauseState.message ?? startState.message;
+  const failed = (pauseState.status === "error" && pauseState.message) || (startState.status === "error" && startState.message);
+
   return <section className="portal-card member-import-card" aria-labelledby="member-invite-heading">
-    <div className="member-import-section-heading"><div><span>Website invitations</span><h3 id="member-invite-heading">{remaining ? `${plural(remaining, "person", "people")} still to invite` : "Everyone imported has been invited"}</h3><p>Each person receives one email with a secure link that opens their account. No password is needed; they sign in later with a one-time link sent to their email. Members who already have a login are linked without an email. Up to 40 are sent each time you press the button.</p></div><Mail/></div>
-    {remaining ? <form action={formAction} className="stack-form">
-      <PendingSubmitButton className="button dark" pendingLabel="Sending invitations…"><Mail/>Send the next {Math.min(remaining, 40)} invitations</PendingSubmitButton>
-    </form> : null}
-    {state.message ? <p className={`form-message ${state.status === "error" ? "error" : "success"}`} role="status">{state.message}</p> : null}
+    <div className="member-import-section-heading"><div><span>Website invitations</span><h3 id="member-invite-heading">{heading}</h3>
+      <p>Each person receives one email with a secure link that opens their account. No password is needed; they sign in later with a one-time link sent to their email. Members who already have a login are linked without an email.</p>
+      <p>Press the button once. A few invitations go out every five minutes (about 60 an hour), failures are tried again, and it stops by itself when everyone has been invited. You can leave this page.</p></div><Mail/></div>
+    {status.enabled ? <p className="form-help" role="status">
+      {status.pending} still to invite · {status.sent} invited and {status.linked} linked since it started{status.failed ? ` · ${status.failed} failed attempts` : ""}.
+      {waiting && status.pausedUntil ? ` The email service has reached its hourly limit. Trying again at ${format(new Date(status.pausedUntil), "HH:mm")}.` : ""}
+    </p> : status.finishedAt ? <p className="form-help" role="status">Finished on {format(new Date(status.finishedAt), "d MMMM yyyy 'at' HH:mm")}: {status.sent} invited and {status.linked} linked to an existing login.</p> : null}
+    {status.gaveUp ? <p className="form-message error" role="status">{plural(status.gaveUp, "person", "people")} could not be invited after five tries. Check their email addresses, then press the button again to try them once more.</p> : null}
+    {status.lastError && !waiting ? <p className="form-message error" role="status">{status.lastError}</p> : null}
+    {status.enabled
+      ? <form action={pauseAction} className="stack-form"><PendingSubmitButton className="button secondary" pendingLabel="Pausing…"><Pause/>Pause invitations</PendingSubmitButton></form>
+      : status.pending || status.gaveUp
+        ? <form action={startAction} className="stack-form"><PendingSubmitButton className="button dark" pendingLabel="Starting…"><Mail/>{status.startedAt ? "Invite everyone left" : "Invite everyone"}</PendingSubmitButton></form>
+        : null}
+    {message ? <p className={`form-message ${failed ? "error" : "success"}`} role="status">{message}</p> : null}
   </section>;
 }

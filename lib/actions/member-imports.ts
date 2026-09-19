@@ -3,25 +3,20 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireRole } from "@/lib/auth";
-import { writeAudit } from "@/lib/audit";
-import { likeLiteral } from "@/lib/like-literal";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import {
   applyMemberListImport,
   buildMemberListPreview,
-  countPendingInvitations,
-  currentMembershipYear,
   MemberImportError,
   type MemberImportPreview,
   type MemberImportResult,
 } from "@/lib/membermojo";
 import { MEMBER_LIST_MAX_BYTES, MemberListError } from "@/lib/membermojo-list";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { getTrustedAppOrigin } from "@/lib/trusted-origin";
 
 export type MemberImportPreviewState = { status: "idle" | "error" | "success"; message?: string; preview?: MemberImportPreview };
 export type MemberImportApplyState = { status: "idle" | "error" | "success"; message?: string; result?: MemberImportResult };
-export type MemberInvitationState = { status: "idle" | "error" | "success"; message?: string; sent?: number; linked?: number; failed?: number; remaining?: number };
+export type MemberInvitationState = { status: "idle" | "error" | "success"; message?: string };
 
 export async function previewMemberList(_previous: MemberImportPreviewState, formData: FormData): Promise<MemberImportPreviewState> {
   const { user } = await requireRole(["administrator"]);
@@ -69,71 +64,32 @@ export async function applyMemberList(_previous: MemberImportApplyState, formDat
   }
 }
 
-const INVITATION_BATCH = 40;
-
-/** Invites the next batch of imported members to the website. Safe to press again: it carries on where it stopped. */
-export async function sendMemberInvitations(): Promise<MemberInvitationState> {
-  const { user, role } = await requireRole(["administrator"]);
-  if (!await consumeRateLimit("membermojo-invitations", 60, 60 * 60, user.id)) {
-    return { status: "error", message: "Many invitations have been sent in a short time. Please wait before sending more." };
+/**
+ * Starts the background run. A scheduled job then sends a few invitations every five minutes, retries failures,
+ * waits when Supabase Auth's hourly email limit is reached, and stops by itself when everyone has been invited.
+ */
+export async function startMemberInvitations(): Promise<MemberInvitationState> {
+  const { user } = await requireRole(["administrator"]);
+  if (!await consumeRateLimit("membermojo-invitations", 20, 60 * 60, user.id)) {
+    return { status: "error", message: "This has been tried several times. Please wait a little before trying again." };
   }
-  const admin = createServiceClient();
-  const { data: members, error } = await admin.from("members")
-    .select("id,full_name,contact_email")
-    .eq("source", "membermojo_cutover").eq("portal_invitation_status", "eligible")
-    .is("auth_user_id", null).eq("contact_role", "self").not("contact_email", "is", null).is("anonymized_at", null)
-    .order("created_at").order("id").limit(INVITATION_BATCH);
-  if (error) return { status: "error", message: "We could not read the list of people to invite." };
-
-  const origin = getTrustedAppOrigin();
-  let sent = 0;
-  let linked = 0;
-  let failed = 0;
-  for (const member of members ?? []) {
-    const email = String(member.contact_email).trim().toLowerCase();
-    const { data: profiles, error: profileError } = await admin.from("users").select("id").ilike("email", likeLiteral(email)).limit(2);
-    if (profileError) { failed += 1; continue; }
-    let authUserId: string | null = null;
-    let status: "sent" | "linked" | "blocked_shared" = "sent";
-    if (profiles && profiles.length === 1) {
-      const { data: owner } = await admin.from("members").select("id").eq("auth_user_id", profiles[0].id).neq("id", member.id).maybeSingle();
-      authUserId = profiles[0].id as string;
-      status = owner ? "blocked_shared" : "linked";
-    } else if (profiles && profiles.length > 1) {
-      status = "blocked_shared";
-    } else {
-      const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-        data: { full_name: member.full_name, membership_active: true, invite_context: "membermojo", membership_year: String(currentMembershipYear()) },
-        redirectTo: `${origin}/auth/invite?next=/account`,
-      });
-      if (inviteError || !invitation.user) {
-        failed += 1;
-        if (inviteError?.status === 429) break;
-        continue;
-      }
-      authUserId = invitation.user.id;
-    }
-    const { error: updateError } = await admin.from("members").update({
-      auth_user_id: status === "blocked_shared" ? null : authUserId,
-      portal_invitation_status: status,
-      updated_at: new Date().toISOString(),
-    }).eq("id", member.id).is("auth_user_id", null);
-    if (updateError) { failed += 1; continue; }
-    if (status === "sent") sent += 1;
-    else if (status === "linked") linked += 1;
-  }
-
-  const remaining = await countPendingInvitations();
-  if (sent || linked) {
-    await writeAudit({
-      actorUserId: user.id, actorRole: role, action: "membermojo.invitations-sent", entityType: "member-import",
-      entityId: crypto.randomUUID(), summary: `${sent} invited; ${linked} linked to an existing login; ${failed} failed`,
-    });
+  const { data, error } = await createServiceClient().rpc("start_member_invitations", { p_actor_id: user.id });
+  if (error || !data) {
+    console.error("Starting website invitations failed", { error: error?.message ?? "unknown" });
+    return { status: "error", message: "We could not start the invitations. Please try again." };
   }
   revalidatePath("/administrator/member-import");
-  revalidatePath("/admin/members");
-  const message = failed
-    ? `${sent} invited${linked ? `, ${linked} linked to an existing login` : ""}. ${failed} could not be sent; press the button again to retry.`
-    : `${sent} invited${linked ? `, ${linked} linked to an existing login` : ""}.`;
-  return { status: failed && !sent && !linked ? "error" : "success", message, sent, linked, failed, remaining };
+  return { status: "success", message: "The invitations have started. The first ones go out within five minutes." };
+}
+
+/** Stops the background run. Nobody is invited twice, and starting again carries on with the people not yet invited. */
+export async function pauseMemberInvitations(): Promise<MemberInvitationState> {
+  const { user } = await requireRole(["administrator"]);
+  const { error } = await createServiceClient().rpc("pause_member_invitations", { p_actor_id: user.id });
+  if (error) {
+    console.error("Pausing website invitations failed", { error: error.message });
+    return { status: "error", message: "We could not pause the invitations. Please try again." };
+  }
+  revalidatePath("/administrator/member-import");
+  return { status: "success", message: "The invitations are paused. Nothing more will be sent until you start them again." };
 }

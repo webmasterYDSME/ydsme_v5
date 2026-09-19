@@ -180,12 +180,36 @@ export async function applyMemberListImport(actorId: string, bytes: Uint8Array, 
   };
 }
 
-/** Members added by an import who can be invited to the website but have not been yet. */
-export async function countPendingInvitations() {
-  const { count, error } = await createServiceClient().from("members")
-    .select("id", { count: "exact", head: true })
-    .eq("source", "membermojo_cutover").eq("portal_invitation_status", "eligible")
-    .is("auth_user_id", null).not("contact_email", "is", null).is("anonymized_at", null);
-  if (error) throw new Error("Unable to count website invitations still to send.");
-  return count ?? 0;
+export type MemberInvitationStatus = {
+  enabled: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastRunAt: string | null;
+  /** Set while the run is waiting for Supabase Auth's hourly email limit to reset. */
+  pausedUntil: string | null;
+  sent: number;
+  linked: number;
+  failed: number;
+  lastError: string | null;
+  /** People still to invite (fewer than five failed attempts). */
+  pending: number;
+  /** People whose invitation failed five times; starting again tries them again. */
+  gaveUp: number;
+};
+
+/** Progress of the background run that invites imported members to the website. */
+export async function getMemberInvitationStatus(): Promise<MemberInvitationStatus> {
+  const { data, error } = await createServiceClient().rpc("member_invitation_status");
+  if (error || !data) throw new Error("Unable to read the website invitation progress.");
+  const status = data as Record<string, unknown>;
+  const number = (value: unknown) => Number(value ?? 0);
+  const text = (value: unknown) => typeof value === "string" && value ? value : null;
+  return {
+    enabled: status.enabled === true,
+    startedAt: text(status.started_at), finishedAt: text(status.finished_at), lastRunAt: text(status.last_run_at),
+    pausedUntil: text(status.paused_until),
+    sent: number(status.sent), linked: number(status.linked), failed: number(status.failed),
+    lastError: text(status.last_error),
+    pending: number(status.pending), gaveUp: number(status.gave_up),
+  };
 }

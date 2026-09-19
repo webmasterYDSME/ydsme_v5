@@ -97,7 +97,7 @@ test("the import is administrator-only, rate limited, and the old modes are gone
     read("lib/membermojo.ts"),
     read("app/administrator/member-import/page.tsx"),
   ]);
-  assert.equal((actions.match(/requireRole\(\["administrator"\]\)/g) ?? []).length, 3);
+  assert.equal((actions.match(/requireRole\(\["administrator"\]\)/g) ?? []).length, 4);
   assert.match(actions, /consumeRateLimit\("membermojo-import-preview"/);
   assert.match(actions, /consumeRateLimit\("membermojo-import-apply"/);
   assert.match(page, /requireRole\(\["administrator"\]\)/);
@@ -108,10 +108,33 @@ test("the import is administrator-only, rate limited, and the old modes are gone
 });
 
 test("import invitations use the membership wording and open the account, with no password step", async () => {
-  const [actions, template] = await Promise.all([read("lib/actions/member-imports.ts"), read("supabase/templates/invite.html")]);
-  assert.match(actions, /invite_context: "membermojo"/);
-  assert.match(actions, /auth\/invite\?next=\/account/);
-  assert.doesNotMatch(actions, /reset-password/);
+  const [job, template] = await Promise.all([read("supabase/functions/run-membership-automation/index.ts"), read("supabase/templates/invite.html")]);
+  assert.match(job, /invite_context: "membermojo"/);
+  assert.match(job, /auth\/invite\?next=\/account/);
+  assert.doesNotMatch(job, /reset-password/);
   assert.match(template, /eq \$context "membermojo"/);
   assert.match(template, /Your account is ready/);
+});
+
+test("invitations are sent by a background job that an administrator starts once", async () => {
+  const [job, actions, migration, panel] = await Promise.all([
+    read("supabase/functions/run-membership-automation/index.ts"), read("lib/actions/member-imports.ts"),
+    read("supabase/migrations/202609190023_member_invitation_run.sql"), read("app/components/MemberMojoImportForm.tsx"),
+  ]);
+  // The job works in every mode, so it is handled before the MemberMojo-mode pause.
+  assert.ok(job.indexOf('body.job === "invitations"') < job.indexOf("membermojoMode && body.job"));
+  assert.match(job, /claim_member_invitation_run/);
+  assert.match(job, /finish_member_invitation_run/);
+  assert.match(job, /status === 429/);
+  assert.match(job, /INVITATIONS_PER_RUN = 10/);
+  // Administrators start and pause it; there is no button that sends a batch by hand any more.
+  assert.match(actions, /start_member_invitations/);
+  assert.match(actions, /pause_member_invitations/);
+  assert.doesNotMatch(actions, /inviteUserByEmail|sendMemberInvitations/);
+  assert.doesNotMatch(panel, /Send the next/);
+  // Every function and table is for the server only, and the job runs every five minutes.
+  assert.doesNotMatch(migration, /grant execute on function [^;]* to (anon|authenticated)/i);
+  assert.match(migration, /revoke all on public\.member_invitation_run from public, anon, authenticated/);
+  assert.match(migration, /'\*\/5 \* \* \* \*'/);
+  assert.match(migration, /interval '15 minutes'/);
 });
