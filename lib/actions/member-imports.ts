@@ -103,7 +103,7 @@ export async function sendMemberInvitations(): Promise<MemberInvitationState> {
     } else {
       const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
         data: { full_name: member.full_name, membership_active: true },
-        redirectTo: `${origin}/auth/invite?next=/reset-password`,
+        redirectTo: `${origin}/auth/invite?next=/account`,
       });
       if (inviteError || !invitation.user) {
         failed += 1;

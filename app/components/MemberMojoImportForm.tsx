@@ -100,7 +100,7 @@ export function SendInvitationsPanel({ pending }: { pending: number }) {
   const [state, formAction] = useActionState(sendMemberInvitations, inviteInitial);
   const remaining = state.remaining ?? pending;
   return <section className="portal-card member-import-card" aria-labelledby="member-invite-heading">
-    <div className="member-import-section-heading"><div><span>Website invitations</span><h3 id="member-invite-heading">{remaining ? `${plural(remaining, "person", "people")} still to invite` : "Everyone imported has been invited"}</h3><p>Each person receives one email asking them to choose a password. Members who already have a login are linked without an email. Up to 40 are sent each time you press the button.</p></div><Mail/></div>
+    <div className="member-import-section-heading"><div><span>Website invitations</span><h3 id="member-invite-heading">{remaining ? `${plural(remaining, "person", "people")} still to invite` : "Everyone imported has been invited"}</h3><p>Each person receives one email with a secure link that opens their account. No password is needed; they sign in later with a one-time link sent to their email. Members who already have a login are linked without an email. Up to 40 are sent each time you press the button.</p></div><Mail/></div>
     {remaining ? <form action={formAction} className="stack-form">
       <PendingSubmitButton className="button dark" pendingLabel="Sending invitations…"><Mail/>Send the next {Math.min(remaining, 40)} invitations</PendingSubmitButton>
     </form> : null}
