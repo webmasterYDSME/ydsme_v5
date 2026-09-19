@@ -67,11 +67,16 @@ export default {
     let failed = 0;
     for (const notification of (data ?? []) as ClaimedNotification[]) {
       const actionUrl = notification.action_href ? `${siteUrl}${notification.action_href}` : null;
+      // Renewal emails point at the renewal page, not the member account, so they say so.
+      const isRenewal = notification.kind === "membership.renewal-invitation" || notification.kind === "membership.renewal-reminder";
+      const eyebrow = isRenewal ? "Membership renewal" : "Membership update";
+      const buttonLabel = isRenewal ? "Renew my membership" : "Open membership account";
+      const textLinkLabel = isRenewal ? "Renew online" : "Open";
       let deliveryError: string | null = null;
       let providerMessageId: string | null = null;
       try {
-        const textBody = [notification.body, actionUrl ? `Open: ${actionUrl}` : "", "", "York City & District Society of Model Engineers"].filter(Boolean).join("\n\n");
-        const htmlBody = `<!doctype html><html><body style="margin:0;background:#eee9dc;color:#13241d;font-family:Arial,sans-serif"><div style="max-width:620px;margin:0 auto;padding:36px 20px"><div style="background:#18382d;color:#fff;padding:34px;border-top:6px solid #d5a84b"><p style="margin:0 0 12px;color:#d5a84b;font-size:12px;letter-spacing:2px;text-transform:uppercase">Membership update</p><h1 style="margin:0;font-family:Georgia,serif;font-size:36px;font-weight:500">${escapeHtml(notification.title)}</h1></div><div style="background:#fffdf7;padding:34px"><p style="margin:0;color:#39443e;font-size:16px;line-height:26px;white-space:pre-line">${escapeHtml(notification.body)}</p>${actionUrl ? `<p style="margin:28px 0 0"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#18382d;color:#fff;padding:13px 18px;text-decoration:none;font-weight:700">Open membership account</a></p>` : ""}</div><p style="padding:18px;text-align:center;color:#68716c;font-size:12px">York City &amp; District Society of Model Engineers</p></div></body></html>`;
+        const textBody = [notification.body, actionUrl ? `${textLinkLabel}: ${actionUrl}` : "", "", "York City & District Society of Model Engineers"].filter(Boolean).join("\n\n");
+        const htmlBody = `<!doctype html><html><body style="margin:0;background:#eee9dc;color:#13241d;font-family:Arial,sans-serif"><div style="max-width:620px;margin:0 auto;padding:36px 20px"><div style="background:#18382d;color:#fff;padding:34px;border-top:6px solid #d5a84b"><p style="margin:0 0 12px;color:#d5a84b;font-size:12px;letter-spacing:2px;text-transform:uppercase">${escapeHtml(eyebrow)}</p><h1 style="margin:0;font-family:Georgia,serif;font-size:36px;font-weight:500">${escapeHtml(notification.title)}</h1></div><div style="background:#fffdf7;padding:34px"><p style="margin:0;color:#39443e;font-size:16px;line-height:26px;white-space:pre-line">${escapeHtml(notification.body)}</p>${actionUrl ? `<p style="margin:28px 0 0"><a href="${escapeHtml(actionUrl)}" style="display:inline-block;background:#18382d;color:#fff;padding:13px 18px;text-decoration:none;font-weight:700">${escapeHtml(buttonLabel)}</a></p>` : ""}</div><p style="padding:18px;text-align:center;color:#68716c;font-size:12px">York City &amp; District Society of Model Engineers</p></div></body></html>`;
         const response = useLocalMailpit
           ? await fetch(`${mailpitUrl}/api/v1/send`, {
             method: "POST",

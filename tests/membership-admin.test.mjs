@@ -246,3 +246,19 @@ test("the fee in force is the latest active fee starting in or before the year",
   assert.equal(feeInForce(prices, "adult", 2024), null);
   assert.equal(feeInForce(prices, "student", 2026), null);
 });
+
+test("renewal emails say what the link is for and when it stops working", async () => {
+  const [sql, worker] = await Promise.all([
+    readFile(new URL("../supabase/migrations/202609190002_membership_renewal_email_wording.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/functions/deliver-membership-notifications/index.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(sql, /is due for renewal for/);
+  assert.match(sql, /nothing is set up to charge you again/);
+  assert.match(sql, /The link works until 31 December/);
+  assert.match(sql, /Reminder: please renew/);
+  assert.match(sql, /queue_membership_renewal_invitation/);
+  assert.match(sql, /queue_membership_renewal_reminders/);
+  assert.match(worker, /membership\.renewal-invitation/);
+  assert.match(worker, /Renew my membership/);
+  assert.match(worker, /Open membership account/);
+});
