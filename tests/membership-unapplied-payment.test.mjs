@@ -80,7 +80,9 @@ test("website access follows the membership record and never reopens or locks ou
   assert.doesNotMatch(noExemption, /administrator'\)/);
   assert.match(noExemption, /membership_status in \('active', 'lapsed'\)/);
   const config = read("supabase/config.toml");
-  assert.doesNotMatch(config, /^enable_signup = true/m);
+  // Public sign-up is off under [auth]. [auth.email] must stay on: it is the email provider, and off blocks every password sign-in.
+  assert.match(config, /\[auth\]\n[\s\S]*?\nenable_signup = false/);
+  assert.match(config, /\[auth\.email\]\n[\s\S]*?\nenable_signup = true/);
 });
 
 test("the daily membership job catches up on days it missed and tells officers when it has stopped", () => {

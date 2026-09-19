@@ -22,7 +22,6 @@ import {
   MEMBERMOJO_MEMBERSHIP_URL,
   membershipAdministrationEnabled,
   membershipBillingEnabled,
-  membershipMode,
   membershipRecoveryEnabled,
 } from "@/lib/features";
 import {
@@ -94,11 +93,6 @@ export async function submitMembershipApplication(formData: FormData) {
   const verified = await getSignupVerification();
   if (!verified || verified.email !== applicationEmail || verified.full_name !== normalizeIdentityName(parsed.data.full_name)) redirect("/membership/apply?application=verification-required");
   if (!applicationEmail) redirect("/membership/apply?application=invalid");
-  if (membershipMode() === "live") {
-    const { count, error: blockerError } = await createServiceClient().from("membership_migration_reviews")
-      .select("id", { count: "exact", head: true }).eq("status", "pending");
-    if (blockerError || (count ?? 0) > 0) redirect(MEMBERMOJO_MEMBERSHIP_URL);
-  }
   if (!await consumeRateLimit("membership-application", 5, 60 * 60, applicationEmail)) {
     redirect("/membership/apply?application=received");
   }
@@ -1383,32 +1377,6 @@ export async function resolveMembershipPaymentReview(formData: FormData) {
   redirect("/admin/memberships?notice=payment-review-resolved");
 }
 
-export async function resolveMembershipMigrationReview(formData: FormData) {
-  const { user } = await requireCapability("memberships.manage");
-  const reviewId = idSchema.parse(formData.get("review_id"));
-  const status = z.enum(["resolved", "dismissed"]).parse(formData.get("status"));
-  const resolution = z.string().trim().min(8).max(500).parse(formData.get("resolution"));
-  const admin = createServiceClient();
-  const { data: review } = await admin.from("membership_migration_reviews")
-    .select("id,review_kind,membership_record_id,status,review_group_key").eq("id", reviewId).maybeSingle();
-  if (!review || review.status !== "pending") redirect("/admin/memberships?error=migration-review-unavailable");
-  const { error } = await admin.from("membership_migration_reviews").update({
-    status,
-    resolution,
-    resolved_by: user.id,
-    resolved_at: new Date().toISOString(),
-  }).eq("id", reviewId).eq("status", "pending");
-  if (error) redirect("/admin/memberships?error=migration-review-failed");
-  await writeAudit({
-    actorUserId: user.id, actorRole: "committee", action: "membership.migration-review-resolved",
-    entityType: "membership-migration-review", entityId: reviewId,
-    before: { status: review.status, review_kind: review.review_kind },
-    after: { status, resolution, review_group_key: review.review_group_key },
-  });
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?section=membermojo-import&notice=migration-review-saved#membermojo-import");
-}
-
 export async function requestMembershipReportExport() {
   const { user } = await requireCapability("memberships.manage");
   const admin = createServiceClient();
@@ -1664,10 +1632,3 @@ export async function configureMembershipPrice(formData: FormData) {
   redirect("/admin/memberships/renewals?notice=price-saved");
 }
 
-export async function stageMemberMojoCutover() {
-  const { user } = await requireCapability("memberships.manage");
-  const { error } = await createServiceClient().rpc("execute_membermojo_final_membership_cutover", { p_actor_id: user.id });
-  if (error) redirect("/admin/memberships?error=cutover-failed");
-  revalidatePath("/admin/memberships");
-  redirect("/admin/memberships?notice=cutover-staged");
-}

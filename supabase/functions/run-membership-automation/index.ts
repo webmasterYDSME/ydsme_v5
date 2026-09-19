@@ -24,9 +24,13 @@ async function stripeRequest(path: string, apiKey: string, init: RequestInit = {
 export default {
   fetch: withSupabase({ auth: "secret" }, async (request, context) => {
     if (request.method !== "POST") return Response.json({ ok: false }, { status: 405 });
-    const mode = (Deno.env.get("MEMBERSHIP_MODE") || "membermojo").toLowerCase();
+    // "website" (or the older pilot, live, drain) means the website runs membership. Anything else means
+    // MemberMojo still does: the daily lifecycle keeps access in step with the imported list, but nothing
+    // is charged and no member is emailed by the website.
+    const configured = (Deno.env.get("MEMBERSHIP_MODE") || "membermojo").toLowerCase();
+    const membermojoMode = !["website", "pilot", "live", "drain"].includes(configured);
     const body = await request.json().catch(() => ({})) as { job?: string };
-    if (mode === "membermojo") return Response.json({ ok: true, paused: true });
+    if (membermojoMode && body.job === "commands") return Response.json({ ok: true, paused: true });
 
     if (body.job === "commands") {
       const apiKey = Deno.env.get("STRIPE_RESTRICTED_KEY") || Deno.env.get("STRIPE_SECRET_KEY");
@@ -76,7 +80,13 @@ export default {
       timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
     }).format(new Date());
     await context.supabaseAdmin.rpc("run_membership_launch_retention", { p_today: today });
-    if (mode === "drain") return Response.json({ ok: true, lifecycle_paused: true });
+    if (membermojoMode) {
+      const { data: caughtUp, error: caughtUpError } = await context.supabaseAdmin.rpc("run_membership_daily_catch_up", { p_today: today });
+      if (caughtUpError) return Response.json({ ok: false }, { status: 500 });
+      // MemberMojo sends the members' emails, so the website's own member-facing ones are dropped, not queued for later.
+      await context.supabaseAdmin.rpc("discard_unsent_member_emails");
+      return Response.json({ ok: true, result: caughtUp, membermojo: true });
+    }
     const year = Number(today.slice(0, 4));
     const month = Number(today.slice(5, 7));
     await context.supabaseAdmin.rpc("expire_membership_applications");

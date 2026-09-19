@@ -11,7 +11,7 @@ const environment = {
   NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3013",
   JOURNEY_PORT: "3013",
   JOURNEY_START_MODE: "production",
-  MEMBERSHIP_MODE: "live",
+  MEMBERSHIP_MODE: "website",
 };
 
 for (const [command, args] of [

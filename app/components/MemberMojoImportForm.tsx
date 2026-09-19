@@ -1,106 +1,100 @@
 "use client";
 
 import { useActionState } from "react";
-import { AlertTriangle, Check, Database, FileSearch, FileUp, Link2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Database, FileSearch, FileUp, Mail, ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import {
-  applyMemberMojoImport,
-  previewMemberMojoImport,
-  type MemberImportActionState,
-  type MemberImportApplyActionState,
+  applyMemberList,
+  previewMemberList,
+  sendMemberInvitations,
+  type MemberImportApplyState,
+  type MemberImportPreviewState,
+  type MemberInvitationState,
 } from "@/lib/actions/member-imports";
 import type { MemberImportPreview } from "@/lib/membermojo";
 
-const initialState: MemberImportActionState = { status: "idle" };
-const initialApplyState: MemberImportApplyActionState = { status: "idle" };
+const previewInitial: MemberImportPreviewState = { status: "idle" };
+const applyInitial: MemberImportApplyState = { status: "idle" };
+const inviteInitial: MemberInvitationState = { status: "idle" };
 
-function plural(value: number, singular: string, pluralForm = `${singular}s`) {
-  return `${value} ${value === 1 ? singular : pluralForm}`;
-}
+const plural = (value: number, singular: string, pluralForm = `${singular}s`) => `${value} ${value === 1 ? singular : pluralForm}`;
 
-function ApplyMemberImportForm({ preview }: { preview: MemberImportPreview }) {
-  const [state, formAction] = useActionState(applyMemberMojoImport, initialApplyState);
-  const completeSnapshot = preview.mode === "complete_active_snapshot";
-
-  if (state.status === "success") {
-    return <section className="member-import-applied" aria-live="polite"><Check/><div><span>Update finished</span><h3>{plural(state.processedCount ?? 0, "member")} checked</h3><p>{state.createdCount} added · {state.refreshedCount} updated.</p><p className="member-import-lifecycle-result">{state.endedCount} marked as ended · {state.restoredCount} marked as current again · {state.portalAccessReviewCount} sign-ins need checking</p><p>Nobody’s sign-in, login email, or website access level was changed.</p></div></section>;
+function ApplyForm({ preview }: { preview: MemberImportPreview }) {
+  const [state, formAction] = useActionState(applyMemberList, applyInitial);
+  if (state.status === "success" && state.result) {
+    const result = state.result;
+    return <section className="member-import-applied" aria-live="polite"><Check/><div>
+      <span>Saved</span>
+      <h3>{plural(result.added, "person", "people")} added, {plural(result.renewed, "member")} renewed for {preview.year}</h3>
+      <p>{result.alreadyPaid} already paid for {preview.year} · {result.skipped} left out · {result.loginsLinked} linked to an existing website login.</p>
+      <p>{plural(result.needInvitation, "person", "people")} can now be invited to the website. Use the invitations section below.</p>
+    </div></section>;
   }
-  if (!preview.canApply) {
-    return <section className="member-import-apply-placeholder"><ShieldCheck/><div><strong>This file was used before</strong><p>These changes have already been saved. Download a newer file from MemberMojo if you need to update the list again.</p></div><button type="button" disabled>Already saved</button></section>;
-  }
-
   return <section className="member-import-apply-panel" aria-labelledby="member-import-apply-heading">
-    <div className="member-import-section-heading"><div><span>Final safety check</span><h3 id="member-import-apply-heading">Save these member changes</h3><p>This check closes at {new Date(preview.expiresAt).toLocaleString("en-GB")}.</p></div><ShieldCheck/></div>
+    <div className="member-import-section-heading"><div><span>Final check</span><h3 id="member-import-apply-heading">Save this member list</h3></div><ShieldCheck/></div>
     <form action={formAction} className="stack-form member-import-apply-form">
-      <input type="hidden" name="importId" value={preview.importId}/>
-      <p className="form-help">Choose the same file again. We check that it has not changed, then read it without keeping a copy.</p>
-      <label>Choose the same MemberMojo file
-        <input type="file" name="file" accept="text/csv,.csv" required/>
-      </label>
-      <label className="member-import-review-check" aria-label="I have checked the warnings"><input type="checkbox" name="reviewed" value="yes" required/><span>I have checked the warnings and understand that the member details will be saved as they appear in MemberMojo.</span></label>
-      <label>To make sure this is deliberate, type <code className="member-import-confirmation-phrase">APPLY MEMBERMOJO IMPORT</code>
-        <input name="confirmation" autoComplete="off" required/>
-      </label>
-      <div className="member-import-apply-scope"><strong>This will:</strong><ul><li>Add new members and update existing member details.</li>{completeSnapshot ? <><li>Mark {plural(preview.totals.missingFromSnapshot, "current member")} missing from this full list as having left.</li><li>Keep former-member details for 12 months and ask an administrator to check any website sign-in.</li></> : <li>Leave anyone who is not in this file exactly as they are.</li>}</ul><strong>This will not:</strong><ul><li>Change anyone’s website sign-in, login email, or access level.</li><li>Pause, turn off, or delete any website account.</li></ul></div>
+      <input type="hidden" name="fileSha256" value={preview.fileSha256}/>
+      <input type="hidden" name="rows" value={JSON.stringify(preview.rows)}/>
+      <div className="member-import-apply-scope"><strong>This will:</strong><ul>
+        <li>Add {plural(preview.totals.add, "new person", "new people")} and mark them as full members for {preview.year}, paid through MemberMojo.</li>
+        <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
+        <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
+      </ul><strong>This will not:</strong><ul>
+        <li>Remove or change anyone who is not in this file.</li>
+        <li>Charge anyone or change any payment.</li>
+      </ul></div>
+      <label className="member-import-review-check"><input type="checkbox" name="confirmed" value="yes" required/><span>I have checked the things to look at and want to save this list.</span></label>
       {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
-      <PendingSubmitButton className="button dark" pendingLabel="Saving member changes…"><Database/>Save member changes</PendingSubmitButton>
+      <PendingSubmitButton className="button dark" pendingLabel="Saving the member list…"><Database/>Save member list</PendingSubmitButton>
     </form>
   </section>;
 }
 
 export function MemberMojoImportForm() {
-  const [state, formAction] = useActionState(previewMemberMojoImport, initialState);
+  const [state, formAction] = useActionState(previewMemberList, previewInitial);
   const preview = state.preview;
-  const expiredActive = preview?.issues.filter(issue => issue.code === "active-past-expiry") ?? [];
-
   return <div className="member-import-workspace">
     <section className="portal-card member-import-card">
-      <div className="member-import-safety"><ShieldCheck/><div><strong>Looking at the file changes nothing</strong><p>We read the file to show you what would happen, but we do not keep the file or change any member until you complete the final safety check.</p></div></div>
+      <div className="member-import-safety"><ShieldCheck/><div><strong>Looking at the file changes nothing</strong><p>We read the file to show you what would happen. Nothing is saved until you confirm.</p></div></div>
       <form action={formAction} className="stack-form member-import-form">
         <label>MemberMojo member-list file
           <input type="file" name="file" accept="text/csv,.csv" required/>
-          <small>Choose the CSV file downloaded directly from MemberMojo. It can contain up to 1,000 people.</small>
+          <small>Choose the CSV downloaded from MemberMojo. We use only the name, the email and, if present, the Membership column. Everyone in the file is made a full member for the current year.</small>
         </label>
-        <fieldset>
-          <legend>Who is included in this file?</legend>
-          <label className="member-import-mode" htmlFor="member-import-update-only" aria-label="Only update people in this file"><input id="member-import-update-only" type="radio" name="mode" value="update_only" defaultChecked/><span><strong>Only update people in this file</strong><small>Use this if the file may not contain every current member. Anyone missing from it will be left alone.</small></span></label>
-          <label className="member-import-mode" htmlFor="member-import-complete-snapshot" aria-label="This is the full list of current members"><input id="member-import-complete-snapshot" type="radio" name="mode" value="complete_active_snapshot"/><span><strong>This is the full list of current members</strong><small>Use this only when the secretary confirms that every current member is included. Missing people will be treated as having left.</small></span></label>
-        </fieldset>
-        <PendingSubmitButton className="button dark" pendingLabel="Checking the file…"><FileSearch/>Show me what will change</PendingSubmitButton>
+        <PendingSubmitButton className="button dark" pendingLabel="Checking the file…"><FileSearch/>Show me what will happen</PendingSubmitButton>
       </form>
       {state.status === "error" ? <p className="form-message error" role="alert">{state.message}</p> : null}
     </section>
 
     {state.status === "success" && preview ? <section className="member-import-results" aria-live="polite">
-      <div className="form-message success"><ShieldCheck/><span>{state.message}</span></div>
-      <header className="member-import-result-heading"><div><p className="eyebrow dark">Nothing has been saved yet</p><h2>{plural(preview.totals.uploadedRows, "person")} in this file</h2><p>{preview.mode === "update_only" ? "Only people in this file will be updated." : "You said this is the full list of current members."}</p></div><FileUp/></header>
-
+      <header className="member-import-result-heading"><div><p className="eyebrow dark">Nothing has been saved yet</p><h2>{plural(preview.totals.people, "person", "people")} in this file</h2><p>Membership year {preview.year}. Columns used: {preview.columnsUsed.join(", ")}.{preview.notActive ? ` ${preview.notActive} not marked Active were left out.` : ""}</p></div><FileUp/></header>
       <div className="member-import-stats">
-        <article><Database/><span>Member details</span><strong>{preview.totals.newRecords} new</strong><small>{preview.totals.changedRecords} will change · {preview.totals.unchangedRecords} already match</small></article>
-        <article><Link2/><span>Website accounts</span><strong>{preview.totals.portalLinkCandidates} possible matches</strong><small>{preview.totals.alreadyLinked} already matched</small></article>
-        <article className={preview.totals.warnings ? "has-warning" : ""}><AlertTriangle/><span>Things to check</span><strong>{plural(preview.totals.warnings, "warning")}</strong><small>{preview.totals.information} useful notes</small></article>
-        <article><FileSearch/><span>Current members</span><strong>{preview.totals.activeRows} marked Active</strong><small>{preview.totals.missingFromSnapshot} current people missing from this file</small></article>
+        <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>added as full members</small></article>
+        <article><Check/><span>Existing members</span><strong>{preview.totals.renew} renewed</strong><small>{preview.totals.alreadyPaid} already paid for {preview.year}</small></article>
+        <article><Mail/><span>Website login</span><strong>{preview.totals.needInvitation} to invite</strong><small>{preview.totals.loginsToLink} already have a login and are linked</small></article>
+        <article className={preview.totals.skipped || preview.flagged.length ? "has-warning" : ""}><AlertTriangle/><span>To look at</span><strong>{preview.flagged.length + preview.totals.skipped}</strong><small>{preview.totals.skipped} left out</small></article>
       </div>
-
-      {expiredActive.length ? <section className="member-import-exceptions" aria-labelledby="expired-active-heading">
-        <div className="member-import-section-heading"><div><span>Please check these first</span><h3 id="expired-active-heading">{plural(expiredActive.length, "person")} marked Active after their end date</h3></div><AlertTriangle/></div>
-        <div className="member-import-review-list">{expiredActive.map(issue => <article key={`${issue.rowNumber}-${issue.externalId}`}><span>Row {issue.rowNumber} · ID {issue.externalId}</span><strong>{issue.memberName}</strong><p>{issue.message}</p></article>)}</div>
-      </section> : null}
-
-      {preview.issues.length ? <details className="member-import-details" open={!expiredActive.length}>
-        <summary>See everything that needs checking ({preview.totals.warnings + preview.totals.information})</summary>
-        <div className="member-import-issue-table"><div className="member-import-table-head"><span>Member</span><span>Importance</span><span>What to check</span></div>{preview.issues.map((issue, index) => <div key={`${issue.rowNumber}-${issue.code}-${index}`}><span><strong>{issue.memberName || "Whole file"}</strong><small>{issue.rowNumber ? `Line ${issue.rowNumber} · MemberMojo ID ${issue.externalId}` : "This is about the whole file"}</small></span><span className={`member-import-severity is-${issue.severity}`}>{issue.severity === "warning" ? "Please check" : "Good to know"}</span><p>{issue.message}</p></div>)}</div>
-        {preview.issuesTruncated ? <p className="form-help">The first 150 items are shown.</p> : null}
+      {preview.skipped.length ? <details className="member-import-details" open>
+        <summary>Left out ({preview.skipped.length})</summary>
+        <div className="member-import-review-list">{preview.skipped.map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{item.detail}</p></article>)}</div>
       </details> : null}
-
-      {preview.rows.length ? <details className="member-import-details">
-        <summary>See new people and changed details ({preview.totals.newRecords + preview.totals.changedRecords})</summary>
-        <div className="member-import-change-list">{preview.rows.map(row => <article key={row.externalId}><span>{row.outcome === "new" ? "New person" : "Details changed"} · MemberMojo ID {row.externalId}</span><strong>{row.memberName}</strong><p>{row.changedFields.length ? `Details that will change: ${row.changedFields.join(", ")}.` : "A new member will be added."} Website account: {row.portalMatch.replaceAll("-", " ")}.</p></article>)}</div>
-        {preview.rowsTruncated ? <p className="form-help">The first 150 new or changed people are shown.</p> : null}
+      {preview.flagged.length ? <details className="member-import-details">
+        <summary>Worth a look ({preview.flagged.length})</summary>
+        <div className="member-import-review-list">{preview.flagged.map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{item.detail}</p></article>)}</div>
       </details> : null}
-
-      {preview.ignoredHeaders.length ? <details className="member-import-details"><summary>Extra columns we did not use ({preview.ignoredHeaders.length})</summary><p className="form-help">{preview.ignoredHeaders.join(", ")}</p></details> : null}
-      <ApplyMemberImportForm key={preview.importId} preview={preview}/>
+      <ApplyForm key={preview.fileSha256} preview={preview}/>
     </section> : null}
   </div>;
+}
+
+export function SendInvitationsPanel({ pending }: { pending: number }) {
+  const [state, formAction] = useActionState(sendMemberInvitations, inviteInitial);
+  const remaining = state.remaining ?? pending;
+  return <section className="portal-card member-import-card" aria-labelledby="member-invite-heading">
+    <div className="member-import-section-heading"><div><span>Website invitations</span><h3 id="member-invite-heading">{remaining ? `${plural(remaining, "person", "people")} still to invite` : "Everyone imported has been invited"}</h3><p>Each person receives one email asking them to choose a password. Members who already have a login are linked without an email. Up to 40 are sent each time you press the button.</p></div><Mail/></div>
+    {remaining ? <form action={formAction} className="stack-form">
+      <PendingSubmitButton className="button dark" pendingLabel="Sending invitations…"><Mail/>Send the next {Math.min(remaining, 40)} invitations</PendingSubmitButton>
+    </form> : null}
+    {state.message ? <p className={`form-message ${state.status === "error" ? "error" : "success"}`} role="status">{state.message}</p> : null}
+  </section>;
 }

@@ -45,7 +45,7 @@ export default {
     const siteUrl = (Deno.env.get("SITE_URL") || (isLocalSupabase ? "http://localhost:3010" : "")).replace(/\/$/, "");
     const mailpitUrl = (Deno.env.get("LOCAL_MAILPIT_URL") || (isLocalSupabase ? "http://inbucket:8025" : "")).replace(/\/$/, "");
     const membershipMode = (Deno.env.get("MEMBERSHIP_MODE") || "membermojo").toLowerCase();
-    if (membershipMode !== "pilot" && membershipMode !== "live") {
+    if (!["website", "pilot", "live", "drain"].includes(membershipMode)) {
       return Response.json({ ok: true, result: { claimed: 0, sent: 0, failed: 0, paused: true } }, {
         headers: { "Cache-Control": "no-store" },
       });

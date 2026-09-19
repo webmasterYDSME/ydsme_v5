@@ -18,7 +18,7 @@ This project's Supabase services use the dedicated `55320–55329` port range: A
 
 Copy the keys listed in `.env.example` into `.env.local`. Never commit `.env.local`. Run `npm run supabase:status` to retrieve the local API URL and local-only keys. Use only Stripe test-mode credentials locally. Facebook, production SMTP and production webhooks should remain disabled during local development.
 
-Set `MEMBERSHIP_MODE` to `membermojo`, `pilot`, `live`, or `drain`. `membermojo` keeps all public journeys on MemberMojo; `pilot` enables the website journeys in an isolated test environment; `live` enables the public platform; and `drain` stops new applications and financial automation while retaining officer recovery and signed webhook reconciliation.
+Set `MEMBERSHIP_MODE` to `membermojo` or `website`. `membermojo` keeps all public journeys on MemberMojo and hides the membership area; administrators update the register from MemberMojo's member list at `/administrator/member-import`. `website` enables the full website membership platform. The older values `pilot`, `live` and `drain` are read as `website`.
 
 `npm run supabase:start` also installs local-only Vault values used by scheduled jobs. Membership emails are sent to Mailpit immediately after they are queued; a one-minute job retries any delivery interrupted by a transient failure.
 
@@ -41,7 +41,7 @@ The setup command connects only to the local Supabase stack and creates/reuses f
 
 For local CAPTCHA testing, use Cloudflare’s documented test sitekey and matching test secret in `.env.local` (see https://developers.cloudflare.com/turnstile/troubleshooting/testing/). Keep production keys in deployment configuration.
 
-Open `/membership/apply`. In `MEMBERSHIP_MODE=pilot`, any valid email address can use the isolated membership journey. Read verification codes and account invitations in local Mailpit at http://127.0.0.1:55324. Pay using Stripe's test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC. Confirm the member becomes active in `/admin/memberships`, with manual review still pending where applicable. For queued membership notices, keep `npx supabase functions serve deliver-membership-notifications` running in another terminal. Its local configuration sends only to Mailpit. Supabase Auth invitations and signup codes use local Mailpit directly.
+Open `/membership/apply`. In `MEMBERSHIP_MODE=website`, any valid email address can use the isolated membership journey. Read verification codes and account invitations in local Mailpit at http://127.0.0.1:55324. Pay using Stripe's test card `4242 4242 4242 4242`, any future expiry and any three-digit CVC. Confirm the member becomes active in `/admin/memberships`, with manual review still pending where applicable. For queued membership notices, keep `npx supabase functions serve deliver-membership-notifications` running in another terminal. Its local configuration sends only to Mailpit. Supabase Auth invitations and signup codes use local Mailpit directly.
 
 The automated `test:stripe-membership` runner manages its own server and signed fixtures; stop the manual listener before running it to avoid concurrent delivery into the shared local database.
 

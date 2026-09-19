@@ -1,178 +1,68 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import {
-  MEMBERMOJO_REQUIRED_HEADERS,
-  MemberMojoCsvError,
-  parseMemberMojoCsv,
-} from "../lib/membermojo-csv.ts";
+import { MEMBER_LIST_MAX_ROWS, MemberListError, parseMemberList } from "../lib/membermojo-list.ts";
 
-function csvCell(value) {
-  const text = String(value ?? "");
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
+const bytes = (text, encoding = "utf8") => new Uint8Array(Buffer.from(text, encoding));
+const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-function makeCsv(records, extraHeaders = []) {
-  const headers = [...MEMBERMOJO_REQUIRED_HEADERS, ...extraHeaders];
-  const rows = records.map(record => headers.map(header => csvCell(record[header] ?? "")).join(","));
-  return `${headers.map(csvCell).join(",")}\r\n${rows.join("\r\n")}\r\n`;
-}
-
-function member(id, overrides = {}) {
-  return {
-    Title: "Ms",
-    "First name": `Member ${id}`,
-    "Last name": "Example",
-    Email: `member${id}@example.test`,
-    Membership: "Adult member",
-    "By ticking this box you agree to abide by the Rules of the Club": "Yes",
-    "Expires on": "2027-01-31",
-    "Renewed on": "2026-02-01",
-    "Member since": "2020-01-01",
-    "Site role": "Member",
-    "Membership state": "Active",
-    "membermojo ID": String(id),
-    ...overrides,
-  };
-}
-
-test("parses quoted MemberMojo values and falls back to Windows-1252", () => {
-  const source = makeCsv([
-    member(101, {
-      "First name": "Anne, Marie",
-      Membership: "Adult, full member",
-      Notes: "Annual £ fee",
-    }),
-  ], ["Notes"]);
-  const parsed = parseMemberMojoCsv(Buffer.from(source, "latin1"), "2026-08-18");
-
-  assert.equal(parsed.encoding, "windows-1252");
-  assert.equal(parsed.records[0].firstName, "Anne, Marie");
-  assert.equal(parsed.records[0].membershipType, "Adult, full member");
-  assert.deepEqual(parsed.ignoredHeaders, ["Notes"]);
-});
-
-test("shows six expired records that MemberMojo still explicitly marks Active", () => {
-  const records = Array.from({ length: 6 }, (_, index) => member(200 + index, {
-    "Expires on": `2025-0${index + 1}-28`,
-  }));
-  const parsed = parseMemberMojoCsv(Buffer.from(makeCsv(records)), "2026-08-18");
-  const expiredActive = parsed.issues.filter(issue => issue.code === "active-past-expiry");
-
-  assert.equal(expiredActive.length, 6);
-  assert.deepEqual(expiredActive.map(issue => issue.externalId), ["200", "201", "202", "203", "204", "205"]);
-  assert.ok(expiredActive.every(issue => issue.memberName?.startsWith("Member ")));
-});
-
-test("flags shared and missing emails without treating MemberMojo roles as permissions", () => {
-  const parsed = parseMemberMojoCsv(Buffer.from(makeCsv([
-    member(301, { Email: "shared@example.test", "Site role": "Administrator" }),
-    member(302, { Email: "SHARED@example.test" }),
-    member(303, { Email: "", "Site role": "Committee" }),
-  ])), "2026-08-18");
-
-  assert.equal(parsed.issues.filter(issue => issue.code === "shared-email").length, 2);
-  assert.equal(parsed.issues.filter(issue => issue.code === "missing-email").length, 1);
-  assert.equal(parsed.issues.filter(issue => issue.code === "source-role-ignored").length, 2);
-  assert.equal(parsed.records[0].sourceSiteRole, "Administrator");
-});
-
-test("rejects duplicate MemberMojo IDs and missing required columns", () => {
-  assert.throws(
-    () => parseMemberMojoCsv(Buffer.from(makeCsv([member(401), member(401)]))),
-    error => error instanceof MemberMojoCsvError && /same MemberMojo ID appears more than once/.test(error.message),
-  );
-
-  const incomplete = "First name,Last name,Email\r\nAda,Lovelace,ada@example.test\r\n";
-  assert.throws(
-    () => parseMemberMojoCsv(Buffer.from(incomplete)),
-    error => error instanceof MemberMojoCsvError && /expected column headings/.test(error.message),
-  );
-});
-
-test("preview and apply are administrator-gated, same-file, atomic and service-role-only", async () => {
-  const [action, comparison, component, page, foundation, applyMigration, lifecycleMigration, reviewMigration, purgeMigration, anonymizeMigration, legalHoldMigration, hourlyPurgeMigration, purgeFunction, contentActions] = await Promise.all([
-    readFile(new URL("../lib/actions/member-imports.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/membermojo.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/MemberMojoImportForm.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/administrator/member-import/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180026_membermojo_import_foundation.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180027_membermojo_import_apply.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180028_membermojo_lifecycle_retention.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180029_membermojo_portal_reviews.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180030_expired_member_purge.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180031_member_purge_anonymisation.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180032_member_purge_legal_hold_guard.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/migrations/202608180033_hourly_member_retention_purge.sql", import.meta.url), "utf8"),
-    readFile(new URL("../supabase/functions/purge-expired-members/index.ts", import.meta.url), "utf8"),
-    readFile(new URL("../lib/actions/content.ts", import.meta.url), "utf8"),
+test("reads a MemberMojo export: first name, last name, email and membership", () => {
+  const parsed = parseMemberList(bytes(
+    "Title,First name,Last name,Email,Membership,Membership state,Expires on\r\n"
+    + "Ms,Ann,Example,Ann@Example.test,Adult member,Active,2025-01-31\r\n"
+    + "Mr,Bob,Sample,bob@example.test,Junior member,Active,2027-01-31\r\n",
+  ));
+  assert.deepEqual(parsed.rows, [
+    { fullName: "Ann Example", email: "ann@example.test", membershipType: "Adult member" },
+    { fullName: "Bob Sample", email: "bob@example.test", membershipType: "Junior member" },
   ]);
+  assert.equal(parsed.notActive, 0);
+  assert.deepEqual(parsed.columnsUsed, ["First name and Last name", "Email", "Membership", "Membership state"]);
+});
 
-  assert.equal(action.match(/requireCapability\("members\.manage"\)/g)?.length, 3);
-  assert.match(action, /z\.literal\("APPLY MEMBERMOJO IMPORT"\)/);
-  assert.match(action, /z\.literal\("yes"\)/);
-  assert.doesNotMatch(action, /\.(?:insert|update|upsert|delete)\(\{/);
-  assert.doesNotMatch(comparison, /\.(?:insert|update|upsert|delete)\(\{/);
-  assert.match(comparison, /p_file_sha256: fileSha256/);
-  assert.doesNotMatch(comparison.match(/const records = parsed\.records[\s\S]*?as Json;/)?.[0] ?? "", /sourceSiteRole/);
-  assert.match(component, /Choose the same file again/);
-  assert.match(component, /Save these member changes/);
-  assert.match(component, /Keep former-member details for 12 months/);
-  assert.match(component, /This is the full list of current members/);
-  assert.doesNotMatch(component, /fingerprint|aggregate review counts|Applying atomically|Snapshot coverage/);
-  assert.match(page, /Check who can still sign in/);
-  assert.match(page, /Turn off website sign-in/);
-  assert.match(page, /Keep website sign-in/);
-  assert.doesNotMatch(page, /reconcile membership lifecycle|Retention review|Human decision required/);
-  assert.match(page, /ARCHIVE PORTAL ACCESS/);
-  assert.match(page, /RETAIN PORTAL ACCESS/);
-  assert.match(action, /resolve_membermojo_portal_access_review/);
-  assert.match(foundation, /alter table public\.membership_imports enable row level security/);
-  assert.match(foundation, /revoke all on table public\.membership_imports from public, anon, authenticated/);
-  assert.match(applyMigration, /for update/);
-  assert.match(applyMigration, /p_file_sha256 is distinct from v_import\.file_sha256/);
-  assert.match(applyMigration, /on conflict \(source, external_id\) do update/);
-  assert.match(applyMigration, /insert into public\.audit_logs/);
-  assert.match(applyMigration, /portal_accounts_changed', 0/);
-  assert.doesNotMatch(applyMigration, /(?:update|insert into|delete from) public\.(?:users|user_roles)/);
-  assert.match(applyMigration, /revoke all on function public\.apply_membermojo_membership_import[\s\S]*from public, anon, authenticated/);
-  assert.match(applyMigration, /grant execute on function public\.apply_membermojo_membership_import[\s\S]*to service_role/);
-  assert.match(lifecycleMigration, /new\.import_mode = 'complete_active_snapshot'/);
-  assert.match(lifecycleMigration, /retention_until = v_now \+ interval '12 months'/);
-  assert.match(lifecycleMigration, /portal_access_review_required = auth_user_id is not null/);
-  assert.match(lifecycleMigration, /auth_user_id is null/);
-  assert.match(lifecycleMigration, /and not legal_hold/);
-  assert.match(lifecycleMigration, /membership_records_deleted/);
-  assert.doesNotMatch(lifecycleMigration, /(?:update|insert into|delete from) public\.(?:users|user_roles)/);
-  assert.match(lifecycleMigration, /revoke all on function public\.apply_membermojo_membership_import_v2[\s\S]*from public, anon, authenticated/);
-  assert.match(lifecycleMigration, /grant execute on function public\.apply_membermojo_membership_import_v2[\s\S]*to service_role/);
-  assert.match(reviewMigration, /p_decision not in \('archive_access', 'retain_access'\)/);
-  assert.match(reviewMigration, /membermojo_portal_review_self/);
-  assert.match(reviewMigration, /membermojo_portal_review_administrator/);
-  assert.match(reviewMigration, /membership_status = 'archived'/);
-  assert.match(reviewMigration, /insert into public\.audit_logs/);
-  assert.doesNotMatch(reviewMigration, /(?:update|insert into|delete from) auth\.users/);
-  assert.match(reviewMigration, /revoke all on function public\.resolve_membermojo_portal_access_review[\s\S]*from public, anon, authenticated/);
-  assert.match(reviewMigration, /grant execute on function public\.resolve_membermojo_portal_access_review[\s\S]*to service_role/);
-  assert.match(purgeMigration, /claim_expired_portal_accounts/);
-  assert.match(purgeMigration, /not mr\.legal_hold/);
-  assert.match(purgeMigration, /ur\.role = 'administrator'/);
-  assert.match(purgeMigration, /membership_records_portal_reviews_reopened/);
-  assert.match(purgeMigration, /purge-expired-portal-accounts[\s\S]*net\.http_post/);
-  assert.match(purgeMigration, /announcements_created_by_fkey[\s\S]*on delete set null/);
-  assert.doesNotMatch(purgeMigration, /(?:update|insert into|delete from) auth\.users/);
-  assert.match(purgeFunction, /withSupabase\(\{ auth: "secret" \}/);
-  assert.match(purgeFunction, /auth\.admin\.deleteUser\(claim\.user_id, false\)/);
-  assert.match(purgeFunction, /release_expired_portal_account_claim/);
-  assert.match(purgeFunction, /member\.retention-purged/);
-  assert.match(anonymizeMigration, /anonymize_member_content_for_purge/);
-  assert.match(anonymizeMigration, /author_name = 'Former member'/);
-  assert.match(anonymizeMigration, /participant_id = null/);
-  assert.match(anonymizeMigration, /role in \('administrator', 'committee'\)/);
-  assert.match(anonymizeMigration, /from public\.committees c/);
-  assert.match(purgeFunction, /anonymize_member_content_for_purge[\s\S]*auth\.admin\.deleteUser/);
-  assert.match(contentActions, /purgeMember[\s\S]*anonymize_member_content_for_purge[\s\S]*auth\.admin\.deleteUser/);
-  assert.match(legalHoldMigration, /mr\.auth_user_id = p_user_id and mr\.legal_hold/);
-  assert.match(hourlyPurgeMigration, /cron\.unschedule\('purge-expired-portal-accounts'\)/);
-  assert.match(hourlyPurgeMigration, /'47 \* \* \* \*'/);
+test("reads the simple email and full_name layout and ignores every other column", () => {
+  const parsed = parseMemberList(bytes("full_name,email,secret\n\"Smith, Jo\",jo@example.test,x\n"));
+  assert.deepEqual(parsed.rows, [{ fullName: "Smith, Jo", email: "jo@example.test", membershipType: "" }]);
+  assert.deepEqual(parsed.columnsUsed, ["full_name", "Email"]);
+});
+
+test("leaves out people who are not Active", () => {
+  const parsed = parseMemberList(bytes("Email,Full name,Membership state\na@example.test,A One,Active\nb@example.test,B Two,Expired\n"));
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.notActive, 1);
+  assert.throws(() => parseMemberList(bytes("Email,Full name,Membership state\nb@example.test,B Two,Expired\n")), MemberListError);
+});
+
+test("falls back to Windows-1252 and keeps blank emails", () => {
+  const parsed = parseMemberList(bytes("Email,Full name\n,Zoë Fern\n", "latin1"));
+  assert.equal(parsed.rows[0].fullName, "Zoë Fern");
+  assert.equal(parsed.rows[0].email, "");
+});
+
+test("refuses files that cannot be read safely", () => {
+  assert.throws(() => parseMemberList(bytes("")), MemberListError);
+  assert.throws(() => parseMemberList(bytes("Email\na@example.test\n")), /full_name|First name/);
+  assert.throws(() => parseMemberList(bytes("Full name\nA One\n")), /Email column/);
+  assert.throws(() => parseMemberList(bytes("Email,Full name\na@example.test,\"Unfinished\n")), MemberListError);
+  assert.throws(() => parseMemberList(bytes("Email,Full name\na@example.test,ab\"c\n")), MemberListError);
+  assert.throws(() => parseMemberList(bytes(`Email,Full name\na@example.test,${"x".repeat(181)}\n`)), /too long/);
+  const many = `Email,Full name\n${Array.from({ length: MEMBER_LIST_MAX_ROWS + 1 }, (_, index) => `p${index}@example.test,Person ${index}`).join("\n")}\n`;
+  assert.throws(() => parseMemberList(bytes(many)), /more than 1000/);
+});
+
+test("the import is administrator-only, rate limited, and the old modes are gone", async () => {
+  const [actions, features, wrapper, page] = await Promise.all([
+    read("lib/actions/member-imports.ts"),
+    read("lib/features.ts"),
+    read("lib/membermojo.ts"),
+    read("app/administrator/member-import/page.tsx"),
+  ]);
+  assert.equal((actions.match(/requireRole\(\["administrator"\]\)/g) ?? []).length, 3);
+  assert.match(actions, /consumeRateLimit\("membermojo-import-preview"/);
+  assert.match(actions, /consumeRateLimit\("membermojo-import-apply"/);
+  assert.match(page, /requireRole\(\["administrator"\]\)/);
+  assert.match(wrapper, /apply_membermojo_import/);
+  assert.match(features, /MembershipMode = "membermojo" \| "website"/);
+  assert.match(features, /"pilot" \|\| configured === "live" \|\| configured === "drain"/);
+  await assert.rejects(read("lib/membermojo-csv.ts"), { code: "ENOENT" });
 });

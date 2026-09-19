@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { isAdministrator, requireCapability } from "@/lib/auth";
-import { membershipMode } from "@/lib/features";
-import { countMigrationReviews } from "@/lib/membership-admin/records";
 import { MembershipPaymentSettings } from "../MembershipPaymentSettings";
-import { ImportPanel } from "../_components/ImportPanel";
 import { MembershipFlash } from "../_components/MembershipFlash";
 import { ReportsPanel } from "../_components/ReportsPanel";
 import { RetentionPanel } from "../_components/RetentionPanel";
@@ -18,14 +15,10 @@ const one = (value: string | string[] | undefined) => (Array.isArray(value) ? va
 export default async function MembershipSetup({ searchParams }: { searchParams: Promise<Query> }) {
   const query = await searchParams;
   const { role } = await requireCapability("memberships.manage");
-  const reviewCount = await countMigrationReviews();
-  // The one-off MemberMojo import is only offered until membership is live and every imported record is reviewed.
-  const importAvailable = membershipMode() !== "live" || reviewCount > 0;
   const tabs = [
     { key: "payment", label: "Payment details" },
     { key: "reports", label: "Reports" },
     { key: "retention", label: "Old records" },
-    ...(importAvailable ? [{ key: "import", label: "MemberMojo import", count: reviewCount }] : []),
   ];
   const requested = one(query.tab);
   // Membership types and fees now live on the Renewals tab. Older links and stored notices still say tab=fees.
@@ -38,16 +31,15 @@ export default async function MembershipSetup({ searchParams }: { searchParams: 
 
   return <>
     <MembershipFlash/>
-    <p className={styles.tabNote}>The treasurer’s payment details, bookkeeping reports, removing old member records, and the one-time MemberMojo import. Membership types and fees are on the Renewals tab.</p>
+    <p className={styles.tabNote}>The treasurer’s payment details, bookkeeping reports and removing old member records. Membership types and fees are on the Renewals tab.</p>
     <div className={styles.setupLayout}>
       <nav className={styles.subnav} aria-label="Setup sections">
-        {tabs.map((item) => <Link key={item.key} href={item.key === "payment" ? "/admin/memberships/setup" : `/admin/memberships/setup?tab=${item.key}`} prefetch={false} aria-current={item.key === tab ? "page" : undefined}>{item.label}{"count" in item && item.count ? <span>{item.count}</span> : null}</Link>)}
+        {tabs.map((item) => <Link key={item.key} href={item.key === "payment" ? "/admin/memberships/setup" : `/admin/memberships/setup?tab=${item.key}`} prefetch={false} aria-current={item.key === tab ? "page" : undefined}>{item.label}</Link>)}
       </nav>
       <div>
         {tab === "payment" ? <MembershipPaymentSettings/> : null}
         {tab === "reports" ? <ReportsPanel/> : null}
         {tab === "retention" ? <RetentionPanel canSwitch={isAdministrator(role)}/> : null}
-        {tab === "import" ? <ImportPanel/> : null}
       </div>
     </div>
   </>;

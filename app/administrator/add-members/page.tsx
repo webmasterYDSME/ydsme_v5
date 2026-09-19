@@ -1,8 +1,6 @@
-import Link from "next/link";
-import { UserPlus } from "lucide-react";
-import { BulkInviteForm } from "@/app/components/BulkInviteForm";
+import { redirect } from "next/navigation";
 
-export default async function AddMembers({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
-  const query = await searchParams;
-  return <div className="portal-content narrow"><header className="portal-heading"><div><p className="eyebrow dark">Administrator · Member invitations</p><h1>Upload a member spreadsheet</h1><p>The spreadsheet needs columns labelled <code>email</code> and <code>full_name</code>. Check the preview before invitations are sent.</p></div><UserPlus/></header>{query.error ? <p className="form-message error">{query.error}</p> : null}{query.notice ? <p className="form-message success">Invitations have been sent.</p> : null}<section className="portal-card"><BulkInviteForm/></section><Link className="back-link" href="/admin/members">← Return to member register</Link></div>;
+// Bulk invitations are now part of the MemberMojo member-list import.
+export default function AddMembers() {
+  redirect("/administrator/member-import");
 }

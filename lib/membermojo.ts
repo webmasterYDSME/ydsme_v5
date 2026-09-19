@@ -1,285 +1,151 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { parseMemberMojoCsv, type MemberMojoIssue, type MemberMojoRecord } from "@/lib/membermojo-csv";
-import { createAdminClient } from "@/lib/supabase/admin";
-import type { Json } from "@/lib/supabase/database";
+import { ensureMembershipPlanPrice } from "@/lib/membership";
+import { londonDateParts } from "@/lib/membership-rules";
+import { parseMemberList, type MemberListRow } from "@/lib/membermojo-list";
+import { createServiceClient } from "@/lib/supabase/admin";
 
-export const memberImportModes = ["update_only", "complete_active_snapshot"] as const;
-export type MemberImportMode = (typeof memberImportModes)[number];
-
-export type MemberImportPreviewRow = {
-  rowNumber: number;
-  externalId: string;
-  memberName: string;
-  sourceState: string;
-  expiresOn: string | null;
-  outcome: "new" | "changed" | "unchanged";
-  changedFields: string[];
-  portalMatch: "already-linked" | "candidate" | "none" | "shared-email";
-};
-
-export type MemberImportPreview = {
-  importId: string;
-  canApply: boolean;
-  expiresAt: string;
-  fileFingerprint: string;
-  mode: MemberImportMode;
-  encoding: "utf-8" | "windows-1252";
-  ignoredHeaders: string[];
-  totals: {
-    uploadedRows: number;
-    activeRows: number;
-    existingRecords: number;
-    newRecords: number;
-    changedRecords: number;
-    unchangedRecords: number;
-    alreadyLinked: number;
-    portalLinkCandidates: number;
-    missingFromSnapshot: number;
-    warnings: number;
-    information: number;
-  };
-  rows: MemberImportPreviewRow[];
-  rowsTruncated: boolean;
-  issues: MemberMojoIssue[];
-  issuesTruncated: boolean;
-};
-
-export type AppliedMemberImport = {
-  processedCount: number;
-  createdCount: number;
-  refreshedCount: number;
-  endedCount: number;
-  restoredCount: number;
-  portalAccessReviewCount: number;
-};
-
-export class MemberMojoImportApplyError extends Error {
+export class MemberImportError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "MemberMojoImportApplyError";
+    this.name = "MemberImportError";
   }
 }
 
-type ExistingMembership = {
-  external_id: string;
-  auth_user_id: string | null;
-  title: string;
-  first_name: string;
-  last_name: string;
-  contact_email: string | null;
+type PlanRow = {
+  row_no: number;
+  full_name: string;
+  email: string | null;
   membership_type: string;
-  source_state: string;
-  source_expires_on: string | null;
-  source_renewed_on: string | null;
-  source_member_since: string | null;
-  source_rules_agreement: boolean | null;
+  plan_slug: string;
+  plan_flag: "honorary" | "unrecognised" | null;
+  member_id: string | null;
+  member_state: string | null;
+  shared_email: boolean;
+  login_user_id: string | null;
+  action: "add" | "renew" | "already_paid" | "skip";
+  note: string | null;
 };
 
-const comparedFields: Array<{
-  label: string;
-  source: keyof MemberMojoRecord;
-  existing: keyof ExistingMembership;
-}> = [
-  { label: "title", source: "title", existing: "title" },
-  { label: "first name", source: "firstName", existing: "first_name" },
-  { label: "last name", source: "lastName", existing: "last_name" },
-  { label: "contact email", source: "contactEmail", existing: "contact_email" },
-  { label: "membership type", source: "membershipType", existing: "membership_type" },
-  { label: "membership state", source: "sourceState", existing: "source_state" },
-  { label: "expiry date", source: "expiresOn", existing: "source_expires_on" },
-  { label: "renewal date", source: "renewedOn", existing: "source_renewed_on" },
-  { label: "member-since date", source: "memberSince", existing: "source_member_since" },
-  { label: "rules agreement", source: "rulesAgreement", existing: "source_rules_agreement" },
-];
+export type ImportPreviewItem = { name: string; detail: string };
 
-function normalizedEmail(value: string | null) {
-  return value?.trim().toLowerCase() || null;
-}
-
-function chunks<T>(values: T[], size: number) {
-  return Array.from({ length: Math.ceil(values.length / size) }, (_, index) => values.slice(index * size, (index + 1) * size));
-}
-
-function changedFields(record: MemberMojoRecord, existing: ExistingMembership) {
-  return comparedFields
-    .filter(field => {
-      const sourceValue = field.source === "contactEmail"
-        ? normalizedEmail(record.contactEmail)
-        : record[field.source];
-      const existingValue = field.existing === "contact_email"
-        ? normalizedEmail(existing.contact_email)
-        : existing[field.existing];
-      return sourceValue !== existingValue;
-    })
-    .map(field => field.label);
-}
-
-export async function buildMemberMojoPreview(
-  bytes: Uint8Array,
-  mode: MemberImportMode,
-  actorId: string,
-): Promise<MemberImportPreview> {
-  const parsed = parseMemberMojoCsv(bytes);
-  const admin = createAdminClient();
-  const externalIds = parsed.records.map(record => record.externalId);
-
-  const membershipResults = await Promise.all(chunks(externalIds, 150).map(ids => admin
-    .from("membership_records")
-    .select("external_id,auth_user_id,title,first_name,last_name,contact_email,membership_type,source_state,source_expires_on,source_renewed_on,source_member_since,source_rules_agreement")
-    .eq("source", "membermojo")
-    .in("external_id", ids)));
-  if (membershipResults.some(result => result.error)) throw new Error("Unable to compare the file with membership records.");
-  const existingData = membershipResults.flatMap(result => result.data ?? []);
-
-  const existing = new Map((existingData ?? []).map(record => [record.external_id, record]));
-  const emailCounts = new Map<string, number>();
-  for (const record of parsed.records) {
-    const email = normalizedEmail(record.contactEmail);
-    if (email) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
-  }
-  const uniqueEmails = [...emailCounts].filter(([, count]) => count === 1).map(([email]) => email);
-  const portalResults = await Promise.all(chunks(uniqueEmails, 100).map(emails => admin
-    .from("users")
-    .select("id,email")
-    .in("email", emails)));
-  if (portalResults.some(result => result.error)) throw new Error("Unable to compare the file with portal accounts.");
-  const portalUsers = portalResults.flatMap(result => result.data ?? []);
-
-  const portalByEmail = new Map<string, string[]>();
-  for (const user of portalUsers) {
-    const email = normalizedEmail(user.email);
-    if (!email) continue;
-    portalByEmail.set(email, [...(portalByEmail.get(email) ?? []), user.id]);
-  }
-
-  const rows: MemberImportPreviewRow[] = parsed.records.map(record => {
-    const current = existing.get(record.externalId);
-    const changes = current ? changedFields(record, current) : [];
-    const email = normalizedEmail(record.contactEmail);
-    const matches = email ? portalByEmail.get(email) ?? [] : [];
-    let portalMatch: MemberImportPreviewRow["portalMatch"] = "none";
-    if (current?.auth_user_id) portalMatch = "already-linked";
-    else if (email && (emailCounts.get(email) ?? 0) > 1) portalMatch = "shared-email";
-    else if (matches.length === 1) portalMatch = "candidate";
-
-    return {
-      rowNumber: record.rowNumber,
-      externalId: record.externalId,
-      memberName: record.displayName,
-      sourceState: record.sourceState,
-      expiresOn: record.expiresOn,
-      outcome: !current ? "new" : changes.length ? "changed" : "unchanged",
-      changedFields: changes,
-      portalMatch,
-    };
-  });
-
-  let missingFromSnapshot = 0;
-  if (mode === "complete_active_snapshot") {
-    const { data, error } = await admin
-      .from("membership_records")
-      .select("external_id")
-      .eq("source", "membermojo")
-      .is("membership_ended_at", null);
-    if (error) throw new Error("Unable to identify members absent from the snapshot.");
-    const uploadedIds = new Set(externalIds);
-    missingFromSnapshot = (data ?? []).filter(record => !uploadedIds.has(record.external_id)).length;
-  }
-
-  const issueLimit = 150;
-  const rowLimit = 150;
-  const reviewRows = rows.filter(row => row.outcome !== "unchanged");
-  const totals: MemberImportPreview["totals"] = {
-    uploadedRows: rows.length,
-    activeRows: parsed.records.filter(record => record.sourceState.toLowerCase() === "active").length,
-    existingRecords: rows.filter(row => row.outcome !== "new").length,
-    newRecords: rows.filter(row => row.outcome === "new").length,
-    changedRecords: rows.filter(row => row.outcome === "changed").length,
-    unchangedRecords: rows.filter(row => row.outcome === "unchanged").length,
-    alreadyLinked: rows.filter(row => row.portalMatch === "already-linked").length,
-    portalLinkCandidates: rows.filter(row => row.portalMatch === "candidate").length,
-    missingFromSnapshot,
-    warnings: parsed.issues.filter(issue => issue.severity === "warning").length,
-    information: parsed.issues.filter(issue => issue.severity === "information").length,
+export type MemberImportPreview = {
+  year: number;
+  fileSha256: string;
+  columnsUsed: string[];
+  notActive: number;
+  totals: {
+    people: number;
+    add: number;
+    renew: number;
+    alreadyPaid: number;
+    skipped: number;
+    loginsToLink: number;
+    needInvitation: number;
   };
-  const issueCounts = Object.fromEntries([...new Set(parsed.issues.map(issue => issue.code))]
-    .map(code => [code, parsed.issues.filter(issue => issue.code === code).length]));
-  const fileSha256 = createHash("sha256").update(bytes).digest("hex");
-  const { data: registrationData, error: registrationError } = await admin.rpc("register_membermojo_import_preview", {
-    p_actor_id: actorId,
-    p_file_sha256: fileSha256,
-    p_import_mode: mode,
-    p_row_count: rows.length,
-    p_source_encoding: parsed.encoding,
-    p_summary: {
-      totals,
-      ignored_column_count: parsed.ignoredHeaders.length,
-      issue_counts: issueCounts,
+  /** Things worth a look, none of which stop the import. */
+  flagged: ImportPreviewItem[];
+  skipped: ImportPreviewItem[];
+  /** What the apply step sends back to be saved. */
+  rows: MemberListRow[];
+};
+
+export type MemberImportResult = {
+  added: number;
+  renewed: number;
+  alreadyPaid: number;
+  skipped: number;
+  loginsLinked: number;
+  needInvitation: number;
+};
+
+export function currentMembershipYear(now = new Date()) {
+  return londonDateParts(now).year;
+}
+
+const toJson = (rows: MemberListRow[]) => rows.map((row) => ({
+  full_name: row.fullName, email: row.email, membership_type: row.membershipType,
+}));
+
+async function planRows(rows: MemberListRow[], year: number) {
+  const { data, error } = await createServiceClient().rpc("membermojo_import_plan", {
+    p_rows: toJson(rows), p_year: year,
+  });
+  if (error || !Array.isArray(data)) throw new MemberImportError("We could not check this file. Nothing was changed.");
+  return data as PlanRow[];
+}
+
+export const sha256Hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+export async function buildMemberListPreview(bytes: Uint8Array): Promise<MemberImportPreview> {
+  const parsed = parseMemberList(bytes);
+  const year = currentMembershipYear();
+  const plan = await planRows(parsed.rows, year);
+  const count = (action: PlanRow["action"]) => plan.filter((row) => row.action === action).length;
+  const flagged: ImportPreviewItem[] = [];
+  for (const row of plan) {
+    if (row.action === "skip") continue;
+    if (row.plan_flag === "honorary") flagged.push({ name: row.full_name, detail: `Type "${row.membership_type}" is imported as an Adult member. Change it on their record if it should be Honorary.` });
+    else if (row.plan_flag === "unrecognised") flagged.push({ name: row.full_name, detail: `Type "${row.membership_type || "(blank)"}" was not recognised and is imported as an Adult member.` });
+    if (!row.email) flagged.push({ name: row.full_name, detail: "No email address. They are added without a website login and cannot be invited." });
+    else if (row.shared_email) flagged.push({ name: row.full_name, detail: "Shares an email address with another person. They are added without a website login." });
+    else if (row.plan_slug === "junior") flagged.push({ name: row.full_name, detail: "Junior member. Juniors do not get their own website login." });
+  }
+  const done = plan.filter((row) => row.action !== "skip");
+  const needInvitation = done.filter((row) => row.email && !row.shared_email && row.plan_slug !== "junior" && !row.login_user_id).length;
+  return {
+    year,
+    fileSha256: sha256Hex(bytes),
+    columnsUsed: parsed.columnsUsed,
+    notActive: parsed.notActive,
+    totals: {
+      people: plan.length,
+      add: count("add"),
+      renew: count("renew"),
+      alreadyPaid: count("already_paid"),
+      skipped: count("skip"),
+      loginsToLink: done.filter((row) => row.login_user_id && !row.member_id).length,
+      needInvitation,
     },
-  });
-  const registration = registrationData?.[0];
-  if (registrationError || !registration) throw new Error("Unable to register the import preview.");
-
-  return {
-    importId: registration.import_id,
-    canApply: registration.import_status === "previewed",
-    expiresAt: registration.import_expires_at,
-    fileFingerprint: fileSha256.slice(0, 12),
-    mode,
-    encoding: parsed.encoding,
-    ignoredHeaders: parsed.ignoredHeaders,
-    totals,
-    rows: reviewRows.slice(0, rowLimit),
-    rowsTruncated: reviewRows.length > rowLimit,
-    issues: parsed.issues.slice(0, issueLimit),
-    issuesTruncated: parsed.issues.length > issueLimit,
+    flagged: flagged.slice(0, 300),
+    skipped: plan.filter((row) => row.action === "skip").map((row) => ({ name: row.full_name || "(no name)", detail: row.note ?? "Left out" })),
+    rows: parsed.rows,
   };
 }
 
-function safeApplyMessage(message: string) {
-  if (message.includes("membermojo_import_already_applied")) return "This file was used before, so there is nothing more to save.";
-  if (message.includes("membermojo_preview_expired")) return "This check has closed. Upload the file again to make a new check.";
-  if (message.includes("membermojo_file_changed")) return "This is not the same file you checked. Choose the original file or start again.";
-  if (message.includes("membermojo_preview_not_found")) return "This check is no longer available. Upload the file again.";
-  return "We could not save the member changes. Nothing was changed.";
+export async function applyMemberListImport(actorId: string, rows: MemberListRow[], fileSha256: string): Promise<MemberImportResult> {
+  const year = currentMembershipYear();
+  const plan = await planRows(rows, year);
+  const slugs = [...new Set(plan.filter((row) => row.action !== "skip").map((row) => row.plan_slug))];
+  if (slugs.length) {
+    const { data: plans, error } = await createServiceClient().from("membership_plans").select("id,slug").in("slug", slugs);
+    if (error || !plans || plans.length !== slugs.length) throw new MemberImportError("A membership plan needed for this list is missing. Nothing was changed.");
+    for (const membershipPlan of plans) {
+      try { await ensureMembershipPlanPrice(membershipPlan.id as string, year); }
+      catch { throw new MemberImportError(`No annual fee is set for ${membershipPlan.slug} membership in ${year}. Set the fee first. Nothing was changed.`); }
+    }
+  }
+  const { data, error } = await createServiceClient().rpc("apply_membermojo_import", {
+    p_actor_id: actorId, p_rows: toJson(rows), p_year: year, p_file_sha256: fileSha256,
+  });
+  if (error || !data) {
+    if (error?.message.includes("membermojo_import_price_missing")) throw new MemberImportError("A membership fee is missing for this year. Nothing was changed.");
+    throw new MemberImportError("We could not save the member list. Nothing was changed.");
+  }
+  const result = data as Record<string, number>;
+  return {
+    added: result.added ?? 0, renewed: result.renewed ?? 0, alreadyPaid: result.already_paid ?? 0,
+    skipped: result.skipped ?? 0, loginsLinked: result.logins_linked ?? 0, needInvitation: result.needs_invitation ?? 0,
+  };
 }
 
-export async function applyMemberMojoMembershipImport(
-  bytes: Uint8Array,
-  importId: string,
-  actorId: string,
-): Promise<AppliedMemberImport> {
-  const parsed = parseMemberMojoCsv(bytes);
-  const fileSha256 = createHash("sha256").update(bytes).digest("hex");
-  const records = parsed.records.map(record => ({
-    external_id: record.externalId,
-    title: record.title,
-    first_name: record.firstName,
-    last_name: record.lastName,
-    contact_email: record.contactEmail,
-    membership_type: record.membershipType,
-    source_state: record.sourceState,
-    source_expires_on: record.expiresOn,
-    source_renewed_on: record.renewedOn,
-    source_member_since: record.memberSince,
-    source_rules_agreement: record.rulesAgreement,
-  })) as Json;
-  const { data, error } = await createAdminClient().rpc("apply_membermojo_membership_import_v2", {
-    p_actor_id: actorId,
-    p_file_sha256: fileSha256,
-    p_import_id: importId,
-    p_records: records,
-  });
-  const result = data?.[0];
-  if (error || !result) throw new MemberMojoImportApplyError(safeApplyMessage(error?.message ?? "missing result"));
-  return {
-    processedCount: result.processed_count,
-    createdCount: result.created_count,
-    refreshedCount: result.refreshed_count,
-    endedCount: result.ended_count,
-    restoredCount: result.restored_count,
-    portalAccessReviewCount: result.portal_access_review_count,
-  };
+/** Members added by an import who can be invited to the website but have not been yet. */
+export async function countPendingInvitations() {
+  const { count, error } = await createServiceClient().from("members")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "membermojo_cutover").eq("portal_invitation_status", "eligible")
+    .is("auth_user_id", null).not("contact_email", "is", null).is("anonymized_at", null);
+  if (error) throw new Error("Unable to count website invitations still to send.");
+  return count ?? 0;
 }

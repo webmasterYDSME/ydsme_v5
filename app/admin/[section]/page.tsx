@@ -295,7 +295,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
         <button className="button dark" type="submit">Search members</button>
         {search && <Link prefetch={false} className="portal-filter-clear" href={`/admin/members?status=${status}`}><RotateCcw/>Clear</Link>}
       </div>
-      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships/members">Membership register</Link> : administrator ? <Link prefetch={false} href="/administrator/member-import">MemberMojo final import</Link> : null}{administrator && <Link prefetch={false} href="/administrator/add-members">Bulk invite</Link>}</div>}
+      {(administrator || (membershipEnabled && session.membershipOfficer)) && <div className="bulk-links people-utility-links">{membershipEnabled && session.membershipOfficer ? <Link prefetch={false} href="/admin/memberships/members">Membership register</Link> : null}{administrator ? <Link prefetch={false} href="/administrator/member-import">Import MemberMojo list</Link> : null}</div>}
     </form>
     <div className={`member-table people-member-table ${status === "active" || status === "honorary" ? "people-active-table" : ""}`}>
       <div className="member-row table-head"><span>Member</span><span>Contact</span><span>Website access</span>{status !== "active" && status !== "honorary" && <span>Actions</span>}</div>

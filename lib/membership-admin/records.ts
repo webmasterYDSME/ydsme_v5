@@ -1,6 +1,5 @@
 import "server-only";
 
-import { cache } from "react";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { buildRenewalChoices, renewableMembers, type RenewalMember, type RenewalPlan } from "@/lib/membership-rules";
 import { money } from "@/lib/membership-admin/format";
@@ -13,13 +12,6 @@ function fail(what: string, error: unknown): never {
   if (error) console.error(`Membership administration: ${what}`, error);
   throw new Error(`Unable to load ${what}.`);
 }
-
-export const countMigrationReviews = cache(async () => {
-  const { count, error } = await createServiceClient().from("membership_migration_reviews")
-    .select("id", { count: "exact", head: true }).eq("status", "pending");
-  if (error) fail("membership migration reviews", error);
-  return count ?? 0;
-});
 
 export async function loadPlansAndPrices() {
   const admin = createServiceClient();
@@ -174,12 +166,5 @@ export async function loadReportExports() {
     .select("id,status,storage_path,row_counts,financial_totals,created_at,completed_at,expires_at,last_error")
     .order("created_at", { ascending: false }).limit(10);
   if (error) fail("membership reports", error);
-  return (data ?? []) as Row[];
-}
-
-export async function loadMigrationReviews() {
-  const { data, error } = await createServiceClient().from("membership_migration_reviews")
-    .select("id,review_kind,summary,status,membership_record_id").eq("status", "pending").order("created_at").limit(100);
-  if (error) fail("imported records", error);
   return (data ?? []) as Row[];
 }
