@@ -10,6 +10,7 @@ import {
   applyMemberListImport,
   buildMemberListPreview,
   countPendingInvitations,
+  currentMembershipYear,
   MemberImportError,
   type MemberImportPreview,
   type MemberImportResult,
@@ -102,7 +103,7 @@ export async function sendMemberInvitations(): Promise<MemberInvitationState> {
       status = "blocked_shared";
     } else {
       const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-        data: { full_name: member.full_name, membership_active: true },
+        data: { full_name: member.full_name, membership_active: true, invite_context: "membermojo", membership_year: String(currentMembershipYear()) },
         redirectTo: `${origin}/auth/invite?next=/account`,
       });
       if (inviteError || !invitation.user) {

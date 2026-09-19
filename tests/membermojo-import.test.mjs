@@ -106,3 +106,12 @@ test("the import is administrator-only, rate limited, and the old modes are gone
   assert.match(features, /"pilot" \|\| configured === "live" \|\| configured === "drain"/);
   await assert.rejects(read("lib/membermojo-csv.ts"), { code: "ENOENT" });
 });
+
+test("import invitations use the membership wording and open the account, with no password step", async () => {
+  const [actions, template] = await Promise.all([read("lib/actions/member-imports.ts"), read("supabase/templates/invite.html")]);
+  assert.match(actions, /invite_context: "membermojo"/);
+  assert.match(actions, /auth\/invite\?next=\/account/);
+  assert.doesNotMatch(actions, /reset-password/);
+  assert.match(template, /eq \$context "membermojo"/);
+  assert.match(template, /Your account is ready/);
+});
