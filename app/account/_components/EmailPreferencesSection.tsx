@@ -1,30 +1,22 @@
-import { MailCheck, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { setNewsletterPreference } from "@/lib/actions/account";
 import type { NewsletterPreference } from "@/lib/newsletter-preference";
 import { date } from "../format";
+import { Section } from "./Section";
 import { SectionNotice, type SectionMessage } from "./SectionMessage";
 import styles from "../account.module.css";
 
 /** The one optional email the Society sends. Everything else is a system email and cannot be switched off here. */
 export function EmailPreferencesSection({ newsletter, message }: { newsletter: NewsletterPreference | null; message: SectionMessage | null }) {
-  return <section className={styles.card} id="email-preferences" aria-labelledby="email-preferences-heading">
-    <header className={styles.cardHead}>
-      <span className={styles.badge}><MailCheck/></span>
-      <div className={styles.headText}><h2 id="email-preferences-heading">Email preferences</h2><p>Choose whether you would like the Society newsletter. It is optional, and you can change your mind at any time.</p></div>
-    </header>
-    <div className={styles.cardBodyLoose}>
-      <SectionNotice message={message}/>
-      <Newsletter newsletter={newsletter}/>
-      <div className={styles.system} role="note">
-        <ShieldCheck aria-hidden="true"/>
-        <div>
-          <strong>System emails will still be sent</strong>
-          <p>Whatever you choose here, we will still email you the messages you need to use your account and membership: sign-in links, confirmations when you change an email address, and important notices about your account or membership, such as renewals and receipts. These are not part of the newsletter and cannot be switched off.</p>
-        </div>
-      </div>
-    </div>
-  </section>;
+  return <Section id="email-preferences" title="Email preferences" description="Choose whether you would like the Society newsletter. It is optional, and you can change your mind at any time.">
+    <SectionNotice message={message}/>
+    <Newsletter newsletter={newsletter}/>
+    <p className={styles.note} role="note">
+      <ShieldCheck aria-hidden="true"/>
+      <span><strong>System emails will still be sent.</strong> Whatever you choose here, we will still email you the messages you need to use your account and membership: sign-in links, confirmations when you change an email address, and important notices about your account or membership, such as renewals and receipts. These are not part of the newsletter and cannot be switched off.</span>
+    </p>
+  </Section>;
 }
 
 function Newsletter({ newsletter }: { newsletter: NewsletterPreference | null }) {

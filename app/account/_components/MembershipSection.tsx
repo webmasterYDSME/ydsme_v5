@@ -1,4 +1,4 @@
-import { Award, CalendarClock, CreditCard } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import {
   openMembershipBillingPortal,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/membership";
 import type { MembershipAccount } from "@/lib/membership";
 import { date, membershipStatus, money, paymentMethod, paymentStatus } from "../format";
+import { Section } from "./Section";
 import styles from "../account.module.css";
 
 type Props = {
@@ -23,15 +24,11 @@ type Props = {
 /** Membership status, what to do about renewal, and the payment history. */
 export function MembershipSection({ membership, campaignYear, renewalAvailable, honoraryTransitionPayment }: Props) {
   const honorary = membership?.member.effective_state === "honorary";
-  return <section className={styles.card} id="membership" aria-labelledby="membership-heading">
-    <header className={styles.cardHead}>
-      <span className={styles.badge}>{honorary ? <Award/> : <CalendarClock/>}</span>
-      <div className={styles.headText}>
-        <h2 id="membership-heading">{honorary ? "Lifetime honorary member" : membership?.plan?.name || "Membership"}</h2>
-        <p>Your membership term, renewal and payment history.</p>
-      </div>
-    </header>
-    <div className={styles.cardBodyLoose}>
+  return <Section
+    id="membership"
+    title={honorary ? "Lifetime honorary member" : membership?.plan?.name || "Membership"}
+    description="Your membership term, renewal and payment history.">
+    <div className={styles.stack}>
       {membership ? <>
         <Facts membership={membership}/>
         <StudentRequest membership={membership}/>
@@ -39,7 +36,7 @@ export function MembershipSection({ membership, campaignYear, renewalAvailable, 
         <History membership={membership}/>
       </> : <p className={styles.empty}>Your account has not yet been linked to the Society’s membership register. A membership officer can complete this for you.</p>}
     </div>
-  </section>;
+  </Section>;
 }
 
 function Facts({ membership }: { membership: MembershipAccount }) {

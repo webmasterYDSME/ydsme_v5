@@ -4,14 +4,14 @@ import { getOwnMemberDetails } from "@/lib/member-details";
 import { getMembershipAccount, getOpenMembershipRenewalCampaign } from "@/lib/membership";
 import { getOwnNewsletterPreference } from "@/lib/newsletter-preference";
 import { createClient } from "@/lib/supabase/server";
-import { AccountBanner, type AccountNavItem } from "./_components/AccountBanner";
+import { AccountBanner, type AccountTabLink } from "./_components/AccountBanner";
 import { AddressSection } from "./_components/AddressSection";
 import { EmailPreferencesSection } from "./_components/EmailPreferencesSection";
 import { MembershipSection } from "./_components/MembershipSection";
 import { NotificationsSection, type AccountNotification } from "./_components/NotificationsSection";
 import { ProfileSection } from "./_components/ProfileSection";
 import { SignInSection } from "./_components/SignInSection";
-import { accountErrors, accountNotices, genericError, genericNotice, londonToday, sectionMessage } from "./format";
+import { accountErrors, accountNotices, accountTabLabels, genericError, genericNotice, londonToday, pickAccountTab, sectionMessage, type AccountTab } from "./format";
 import styles from "./account.module.css";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export const metadata = { title: "Your account" };
 const sectionPrefixes = ["newsletter-", "address-"];
 const belongsToSection = (key?: string) => Boolean(key && sectionPrefixes.some((prefix) => key.startsWith(prefix)));
 
-export default async function Account({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
+export default async function Account({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string; tab?: string }> }) {
   const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
   const supabase = await createClient();
   const membershipEnabled = membershipBillingEnabled();
@@ -47,13 +47,14 @@ export default async function Account({ searchParams }: { searchParams: Promise<
   const honoraryTransitionPayment = Boolean(membership?.member.effective_state === "honorary"
     && membership.honorary?.revoked_effective_on && membership.honorary.replacement_plan_id);
 
-  const nav: AccountNavItem[] = [
-    ...(membershipEnabled ? [{ id: "membership", label: "Membership" }, { id: "notifications", label: "Notifications" }] : []),
-    { id: "profile", label: "Your details" },
-    { id: "address", label: "Address" },
-    { id: "email-preferences", label: "Email preferences" },
-    { id: "sign-in", label: "Sign-in and contact" },
-  ];
+  const current = pickAccountTab(query, membershipEnabled);
+  const tabs: AccountTabLink[] = (membershipEnabled ? ["membership", "details", "settings"] as AccountTab[] : ["details", "settings"] as AccountTab[]).map((id) => ({
+    id,
+    label: accountTabLabels[id],
+    href: `/account?tab=${id}`,
+    current: id === current,
+    count: id === "membership" ? unreadNotifications : undefined,
+  }));
 
   return <div className="portal-content">
     <div className={styles.page}>
@@ -62,28 +63,33 @@ export default async function Account({ searchParams }: { searchParams: Promise<
         email={profile.email}
         role={role}
         membershipState={membership?.member.effective_state ?? null}
-        unreadNotifications={unreadNotifications}
-        nav={nav}
+        tabs={tabs}
       />
       {query.error && !belongsToSection(query.error) ? <p className={`${styles.message} ${styles.messageError}`} role="alert">{accountErrors[query.error] || genericError}</p> : null}
       {query.notice && !belongsToSection(query.notice) ? <p className={`${styles.message} ${styles.messageSuccess}`} role="status">{accountNotices[query.notice] || genericNotice}</p> : null}
 
-      <div className={styles.layout}>
-        {membershipEnabled ? <MembershipSection
-          membership={membership}
-          campaignYear={campaign?.membership_year ?? null}
-          renewalAvailable={renewalAvailable}
-          honoraryTransitionPayment={honoraryTransitionPayment}
-        /> : null}
-        {membershipEnabled ? <NotificationsSection notifications={notifications}/> : null}
-        <ProfileSection title={profile.title || ""} fullName={profile.full_name || ""} contactNumber={profile.contact_number || ""}/>
-        <AddressSection details={details} message={sectionMessage(query, "address-")} today={londonToday()}/>
-        <EmailPreferencesSection newsletter={newsletter} message={sectionMessage(query, "newsletter-")}/>
-        <SignInSection
-          loginEmail={profile.email}
-          correspondence={membership ? { email: membership.member.contact_email ?? "", role: membership.member.contact_role } : null}
-          memberMojoLink={!membershipEnabled}
-        />
+      <div className={styles.sections}>
+        {current === "membership" ? <>
+          <MembershipSection
+            membership={membership}
+            campaignYear={campaign?.membership_year ?? null}
+            renewalAvailable={renewalAvailable}
+            honoraryTransitionPayment={honoraryTransitionPayment}
+          />
+          <NotificationsSection notifications={notifications}/>
+        </> : null}
+        {current === "details" ? <>
+          <ProfileSection title={profile.title || ""} fullName={profile.full_name || ""} contactNumber={profile.contact_number || ""}/>
+          <AddressSection details={details} message={sectionMessage(query, "address-")} today={londonToday()}/>
+        </> : null}
+        {current === "settings" ? <>
+          <EmailPreferencesSection newsletter={newsletter} message={sectionMessage(query, "newsletter-")}/>
+          <SignInSection
+            loginEmail={profile.email}
+            correspondence={membership ? { email: membership.member.contact_email ?? "", role: membership.member.contact_role } : null}
+            memberMojoLink={!membershipEnabled}
+          />
+        </> : null}
       </div>
     </div>
   </div>;

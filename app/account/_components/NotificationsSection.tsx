@@ -4,6 +4,7 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { markAllMembershipNotificationsRead } from "@/lib/actions/account";
 import { markMembershipNotificationRead } from "@/lib/actions/membership";
 import { relativeTime, safeInternalHref } from "../format";
+import { Section } from "./Section";
 import styles from "../account.module.css";
 
 export type AccountNotification = {
@@ -42,29 +43,20 @@ export function NotificationsSection({ notifications }: { notifications: Account
   const recent = read.slice(0, RECENT_READ_SHOWN);
   const older = read.slice(RECENT_READ_SHOWN);
 
-  return <section className={styles.card} id="notifications" aria-labelledby="notifications-heading">
-    <header className={styles.cardHead}>
-      <span className={styles.badge}><Bell/></span>
-      <div className={styles.headText}>
-        <h2 id="notifications-heading">Notifications {unread.length ? <span className={styles.count} aria-label={`${unread.length} unread`}>{unread.length}</span> : null}</h2>
-        <p>Updates about your membership, kept here as well as in your inbox.</p>
-      </div>
-    </header>
-    <div className={styles.cardBody}>
-      {notifications.length ? <>
-        {unread.length > 1 ? <form action={markAllMembershipNotificationsRead} className={styles.listTools}>
-          <PendingSubmitButton className={styles.linkButton} pendingLabel="Marking…">Mark all as read</PendingSubmitButton>
-        </form> : null}
-        <ul className={styles.notices}>
-          {[...unread, ...recent].map((notice) => <Notice key={notice.id} notice={notice}/>)}
-        </ul>
-        {older.length ? <details className={styles.older}>
-          <summary>Show {older.length} older {older.length === 1 ? "notification" : "notifications"}</summary>
-          <ul className={styles.notices}>{older.map((notice) => <Notice key={notice.id} notice={notice}/>)}</ul>
-        </details> : null}
-      </> : <div className={styles.emptyState}><span className={styles.badge}><Bell/></span><strong>You are all caught up</strong><p>Notices about renewals, payments and changes to your membership will appear here.</p></div>}
-    </div>
-  </section>;
+  return <Section id="notifications" title="Notifications" count={unread.length} description="Updates about your membership, kept here as well as in your inbox.">
+    {notifications.length ? <>
+      {unread.length > 1 ? <form action={markAllMembershipNotificationsRead} className={styles.listTools}>
+        <PendingSubmitButton className={styles.linkButton} pendingLabel="Marking…">Mark all as read</PendingSubmitButton>
+      </form> : null}
+      <ul className={styles.notices}>
+        {[...unread, ...recent].map((notice) => <Notice key={notice.id} notice={notice}/>)}
+      </ul>
+      {older.length ? <details className={styles.older}>
+        <summary>Show {older.length} older {older.length === 1 ? "notification" : "notifications"}</summary>
+        <ul className={styles.notices}>{older.map((notice) => <Notice key={notice.id} notice={notice}/>)}</ul>
+      </details> : null}
+    </> : <div className={styles.emptyState}><span className={styles.badge}><Bell/></span><strong>You are all caught up</strong><p>Notices about renewals, payments and changes to your membership will appear here.</p></div>}
+  </Section>;
 }
 
 function Notice({ notice }: { notice: AccountNotification }) {

@@ -1,8 +1,8 @@
-import { KeyRound } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { updateLoginEmail } from "@/lib/actions/auth";
 import { requestOwnMembershipContactChange } from "@/lib/actions/membership";
 import { MEMBERMOJO_MEMBERSHIP_URL } from "@/lib/features";
+import { Section } from "./Section";
 import styles from "../account.module.css";
 
 /** The email used to sign in, the address membership mail goes to, and (while MemberMojo runs it) the link to manage membership there. */
@@ -12,12 +12,8 @@ export function SignInSection({ loginEmail, correspondence, memberMojoLink }: {
   correspondence: { email: string; role: string } | null;
   memberMojoLink: boolean;
 }) {
-  return <section className={styles.card} id="sign-in" aria-labelledby="sign-in-heading">
-    <header className={styles.cardHead}>
-      <span className={styles.badge}><KeyRound/></span>
-      <div className={styles.headText}><h2 id="sign-in-heading">Sign-in and contact</h2><p>The email address you sign in with, and where membership messages are sent.</p></div>
-    </header>
-    <div className={styles.cardBody}>
+  return <Section id="sign-in" title="Sign-in and contact" description="The email address you sign in with, and where membership messages are sent.">
+    <div className={styles.rows}>
       <div className={styles.row}>
         <div className={styles.rowText}><strong>Login email</strong><p>Used only to sign in. We ask you to confirm the new address before it changes.</p></div>
         <form action={updateLoginEmail} className={styles.controls}>
@@ -44,5 +40,5 @@ export function SignInSection({ loginEmail, correspondence, memberMojoLink }: {
         <div className={styles.controls}><a className="button outline" href={MEMBERMOJO_MEMBERSHIP_URL} target="_blank" rel="noreferrer">Manage membership</a></div>
       </div> : null}
     </div>
-  </section>;
+  </Section>;
 }

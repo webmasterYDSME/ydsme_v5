@@ -62,3 +62,14 @@ test("membership updates are shown as notifications that link only to pages on t
   assert.match(format, /startsWith\("\/"\)/);
   for (const key of ["address-updated", "address-birth-date-locked"]) assert.match(format, new RegExp(`"${key}"`));
 });
+
+test("the page is split into three tabs, and a result message returns people to the tab they were on", async () => {
+  const [page, format, banner] = await Promise.all([read("app/account/page.tsx"), read("app/account/format.ts"), read("app/account/_components/AccountBanner.tsx")]);
+  assert.match(page, /pickAccountTab\(query, membershipEnabled\)/);
+  assert.match(page, /current === "membership"[\s\S]*<NotificationsSection/);
+  assert.match(page, /current === "details"[\s\S]*<AddressSection/);
+  assert.match(page, /current === "settings"[\s\S]*<EmailPreferencesSection[\s\S]*<SignInSection/);
+  assert.match(format, /const available: AccountTab\[\] = membershipEnabled \? \["membership", "details", "settings"\] : \["details", "settings"\]/);
+  assert.match(format, /newsletter-\|contact-/);
+  assert.match(banner, /aria-current=\{tab\.current \? "page" : undefined\}/);
+});

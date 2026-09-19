@@ -114,3 +114,23 @@ export function safeInternalHref(href: string | null) {
 
 /** London's calendar date today as yyyy-mm-dd. */
 export const londonToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+
+/** The three tabs of the account page. Which ones exist depends on whether the website runs membership. */
+export type AccountTab = "membership" | "details" | "settings";
+
+export const accountTabLabels: Record<AccountTab, string> = { membership: "Membership", details: "Your details", settings: "Settings" };
+
+/**
+ * The tab to show. An explicit ?tab= wins; otherwise a result message decides, so that after saving something the person
+ * lands back where they were (other pages redirect here with only a notice or error); otherwise the first tab.
+ */
+export function pickAccountTab(query: { tab?: string; error?: string; notice?: string }, membershipEnabled: boolean): AccountTab {
+  const available: AccountTab[] = membershipEnabled ? ["membership", "details", "settings"] : ["details", "settings"];
+  const asked = available.find((tab) => tab === query.tab);
+  if (asked) return asked;
+  const key = query.error ?? query.notice ?? "";
+  const inferred: AccountTab | null = /^(address-|profile-)|profile/i.test(key) ? "details"
+    : /^(newsletter-|contact-|email-confirmation)|login email|valid email/i.test(key) ? "settings"
+      : null;
+  return inferred && available.includes(inferred) ? inferred : available[0];
+}
