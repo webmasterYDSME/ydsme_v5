@@ -183,11 +183,24 @@
 .formTitle { margin: 0; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #56625b; }
 .callout { margin: 0; padding: 12px 14px; border-left: 4px solid var(--brass); background: #f7f1e0; color: var(--ink); font-size: 14px; line-height: 1.55; }
 
-/* The Add a membership drawer keeps its numbered sections, but smaller. */
-.panelBody :global(.membership-form-block) { padding: 16px; gap: 14px; border-radius: 8px; }
-.panelBody :global(.membership-form-block-heading) { padding-bottom: 12px; }
-.panelBody :global(.membership-form-block-heading h3) { margin: 0 0 3px; font-size: 19px; }
-.panelBody :global(.membership-form-block-heading p) { font-size: 12px; }
-.panelBody :global(.membership-form-block .settings-fieldset) { padding: 14px; }
-.panelBody :global(.membership-form-block .settings-fieldset legend) { font-size: 16px; }
-.panelBody :global(.membership-form-submit) { padding: 14px 16px; border-radius: 8px; }
+/* The Add a membership drawer: one card per section, no legacy blocks. */
+.panelBody.panelBody .addForm { padding: 0; border: 0; background: none; gap: 14px; margin: 0; }
+.formSection { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 16px; border: 1px solid rgba(16,24,20,.14); border-radius: 8px; background: #fbf8f0; }
+.fieldGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.nameRow { grid-template-columns: minmax(0, 1fr) 120px; }
+.more summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--forest); }
+.more > :not(summary) { margin-top: 14px; }
+.actionRow > p { flex: 1 1 220px; }
+.panelBody :global(.officer-eligibility-fields) { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.panelBody :global(.membership-manual-date-grid) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.panelBody :global(.membership-manual-date-grid label small) { font-size: 12px; font-weight: 400; color: #56625b; line-height: 1.45; }
+.panelBody :global(.membership-manual-charge) { min-height: 0; padding: 14px; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; border-radius: 8px; }
+.panelBody :global(.membership-manual-charge-icon) { width: 36px; height: 36px; }
+.panelBody :global(.membership-manual-charge > div > span) { font-size: 11px; }
+.panelBody :global(.membership-manual-charge strong) { font-size: 20px; }
+.panelBody :global(.membership-manual-charge b) { font-size: 20px; }
+.panelBody :global(.membership-manual-charge small) { font-size: 12px; line-height: 1.45; }
+@media (max-width: 620px) {
+  .fieldGrid, .panelBody :global(.membership-manual-date-grid) { grid-template-columns: minmax(0, 1fr); }
+  .nameRow { grid-template-columns: minmax(0, 1fr) 96px; }
+}
