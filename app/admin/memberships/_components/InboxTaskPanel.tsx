@@ -44,7 +44,7 @@ function facts(task: InboxTask): [string, string][] {
     case "renewal-payment": return [["Membership year", String(task.year)], ["Payment method", paymentMethodName(task.method)], ["Amount due", money(task.amountDuePence)]];
     case "student-request": return [["Requested for", String(task.year)], ["Membership until decided", "Adult"]];
     case "payment-review": return [["Membership year", String(task.year)], ["Paid", `${money(task.paidPence)} of ${money(task.duePence)}`]];
-    case "refund": return [["To refund", money(task.outstandingPence)]];
+    case "refund": return [["To refund", money(task.outstandingPence)], ...(task.reason ? [["Reason for denial", task.reason] as [string, string]] : [])];
     case "email-delivery": return [["Email", task.subject ?? "A membership email"], ["Sent to", task.recipient ?? "Not recorded"]];
     case "email-retry": return [["Sent to", task.recipient], ["Attempts", String(task.attempts)]];
     case "notice": return [["Area", task.area]];
@@ -148,7 +148,7 @@ function Form({ task }: { task: InboxTask }) {
       </div>
       : <p className={styles.panelNote}>{task.body}</p>;
     case "refund": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>{task.reason || "Membership was denied after payment."} Hand the money back, then record it here. If they paid by card, refund it through the payment service instead and this clears by itself.</p>
+      <p className={styles.panelNote}>Membership was denied after payment. Hand the money back, then record it here.</p>
       <form action={recordDeniedMembershipRefund} className="stack-form"><input type="hidden" name="application_id" value={task.applicationId}/><label>How it was refunded<textarea name="note" rows={3} minLength={5} maxLength={400} placeholder="For example: handed back £20 in cash on 20 September." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as refunded</PendingSubmitButton></Actions></form>
     </div>;
     case "email-delivery": return <div className={styles.panelForms}>
