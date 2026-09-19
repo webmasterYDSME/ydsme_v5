@@ -60,7 +60,8 @@ export type InboxTask = Base & (
   | { type: "manual-contact"; notificationId: string; items: string[] }
   | { type: "payment-review"; termId: string; year: number; paidPence: number; duePence: number }
   | { type: "honorary-conflict"; body: string }
-  | { type: "refund"; reason: string | null; outstandingPence: number }
+  | { type: "refund"; applicationId: string; reason: string | null; outstandingPence: number }
+  | { type: "email-delivery"; eventId: string; recipient: string | null; event: "bounced" | "complained" | "suppressed"; subject: string | null }
   | { type: "email-retry"; notificationId: string; recipient: string; attempts: number; error: string | null }
   | { type: "notice"; area: "Online payments" | "Email" | "Setup"; title: string; body: string; technical: string | null; href: string | null; hrefLabel: string | null }
 );
@@ -85,7 +86,7 @@ function sources(admin: Admin) {
     webhookFailures: (columns: string) => admin.from("stripe_webhook_events").select(columns).eq("processing_status", "failed").limit(LIMIT.webhookFailures),
     providerCommands: (columns: string) => admin.from("membership_provider_commands").select(columns).eq("status", "failed").limit(LIMIT.providerCommands),
     emailFailures: (columns: string) => notifications().select(columns).eq("email_status", "failed").limit(LIMIT.emailFailures),
-    deliveryEvents: (columns: string) => admin.from("membership_delivery_events").select(columns).in("event_type", ["bounced", "complained", "suppressed"]).limit(LIMIT.deliveryEvents),
+    deliveryEvents: (columns: string) => admin.from("membership_delivery_events").select(columns).in("event_type", ["bounced", "complained", "suppressed"]).is("resolved_at", null).order("occurred_at").limit(LIMIT.deliveryEvents),
   };
 }
 
@@ -246,7 +247,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     from.webhookFailures("stripe_event_id,event_type,last_error,claimed_at"),
     from.providerCommands("id,command_type,attempts,last_error,updated_at"),
     from.emailFailures("id,member_id,title,recipient_email,email_attempts,last_email_error,created_at"),
-    from.deliveryEvents("id,event_type,occurred_at"),
+    from.deliveryEvents("id,event_type,occurred_at,membership_notifications(member_id,recipient_email,title)"),
     refundsToArrange(admin),
   ]);
   for (const [what, result] of [
@@ -355,7 +356,7 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     add({
       key: `refund.${application.id}`, type: "refund", kind: "problem", name: application.full_name,
       summary: "Membership denied after payment · a refund has to be arranged manually", since: application.created_at, cta: "See details",
-      memberId: application.converted_member_id, reason: application.review_reason, outstandingPence,
+      memberId: application.converted_member_id, applicationId: application.id, reason: application.review_reason, outstandingPence,
     });
   }
   for (const notice of (checkoutNoticeResult.data ?? []) as Row[]) {
@@ -402,11 +403,13 @@ export const loadInbox = cache(async (): Promise<{ tasks: InboxTask[] }> => {
     });
   }
   for (const event of (deliveryResult.data ?? []) as Row[]) {
-    const title = event.event_type === "bounced" ? "Email address could not receive messages" : event.event_type === "complained" ? "Recipient reported unwanted email" : "Email delivery was stopped";
-    const body = event.event_type === "bounced" ? "The address could not receive this email." : event.event_type === "complained" ? "The recipient marked a membership email as unwanted." : "The email service has stopped sending to this address.";
+    const sent = Array.isArray(event.membership_notifications) ? event.membership_notifications[0] : event.membership_notifications;
+    const recipient: string | null = sent?.recipient_email ?? null;
+    const what = event.event_type === "bounced" ? "could not be delivered" : event.event_type === "complained" ? "was reported as unwanted" : "was stopped by the email service";
     add({
-      key: `notice.delivery-${event.id}`, type: "notice", kind: "problem", name: title, summary: body, since: event.occurred_at, cta: "See details", memberId: null,
-      area: "Email", title, body, technical: null, href: null, hrefLabel: null,
+      key: `email-delivery.${event.id}`, type: "email-delivery", kind: "problem", name: recipient ? `Email to ${recipient} ${what}` : `An email ${what}`,
+      summary: sent?.title ? `“${sent.title}”` : "A membership email", since: event.occurred_at, cta: "See details", memberId: sent?.member_id ?? null,
+      eventId: event.id, recipient, event: event.event_type, subject: sent?.title ?? null,
     });
   }
 

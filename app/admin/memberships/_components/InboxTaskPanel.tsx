@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Banknote } from "lucide-react";
 import {
   completeManualMembershipContact,
+  recordDeniedMembershipRefund,
+  resolveMembershipDeliveryProblem,
   confirmExistingMemberOfflineRenewal,
   confirmOfflineMembership,
   recordOfflineApplicationPayment,
@@ -43,6 +45,7 @@ function facts(task: InboxTask): [string, string][] {
     case "student-request": return [["Requested for", String(task.year)], ["Membership until decided", "Adult"]];
     case "payment-review": return [["Membership year", String(task.year)], ["Paid", `${money(task.paidPence)} of ${money(task.duePence)}`]];
     case "refund": return [["To refund", money(task.outstandingPence)]];
+    case "email-delivery": return [["Email", task.subject ?? "A membership email"], ["Sent to", task.recipient ?? "Not recorded"]];
     case "email-retry": return [["Sent to", task.recipient], ["Attempts", String(task.attempts)]];
     case "notice": return [["Area", task.area]];
     default: return [];
@@ -101,7 +104,7 @@ function Actions({ task, link = true, children }: { task: InboxTask; link?: bool
 }
 
 /** Drawers whose form already carries the record link, so it is not repeated below. */
-const recordLinkInForm = new Set<InboxTask["type"]>(["verification", "renewal-payment", "payment-review", "honorary-conflict", "manual-contact"]);
+const recordLinkInForm = new Set<InboxTask["type"]>(["verification", "renewal-payment", "payment-review", "honorary-conflict", "manual-contact", "refund", "email-delivery"]);
 
 function Form({ task }: { task: InboxTask }) {
   const today = londonToday();
@@ -145,8 +148,14 @@ function Form({ task }: { task: InboxTask }) {
       </div>
       : <p className={styles.panelNote}>{task.body}</p>;
     case "refund": return <div className={styles.panelForms}>
-      <p className={styles.panelNote}>{task.reason || "Membership was denied after payment."} Arrange the refund through the payment service. It drops out of this list once nothing is left to refund.</p>
-      {task.memberId ? memberLink(task.memberId, "View payment") : null}
+      <p className={styles.panelNote}>{task.reason || "Membership was denied after payment."} Hand the money back, then record it here. If they paid by card, refund it through the payment service instead and this clears by itself.</p>
+      <form action={recordDeniedMembershipRefund} className="stack-form"><input type="hidden" name="application_id" value={task.applicationId}/><label>How it was refunded<textarea name="note" rows={3} minLength={5} maxLength={400} placeholder="For example: handed back £20 in cash on 20 September." required/></label><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as refunded</PendingSubmitButton></Actions></form>
+    </div>;
+    case "email-delivery": return <div className={styles.panelForms}>
+      <p className={styles.panelNote}>{task.event === "bounced" ? "The address could not receive this email, and further emails to it are blocked. Correct it on the member’s record if they have a new one, or contact them another way."
+        : task.event === "complained" ? "The recipient marked a membership email as unwanted, and further emails to this address are blocked. Contact them another way if they still need to hear from the Society."
+        : "The email service has stopped sending to this address."}</p>
+      <form action={resolveMembershipDeliveryProblem} className="stack-form"><input type="hidden" name="event_id" value={task.eventId}/><Actions task={task}><PendingSubmitButton pendingLabel="Saving…">Mark as dealt with</PendingSubmitButton></Actions></form>
     </div>;
     case "email-retry": return <div className={styles.panelForms}>
       <p className={styles.panelNote}>The email could not be delivered. Correct the address, retry delivery, or contact the member another way.</p>
@@ -174,6 +183,6 @@ export function InboxTaskPanel({ task, closeHref }: { task: InboxTask; closeHref
       </section>)}
     </> : rows.length ? <dl className={styles.facts}>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : null}
     <Form task={task}/>
-    {task.memberId && task.type !== "refund" && task.type !== "email-retry" && !recordLinkInForm.has(task.type) ? memberLink(task.memberId, "Open full membership record") : null}
+    {task.memberId && task.type !== "email-retry" && !recordLinkInForm.has(task.type) ? memberLink(task.memberId, "Open full membership record") : null}
   </SidePanel>;
 }

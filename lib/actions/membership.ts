@@ -970,6 +970,37 @@ export async function completeManualMembershipContact(formData: FormData) {
   redirect("/admin/memberships?notice=manual-contact-completed");
 }
 
+/** Records that a refund owed after a denied membership was handed back by hand (usually cash). */
+export async function recordDeniedMembershipRefund(formData: FormData) {
+  const { user } = await requireCapability("memberships.manage");
+  const applicationId = idSchema.parse(formData.get("application_id"));
+  const note = z.string().trim().min(5).max(400).parse(formData.get("note"));
+  const admin = createServiceClient();
+  const { error } = await admin.rpc("record_denied_membership_refund", { p_application_id: applicationId, p_actor: user.id, p_note: note });
+  if (error) {
+    console.error("Membership refund could not be recorded", error);
+    redirect("/admin/memberships?error=refund-unavailable");
+  }
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=refund-recorded");
+}
+
+/** Clears a bounce, complaint or stopped-delivery entry from the Problems list once the officer has dealt with it. */
+export async function resolveMembershipDeliveryProblem(formData: FormData) {
+  const { user, role } = await requireCapability("memberships.manage");
+  const eventId = idSchema.parse(formData.get("event_id"));
+  const admin = createServiceClient();
+  const { data, error } = await admin.from("membership_delivery_events")
+    .update({ resolved_at: new Date().toISOString() }).eq("id", eventId).is("resolved_at", null).select("id").maybeSingle();
+  if (error || !data) redirect("/admin/memberships?error=delivery-problem-unavailable");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.delivery-problem-resolved",
+    entityType: "membership-delivery-event", entityId: eventId, summary: "Officer marked an email delivery problem as dealt with.",
+  });
+  revalidatePath("/admin/memberships");
+  redirect("/admin/memberships?notice=delivery-problem-cleared");
+}
+
 export async function retryMembershipNotification(formData: FormData) {
   const { user } = await requireCapability("memberships.manage");
   const notificationId = idSchema.parse(formData.get("notification_id"));

@@ -431,3 +431,20 @@ test("contact tasks say why the member has to be contacted", async () => {
   assert.match(inbox, /function contactTasks/);
   assert.match(inbox, /items\.includes\(text\)/);
 });
+
+test("officers can clear refund and email delivery problems", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609190009_membership_problem_clearing.sql", import.meta.url), "utf8");
+  // The refund is recorded against every payment with money left, only for a denied membership, only by an officer.
+  assert.match(sql, /manual_verification='denied'/);
+  assert.match(sql, /has_membership_management_capability\(p_actor\)/);
+  assert.match(sql, /refunded_pence=p\.amount_pence, status='refunded'/);
+  assert.match(sql, /add column if not exists resolved_at/);
+  const inbox = readFileSync(new URL("../lib/membership-admin/inbox.ts", import.meta.url), "utf8");
+  // Cleared delivery problems no longer come back, and the refund task knows which application it is for.
+  assert.match(inbox, /\.is\("resolved_at", null\)/);
+  assert.match(inbox, /applicationId: application\.id/);
+  const panel = readFileSync(new URL("../app/admin/memberships/_components/InboxTaskPanel.tsx", import.meta.url), "utf8");
+  assert.match(panel, /recordDeniedMembershipRefund/);
+  assert.match(panel, /resolveMembershipDeliveryProblem/);
+  assert.match(panel, />Mark as refunded</);
+});

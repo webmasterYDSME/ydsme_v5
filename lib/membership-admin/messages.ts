@@ -44,6 +44,8 @@ const messages: Record<string, string> = {
   "plan-update-failed": "The membership details could not be saved. Try again.",
   "price-save-failed": "The fee could not be saved. Nothing was changed. Try again.",
   "price-transition-queue-failed": "The fee was saved, but some members could not be switched to it. Try saving the same fee again.",
+  "refund-unavailable": "The refund could not be recorded. It may already be recorded, or the membership was not denied. Refresh and check.",
+  "delivery-problem-unavailable": "That email problem was already cleared or could not be found. Refresh and check.",
   "officer-member-create-failed": "The membership could not be added. Check the details and try again.",
 };
 
@@ -61,6 +63,8 @@ const notices: Record<string, string> = {
   "contact-cleared": "Correspondence email removed.",
   "portal-login-assigned": "Website login assigned. The member is invited to set it up.",
   "portal-login-removed": "Personal website access removed.",
+  "refund-recorded": "Refund recorded. It has been cleared from Problems.",
+  "delivery-problem-cleared": "Marked as dealt with.",
   "offline-payment-review-created": "The payment has been sent for checking. Follow it up under Problems in the Inbox.",
 };
 
