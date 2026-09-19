@@ -190,7 +190,7 @@
 
 /* The shared form styles were written for a dense page. Inside this workspace, labels and notes stay readable. */
 .workspace.workspace :global(.editor-form) label, .workspace.workspace :global(.stack-form) label { font-size: 13px; line-height: 1.4; }
-.workspace.workspace :global(.editor-form) label em, .workspace.workspace :global(.stack-form) label em { font-size: 12px; }
+.workspace.workspace :global(.editor-form) label em, .workspace.workspace :global(.stack-form) label em { font-size: 12px; font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; color: #56625b; }
 .panelBody :global(.membership-manual-create-form) { grid-template-columns: 1fr; margin-top: 0; }
 .card :global(.membership-cash-renewal-form) { grid-template-columns: 1fr; margin-top: 16px; padding: 0; border: 0; background: transparent; }
 

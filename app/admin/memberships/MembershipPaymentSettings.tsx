@@ -18,7 +18,7 @@ export async function MembershipPaymentSettings() {
             <div className="settings-field-grid">
               <label>Name or role<input name="treasurer_name" defaultValue={membershipPayment.treasurer_name} required/></label>
               <label>Email<input type="email" name="treasurer_email" defaultValue={membershipPayment.treasurer_email} required/></label>
-              <label>Telephone <span className="sr-only">optional</span><input name="treasurer_phone" defaultValue={membershipPayment.treasurer_phone || ""}/></label>
+              <label><span>Telephone <em>Optional</em></span><input name="treasurer_phone" defaultValue={membershipPayment.treasurer_phone || ""}/></label>
             </div>
           </fieldset>
           <fieldset className="wide settings-fieldset">
