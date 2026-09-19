@@ -35,6 +35,8 @@ npm run stripe:listen-local
 
 Keep the listener running in a separate terminal alongside `npm run dev`. It saves the CLI signing secret as `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` in the ignored `.env.local` file and forwards test events to the local website. Restart the dev server if it has not reloaded the environment. Restart the listener whenever starting a new testing session.
 
+If you paid in test mode while the listener was not running, the membership will not update, and paying again is refused ("Your payment is being confirmed"). Replay the missed event instead: `node --env-file=.env.local scripts/replay-local-stripe-event.mjs` lists recent test checkouts, and adding a `cs_test_…` or `evt_…` id replays that one into the local webhook (the dev server must be running).
+
 The setup command connects only to the local Supabase stack and creates/reuses four test products. Membership amounts come from the website's fee records and are passed as one-time Checkout prices; no recurring prices or subscriptions are configured. No manual Stripe dashboard product setup is needed.
 
 For local CAPTCHA testing, use Cloudflare’s documented test sitekey and matching test secret in `.env.local` (see https://developers.cloudflare.com/turnstile/troubleshooting/testing/). Keep production keys in deployment configuration.
