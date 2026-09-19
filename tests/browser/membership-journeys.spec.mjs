@@ -481,10 +481,10 @@ test.describe("membership public, member and officer journeys", () => {
       : `${monthsIncluded} months through 31 December ${billingYear}, reduced from the £60.00 annual fee.`)).toBeVisible();
     await form.locator('input[name="contact_email"]').fill("journey.member@example.test");
     await form.locator('select[name="payment_method"]').selectOption("cash");
+    await form.locator('input[name="payment_received"][value="on"]').check();
     await form.locator('input[name="payment_reference"]').fill("JOURNEY-CASH-001");
-    await form.locator('input[name="payment_received"]').check();
     await form.getByRole("button", { name: "Add member" }).click();
-    await page.waitForURL(/notice=officer-member-created/);
+    await expect(page.getByRole("dialog").getByText("Membership added", { exact: true })).toBeVisible();
     let linkedMember = await databaseRow(
       admin.from("members").select("id,auth_user_id,effective_state,portal_invitation_status").eq("full_name", `${fixtureNamePrefix} Linked Member`).single(),
       "Officer-created member is missing",
@@ -525,7 +525,7 @@ test.describe("membership public, member and officer journeys", () => {
     await form.locator('input[name="contact_number"]').fill("01904 000001");
     await form.locator('select[name="payment_method"]').selectOption("bank_transfer");
     await form.getByRole("button", { name: "Add member" }).click();
-    await page.waitForURL(/notice=officer-member-created/);
+    await expect(page.getByRole("dialog").getByText("Membership added", { exact: true })).toBeVisible();
     let pendingMember = await databaseRow(
       admin.from("members").select("id,effective_state").eq("full_name", `${fixtureNamePrefix} Pending Bank`).single(),
       "Pending officer-created member is missing",

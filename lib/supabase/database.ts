@@ -1057,6 +1057,10 @@ export type Database = {
           legacy_membership_record_id: string | null
           legal_hold: boolean
           newsletter_opt_in: boolean
+          newsletter_consent_given_on: string | null
+          newsletter_consent_recorded_at: string | null
+          newsletter_consent_recorded_by_actor_id: string | null
+          newsletter_consent_source: string | null
           portal_invitation_status: string
           postal_address: Json | null
           preferred_contact_method: string
@@ -1088,6 +1092,10 @@ export type Database = {
           legacy_membership_record_id?: string | null
           legal_hold?: boolean
           newsletter_opt_in?: boolean
+          newsletter_consent_given_on?: string | null
+          newsletter_consent_recorded_at?: string | null
+          newsletter_consent_recorded_by_actor_id?: string | null
+          newsletter_consent_source?: string | null
           portal_invitation_status?: string
           postal_address?: Json | null
           preferred_contact_method?: string
@@ -1119,6 +1127,10 @@ export type Database = {
           legacy_membership_record_id?: string | null
           legal_hold?: boolean
           newsletter_opt_in?: boolean
+          newsletter_consent_given_on?: string | null
+          newsletter_consent_recorded_at?: string | null
+          newsletter_consent_recorded_by_actor_id?: string | null
+          newsletter_consent_source?: string | null
           portal_invitation_status?: string
           postal_address?: Json | null
           preferred_contact_method?: string
@@ -3603,6 +3615,9 @@ export type Database = {
           p_guardian_consent_note?: string
           p_guardian_email?: string
           p_guardian_name?: string
+          p_newsletter_consent_given_on?: string
+          p_newsletter_consent_source?: string
+          p_newsletter_opt_in?: boolean
           p_payment_method: string
           p_payment_received: boolean
           p_payment_reference: string

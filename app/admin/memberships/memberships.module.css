@@ -61,7 +61,10 @@
 .lines { display: grid; gap: 2px; }
 .mono { font: 500 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
 .inlineLink { color: var(--forest); font-weight: 700; }
-.panelWarn { margin: 0; padding: 10px 14px; border-left: 4px solid #b4531a; background: #fbeee2; color: #7a3410; font-size: 14px; font-weight: 700; line-height: 1.5; }
+.panelWarn { margin: 0; padding: 10px 14px; border-left: 4px solid #b4531a; background: #fbeee2; color: #7a3410; font-size: 14px; font-weight: 600; line-height: 1.5; }
+.panelWarn p { margin: 0; }
+.panelWarn ul { margin: 6px 0 10px; padding-left: 18px; }
+.panelWarn a { color: inherit; font-weight: 800; }
 .panelNote { margin: 0; color: #56625b; font-size: 13px; line-height: 1.55; }
 .panelForms { display: grid; gap: 14px; }
 .technical { font-size: 13px; }
@@ -209,3 +212,13 @@
   .fieldGrid, .panelBody :global(.membership-manual-date-grid) { grid-template-columns: minmax(0, 1fr); }
   .nameRow { grid-template-columns: minmax(0, 1fr) 96px; }
 }
+
+/* Add a membership: payment status choice, consent box, buttons, and a submit row that stays in view. */
+.segmented { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 6px; align-content: start; }
+.segmented legend { padding: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: #2b342f; }
+.panelBody.panelBody .segmented :global(.checkbox-row) { padding: 9px 12px; border: 1px solid rgba(16,24,20,.2); border-radius: 8px; background: #fffdf8; }
+.panelBody.panelBody .segmented :global(.checkbox-row):has(input:checked) { border-color: var(--forest); background: #edf2ed; }
+.consentBox { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid rgba(16,24,20,.14); border-radius: 8px; background: #fffdf8; }
+.buttonPair { display: flex; flex-wrap: wrap; gap: 10px; }
+.stickyActions { position: sticky; bottom: 0; z-index: 2; margin: 0 -30px -34px; padding: 12px 30px 16px; background: #fffdf8; border-top: 1px solid rgba(16,24,20,.12); justify-content: flex-end; }
+@media (max-width: 720px) { .stickyActions { margin-inline: -18px; padding-inline: 18px; } }

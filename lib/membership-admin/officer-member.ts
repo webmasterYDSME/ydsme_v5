@@ -8,9 +8,37 @@ export type OfficerMemberState = {
   attempt: number;
   /** The submitted text and tick boxes, by field name. */
   values: Record<string, string>;
+  /** Set once the membership has been added, so the drawer can show what happened. */
+  created: OfficerMemberCreated | null;
 };
 
-export const emptyOfficerMemberState: OfficerMemberState = { error: null, attempt: 0, values: {} };
+export type OfficerMemberCreated = {
+  memberId: string;
+  name: string;
+  planName: string;
+  year: number;
+  amountPence: number;
+  paid: boolean;
+  newsletter: boolean;
+};
+
+export const emptyOfficerMemberState: OfficerMemberState = { error: null, attempt: 0, values: {}, created: null };
+
+/** A person already on the register who may be the same as the one being added. */
+export type PossibleDuplicate = { id: string; name: string; state: string; matchedOn: "email" | "name and date of birth" };
+
+export const guardianConsentMethods = {
+  paper_form: "Signed paper form",
+  in_person: "Agreed in person",
+  phone: "Agreed by phone",
+  other: "Other",
+} as const;
+
+export const newsletterConsentSources = {
+  paper_form: "Ticked on the paper application form",
+  in_person: "Asked in person",
+  phone: "Asked by phone",
+} as const;
 
 /** The submitted fields as plain text, without the framework's hidden action fields or uploaded files. */
 export function submittedValues(formData: FormData): Record<string, string> {

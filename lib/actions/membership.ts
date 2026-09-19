@@ -1,7 +1,8 @@
 "use server";
 
 import { validMembershipPhone, membershipPhoneHint } from "@/lib/membership-phone";
-import { submittedValues, type OfficerMemberState } from "@/lib/membership-admin/officer-member";
+import { dateLabel } from "@/lib/membership-admin/format";
+import { guardianConsentMethods, submittedValues, type OfficerMemberState, type PossibleDuplicate } from "@/lib/membership-admin/officer-member";
 import { redirect } from "next/navigation";
 import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
@@ -486,7 +487,7 @@ export async function confirmOfflineMembership(formData: FormData) {
 export async function createOfficerManagedMembership(previous: OfficerMemberState, formData: FormData): Promise<OfficerMemberState> {
   const { user } = await requireCapability("memberships.manage");
   // A failed attempt returns the typed values to the open drawer instead of redirecting, so nothing has to be typed again.
-  const fail = (error: string): OfficerMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData) });
+  const fail = (error: string): OfficerMemberState => ({ error, attempt: previous.attempt + 1, values: submittedValues(formData), created: null });
   let parsed;
   try {
     parsed = z.object({
@@ -502,6 +503,11 @@ export async function createOfficerManagedMembership(previous: OfficerMemberStat
       guardian_name: z.string().trim().max(180).optional().transform((value) => value || null),
       guardian_email: z.string().trim().max(254).optional().transform((value) => value ? z.email().parse(value).toLowerCase() : null),
       guardian_consent_note: z.string().trim().max(500).optional().transform((value) => value || null),
+      guardian_consent_method: z.enum(["paper_form", "in_person", "phone", "other"]).optional().catch(undefined),
+      guardian_consent_detail: z.string().trim().max(300).optional().transform((value) => value || null),
+      guardian_consent_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
+      newsletter_consent_source: z.enum(["paper_form", "in_person", "phone"]).optional().catch(undefined),
+      newsletter_consent_given_on: z.string().trim().max(10).optional().transform((value) => value ? z.iso.date().parse(value) : null),
       duplicate_override_reason: z.string().trim().max(500).optional().transform((value) => value || null),
       address_line_one: z.string().trim().max(180).optional().transform((value) => value || null),
       address_line_two: z.string().trim().max(180).optional().transform((value) => value || null),
@@ -512,6 +518,20 @@ export async function createOfficerManagedMembership(previous: OfficerMemberStat
     return fail("officer-member-details-invalid");
   }
   if (!parsed.success) return fail("officer-member-details-invalid");
+  if (!validMembershipPhone(parsed.data.contact_number ?? undefined)) return fail("phone-invalid");
+  const newsletter = formData.get("newsletter_opt_in") === "on";
+  if (newsletter && !parsed.data.contact_email) return fail("newsletter-email-required");
+  if (newsletter && !parsed.data.newsletter_consent_source) return fail("newsletter-consent-evidence-required");
+  if (newsletter && parsed.data.newsletter_consent_given_on && parsed.data.newsletter_consent_given_on > londonToday()) {
+    return fail("newsletter-consent-date-invalid");
+  }
+  // The guardian's consent is recorded as one plain sentence: how it was given, when, and any detail.
+  const guardianConsentNote = parsed.data.guardian_consent_method
+    ? [
+      `${guardianConsentMethods[parsed.data.guardian_consent_method]}${parsed.data.guardian_consent_on ? ` on ${dateLabel(parsed.data.guardian_consent_on)}` : ""}`,
+      parsed.data.guardian_consent_detail,
+    ].filter(Boolean).join(". ")
+    : parsed.data.guardian_consent_note;
   const paymentReceived = formData.get("payment_received") === "on";
   if (paymentReceived && (!parsed.data.received_on || !parsed.data.payment_reference)) {
     return fail("offline-payment-evidence-required");
@@ -562,20 +582,73 @@ export async function createOfficerManagedMembership(previous: OfficerMemberStat
     p_student_declaration: formData.get("student_declaration") === "on",
     p_guardian_name: parsed.data.guardian_name,
     p_guardian_email: parsed.data.guardian_email,
-    p_guardian_consent_note: parsed.data.guardian_consent_note,
+    p_guardian_consent_note: guardianConsentNote,
     p_duplicate_override_reason: parsed.data.duplicate_override_reason,
+    p_newsletter_opt_in: newsletter,
+    p_newsletter_consent_source: newsletter ? parsed.data.newsletter_consent_source : undefined,
+    p_newsletter_consent_given_on: newsletter ? parsed.data.newsletter_consent_given_on ?? londonToday() : undefined,
     p_actor_id: user.id,
   });
   const memberId = data?.[0]?.member_id;
   if (error || !memberId) {
     const reason = error?.message.includes("membership_possible_duplicate") ? "possible-duplicate"
       : error?.message.includes("membership_guardian_consent_required") ? "guardian-consent-required"
-        : error?.message.includes("membership_plan_age_mismatch") ? "plan-age-mismatch" : "officer-member-create-failed";
+        : error?.message.includes("membership_plan_age_mismatch") ? "plan-age-mismatch"
+          : error?.message.includes("membership_price_unavailable") ? "price-unavailable"
+            : error?.message.includes("membership_newsletter_email_required") ? "newsletter-email-required"
+              : error?.message.includes("membership_newsletter_consent_evidence_required") ? "newsletter-consent-evidence-required"
+                : error?.message.includes("membership_newsletter_consent_date_invalid") ? "newsletter-consent-date-invalid"
+                  : "officer-member-create-failed";
     return fail(reason);
   }
   if (paymentReceived && parsed.data.contact_email) await ensureMemberPortalInvitation(memberId);
-  revalidatePath("/admin/memberships");
-  redirect(`/admin/memberships?member=${memberId}&notice=officer-member-created`);
+  const { data: term } = await admin.from("membership_terms").select("membership_year,amount_due_pence").eq("id", data![0].term_id).maybeSingle();
+  // The whole membership area shows this person now: the register, the Inbox and the counts.
+  revalidatePath("/admin/memberships", "layout");
+  return {
+    error: null,
+    attempt: previous.attempt,
+    values: {},
+    created: {
+      memberId,
+      name: parsed.data.full_name,
+      planName: selectedPlan.name,
+      year: term?.membership_year ?? membershipBillingYear(membershipDate),
+      amountPence: term?.amount_due_pence ?? 0,
+      paid: paymentReceived,
+      newsletter,
+    },
+  };
+}
+
+/** Looks for people already on the register who may be the person being added, before the form is submitted. */
+export async function findPossibleDuplicateMembers(input: { full_name: string; date_of_birth: string; contact_email: string }): Promise<PossibleDuplicate[]> {
+  await requireCapability("memberships.manage");
+  const parsed = z.object({
+    full_name: z.string().trim().min(2).max(180).catch(""),
+    date_of_birth: z.iso.date().catch(""),
+    contact_email: z.email().max(254).catch(""),
+  }).safeParse(input);
+  if (!parsed.success) return [];
+  const { full_name: name, date_of_birth: dateOfBirth, contact_email: email } = parsed.data;
+  const admin = createServiceClient();
+  const columns = "id,full_name,effective_state";
+  const [byEmail, byName] = await Promise.all([
+    email ? admin.from("members").select(columns).ilike("contact_email", postgrestLikeLiteral(email)).neq("effective_state", "archived").limit(5) : null,
+    dateOfBirth ? admin.from("members").select(columns).eq("date_of_birth", dateOfBirth).neq("effective_state", "archived").limit(200) : null,
+  ]);
+  const seen = new Set<string>();
+  const matches: PossibleDuplicate[] = [];
+  for (const [rows, matchedOn] of [[byEmail?.data, "email"], [byName?.data, "name and date of birth"]] as const) {
+    for (const row of rows ?? []) {
+      if (seen.has(row.id)) continue;
+      // Names are compared here, not with a database pattern, so nothing typed can act as a wildcard.
+      if (matchedOn === "name and date of birth" && (!name || normalizeIdentityName(row.full_name) !== normalizeIdentityName(name))) continue;
+      seen.add(row.id);
+      matches.push({ id: row.id, name: row.full_name, state: row.effective_state, matchedOn });
+    }
+  }
+  return matches;
 }
 
 export async function grantHonoraryMembership(formData: FormData) {

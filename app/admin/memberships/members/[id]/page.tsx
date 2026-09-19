@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/membership";
 import { requireCapability } from "@/lib/auth";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { newsletterConsentSources } from "@/lib/membership-admin/officer-member";
 import { dateLabel, londonToday, memberStateName, money, paymentMethodName } from "@/lib/membership-admin/format";
 import { loadMemberRecord } from "@/lib/membership-admin/records";
 import { MemberPaymentPanel } from "../../_components/MemberPaymentPanel";
@@ -23,6 +24,13 @@ export const dynamic = "force-dynamic";
 type Query = Record<string, string | string[] | undefined>;
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 const uuid = /^[0-9a-f]{8}-[0-9a-f-]{27}$/i;
+
+/** Whether the member gets the newsletter and, for officer-recorded consent, how and when it was given. */
+function newsletterLabel(member: { newsletter_opt_in?: boolean | null; newsletter_consent_source?: string | null; newsletter_consent_given_on?: string | null }) {
+  if (!member.newsletter_opt_in) return "Not subscribed";
+  const how = member.newsletter_consent_source ? newsletterConsentSources[member.newsletter_consent_source as keyof typeof newsletterConsentSources] : null;
+  return how && member.newsletter_consent_given_on ? `Subscribed · ${how}, ${dateLabel(member.newsletter_consent_given_on)}` : "Subscribed · agreed on the website application";
+}
 
 const stateClass = (state: string) => state === "active" ? styles.pillOk : state === "honorary" ? styles.pillRequest
   : ["grace", "payment_review"].includes(state) ? styles.pillPayment : styles.pillMute;
@@ -100,6 +108,7 @@ export default async function MembershipRecord({ params, searchParams }: { param
           <dl className={styles.facts} style={{ marginTop: 14 }}>
             <div><dt>Email</dt><dd>{member.contact_email || "None"}</dd></div>
             {member.contact_email ? <div><dt>Confirmed</dt><dd>{member.contact_email_verified_at ? "Yes" : "Not yet"}</dd></div> : null}
+            <div><dt>Newsletter</dt><dd>{newsletterLabel(member)}</dd></div>
             <div><dt>Whose address</dt><dd>{member.contact_role === "guardian" ? "Guardian correspondence" : member.contact_role === "shared_household" ? "Shared household" : "The member’s own"}</dd></div>
             {member.contact_number ? <div><dt>Telephone</dt><dd>{member.contact_number}</dd></div> : null}
           </dl>

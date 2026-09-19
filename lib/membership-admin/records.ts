@@ -61,7 +61,7 @@ export async function loadMemberRecord(memberId: string) {
   const admin = createServiceClient();
   const currentYear = new Date().getUTCFullYear();
   const [memberResult, termResult, honoraryResult, planResult, priceResult, transitionResult] = await Promise.all([
-    admin.from("members").select("id,full_name,contact_email,contact_email_verified_at,contact_role,contact_number,date_of_birth,effective_state,current_plan_id,auth_user_id,portal_invitation_status,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").eq("id", memberId).maybeSingle(),
+    admin.from("members").select("id,full_name,contact_email,contact_email_verified_at,contact_role,contact_number,date_of_birth,effective_state,current_plan_id,auth_user_id,portal_invitation_status,newsletter_opt_in,newsletter_consent_source,newsletter_consent_given_on,newsletter_consent_recorded_at,honorary_memberships(status,effective_from,revoked_effective_on,replacement_plan_id)").eq("id", memberId).maybeSingle(),
     admin.from("membership_terms").select("id,membership_year,status,amount_due_pence,amount_paid_pence,source,starts_on,ends_on").eq("member_id", memberId).order("membership_year", { ascending: false }),
     admin.from("honorary_memberships").select("id,status,effective_from,reason,granted_at,revoked_effective_on,revocation_reason").eq("member_id", memberId).order("granted_at", { ascending: false }),
     admin.from("membership_plans").select("id,name").order("sort_order"),

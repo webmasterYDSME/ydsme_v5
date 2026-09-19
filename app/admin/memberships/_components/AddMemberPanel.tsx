@@ -21,6 +21,7 @@ export async function AddMemberPanel({ mode, closeHref }: { mode: "member" | "ho
       <p className={styles.panelNote}>For someone who applied in person or cannot use the online application. Their membership type and amount due are worked out from their date of birth and start date.</p>
       <AddMemberForm
         today={today}
+        closeHref={closeHref}
         plans={plans.filter((plan) => plan.active).map((plan) => ({ id: plan.id, slug: plan.slug, name: plan.name, minimum_age: plan.minimum_age, maximum_age: plan.maximum_age }))}
         prices={prices.map((price) => ({ plan_id: price.plan_id, membership_year: price.membership_year, amount_pence: price.amount_pence }))}
       />

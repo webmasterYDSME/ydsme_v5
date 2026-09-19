@@ -10,6 +10,10 @@ const messages: Record<string, string> = {
   "plan-age-mismatch": "No membership type fits that date of birth on the chosen start date. Check the date of birth.",
   "guardian-consent-required": "A junior member needs a guardian’s name and a note of how the guardian’s consent was given.",
   "possible-duplicate": "Someone with the same email address, or the same name and date of birth, is already on the register. If this is a different person, explain why under “Already on the register?” and add them again.",
+  "newsletter-email-required": "A newsletter subscription needs an email address. Add one, or untick the newsletter.",
+  "newsletter-consent-evidence-required": "Say how the newsletter consent was given.",
+  "newsletter-consent-date-invalid": "The date the newsletter consent was given cannot be in the future.",
+  "phone-invalid": "Enter a phone number with 7–15 digits. Spaces, brackets, hyphens and a leading + are allowed.",
   "officer-member-create-failed": "The membership could not be added. Check the details and try again.",
 };
 

@@ -1,87 +1,183 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
-import { createOfficerManagedMembership } from "@/lib/actions/membership";
+import { useActionState, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { createOfficerManagedMembership, findPossibleDuplicateMembers } from "@/lib/actions/membership";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
+import { dateLabel, memberStateName, money } from "@/lib/membership-admin/format";
 import { membershipErrorMessage } from "@/lib/membership-admin/messages";
-import { emptyOfficerMemberState } from "@/lib/membership-admin/officer-member";
-import { OfficerMembershipEligibilityFields } from "../OfficerMembershipEligibilityFields";
+import {
+  emptyOfficerMemberState,
+  guardianConsentMethods,
+  newsletterConsentSources,
+  type OfficerMemberState,
+  type PossibleDuplicate,
+} from "@/lib/membership-admin/officer-member";
+import { membershipPhoneHint, membershipPhonePattern } from "@/lib/membership-phone";
+import { OfficerFeeSummary, OfficerMembershipEligibilityFields, useOfficerEligibility } from "../OfficerMembershipEligibilityFields";
 import styles from "../memberships.module.css";
 
 type Plan = { id: string; slug: string; name: string; minimum_age: number; maximum_age: number };
 type Price = { plan_id: string; membership_year: number; amount_pence: number };
+type Props = { plans: Plan[]; prices: Price[]; today: string; closeHref: string };
 
 /**
  * The Add a membership form. A failed attempt comes back with an explanation and everything the
- * officer typed, so nothing has to be entered again.
+ * officer typed. A successful one shows what was added, with a way to add another.
  */
-export function AddMemberForm({ plans, prices, today }: { plans: Plan[]; prices: Price[]; today: string }) {
+export function AddMemberForm(props: Props) {
+  const [session, setSession] = useState(0);
+  return <AddMemberSession key={session} {...props} onAnother={() => setSession((current) => current + 1)}/>;
+}
+
+function AddMemberSession({ closeHref, onAnother, ...rest }: Props & { onAnother: () => void }) {
   const [state, formAction] = useActionState(createOfficerManagedMembership, emptyOfficerMemberState);
+  if (state.created) return <Created created={state.created} closeHref={closeHref} onAnother={onAnother}/>;
+  // Rebuilt after every failed attempt, so the date fields start from what was typed.
+  return <Fields key={state.attempt} state={state} formAction={formAction} {...rest}/>;
+}
+
+function Created({ created, closeHref, onAnother }: { created: NonNullable<OfficerMemberState["created"]>; closeHref: string; onAnother: () => void }) {
+  return <div className={styles.panelForms} data-discard-safe="">
+    <section className={styles.formSection} role="status">
+      <h3 className={styles.formTitle}>Membership added</h3>
+      <dl className={styles.facts}>
+        <div><dt>Member</dt><dd>{created.name}</dd></div>
+        <div><dt>Membership</dt><dd>{created.planName} · {created.year}</dd></div>
+        <div><dt>Payment</dt><dd>{created.paid ? `Paid in full · ${money(created.amountPence)}` : `${money(created.amountPence)} still to collect`}</dd></div>
+        <div><dt>Newsletter</dt><dd>{created.newsletter ? "Subscribed, consent recorded" : "Not subscribed"}</dd></div>
+      </dl>
+      <p className={styles.panelNote}>{created.paid ? "The membership is active." : "It appears under Payments in the Inbox until the money arrives."}</p>
+    </section>
+    <div className={styles.actionRow}>
+      <Link className={styles.linkButton} href={`/admin/memberships/members/${created.memberId}`}>Open full membership record</Link>
+      <span className={styles.buttonPair}>
+        <button type="button" className="button outline" onClick={onAnother}>Add another</button>
+        <Link className="pending-submit" href={closeHref}>Done</Link>
+      </span>
+    </div>
+  </div>;
+}
+
+const paymentMethods = { cash: "Cash", bank_transfer: "Bank transfer", cheque: "Cheque" } as const;
+
+function Fields({ state, formAction, plans, prices, today }: { state: OfficerMemberState; formAction: (formData: FormData) => void } & Omit<Props, "closeHref">) {
   const { values } = state;
   const value = (name: string) => values[name] ?? "";
-  const ticked = (name: string) => values[name] === "on";
+  const eligibility = useOfficerEligibility({
+    plans, prices, today,
+    initial: { dateOfBirth: value("date_of_birth"), startDate: value("received_on"), student: values.student_declaration === "on" },
+  });
+  const [name, setName] = useState(value("full_name"));
+  const [email, setEmail] = useState(value("contact_email"));
+  const [newsletter, setNewsletter] = useState(values.newsletter_opt_in === "on");
+  const [paid, setPaid] = useState(values.payment_received === "on");
+  const [method, setMethod] = useState<keyof typeof paymentMethods>((value("payment_method") || "cash") as keyof typeof paymentMethods);
+  const [matches, setMatches] = useState<PossibleDuplicate[]>([]);
+  const junior = eligibility.selected?.slug === "junior";
   const message = state.error ? membershipErrorMessage(state.error) ?? "The membership could not be added. Check the details and try again." : null;
   const alert = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { if (state.error) alert.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [state]);
+  useEffect(() => { if (state.error) alert.current?.scrollIntoView({ block: "center", behavior: "smooth" }); }, [state.error, state.attempt]);
+
+  // Looks for someone already on the register once there is enough to compare, so a duplicate is caught before the form is sent.
+  const { dateOfBirth } = eligibility;
+  useEffect(() => {
+    let current = true;
+    const timer = setTimeout(async () => {
+      // Nothing to compare yet: a name needs a date of birth alongside it.
+      if (!email.trim() && !(name.trim().length > 1 && dateOfBirth)) { if (current) setMatches([]); return; }
+      try {
+        const found = await findPossibleDuplicateMembers({ full_name: name, date_of_birth: dateOfBirth, contact_email: email });
+        if (current) setMatches(found);
+      } catch {
+        if (current) setMatches([]);
+      }
+    }, 500);
+    return () => { current = false; clearTimeout(timer); };
+  }, [name, dateOfBirth, email]);
+  const duplicate = matches.length > 0 || state.error === "possible-duplicate";
 
   return <form action={formAction} className={`editor-form ${styles.addForm} membership-manual-create-form`}>
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>About the member</h3>
       <div className={`${styles.fieldGrid} ${styles.nameRow}`}>
-        <label>Full name<input name="full_name" defaultValue={value("full_name")} required/></label>
+        <label>Full name<input name="full_name" value={name} onChange={(event) => setName(event.target.value)} required/></label>
         <label>Title <em>Optional</em><input name="title" defaultValue={value("title")} maxLength={10}/></label>
       </div>
-      <OfficerMembershipEligibilityFields
-        key={state.attempt}
-        today={today}
-        plans={plans}
-        prices={prices}
-        initial={{ dateOfBirth: value("date_of_birth"), startDate: value("received_on"), student: ticked("student_declaration") }}
-      />
+      <OfficerMembershipEligibilityFields eligibility={eligibility}/>
+      {duplicate ? <div className={styles.panelWarn} role="status">
+        {matches.length ? <>
+          <p>Already on the register:</p>
+          <ul>{matches.map((match) => <li key={match.id}>
+            <Link href={`/admin/memberships/members/${match.id}`} target="_blank" rel="noreferrer">{match.name}<span className="sr-only"> (opens in a new tab)</span></Link> · {memberStateName(match.state)} · same {match.matchedOn}
+          </li>)}</ul>
+        </> : <p>Someone with the same email address, or the same name and date of birth, is already on the register.</p>}
+        <label>If this is a different person, say why<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500} defaultValue={value("duplicate_override_reason")} required/></label>
+      </div> : null}
     </section>
+
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>Contact details</h3>
       <div className={styles.fieldGrid}>
-        <label>Email address <em>Optional</em><input type="email" name="contact_email" defaultValue={value("contact_email")}/></label>
-        <label>Telephone number <em>Optional</em><input name="contact_number" defaultValue={value("contact_number")}/></label>
+        <label>Email address <em>{newsletter ? "Needed for the newsletter" : "Optional"}</em><input type="email" name="contact_email" value={email} onChange={(event) => setEmail(event.target.value)} required={newsletter}/></label>
+        <label>Telephone number <em>Optional</em><input type="tel" name="contact_number" defaultValue={value("contact_number")} pattern={membershipPhonePattern} title={membershipPhoneHint}/></label>
       </div>
+      <p className={styles.panelNote}>{email.trim()
+        ? paid ? "A website invitation is emailed as soon as the member is added." : "A website invitation is emailed once payment is recorded."
+        : "With no email address, no website invitation or newsletter can be sent."}</p>
+      <label className="checkbox-row"><input type="checkbox" name="newsletter_opt_in" checked={newsletter} onChange={(event) => setNewsletter(event.target.checked)}/>They would like the Society newsletter <em>Optional</em></label>
+      {newsletter ? <div className={styles.consentBox}>
+        <p className={styles.panelNote}>Only tick this if they have agreed. How and when they agreed is kept as their consent record.</p>
+        <div className={styles.fieldGrid}>
+          <label>How did they agree?<select name="newsletter_consent_source" defaultValue={value("newsletter_consent_source") || "paper_form"} required>{Object.entries(newsletterConsentSources).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label>Date agreed<input type="date" name="newsletter_consent_given_on" defaultValue={value("newsletter_consent_given_on") || today} max={today} required/></label>
+        </div>
+      </div> : null}
       <details className={styles.disclosure} open={Boolean(value("address_line_one") || value("address_line_two") || value("city") || value("postcode")) || undefined}>
         <summary>Add a postal address</summary>
         <div className={styles.fieldGrid}>
           <label>Address line 1<input name="address_line_one" defaultValue={value("address_line_one")}/></label>
           <label>Address line 2<input name="address_line_two" defaultValue={value("address_line_two")}/></label>
           <label>Town or city<input name="city" defaultValue={value("city")}/></label>
-          <label>Postcode<input name="postcode" defaultValue={value("postcode")}/></label>
+          <label>Postcode<input name="postcode" defaultValue={value("postcode")} pattern="[A-Za-z]{1,2}[0-9][A-Za-z0-9]?\s*[0-9][A-Za-z]{2}" title="Enter a UK postcode, for example YO1 7HH."/></label>
         </div>
       </details>
     </section>
-    <section className={styles.formSection}>
-      <details className={styles.disclosure} open={Boolean(value("guardian_name") || value("guardian_email") || value("guardian_consent_note") || state.error === "guardian-consent-required") || undefined}>
-        <summary>Junior member? Add guardian details</summary>
-        <p className={styles.panelNote}>Record how the guardian agreed to the membership. Their email address is optional when an officer adds the member.</p>
-        <div className={styles.fieldGrid}>
-          <label>Guardian’s name<input name="guardian_name" defaultValue={value("guardian_name")}/></label>
-          <label>Guardian’s email <em>Optional</em><input type="email" name="guardian_email" defaultValue={value("guardian_email")}/></label>
-        </div>
-        <label>How consent was given<textarea name="guardian_consent_note" rows={2} defaultValue={value("guardian_consent_note")} placeholder="For example: signed paper form witnessed on 20 August 2026."/></label>
-      </details>
-    </section>
+
+    {junior ? <section className={styles.formSection}>
+      <h3 className={styles.formTitle}>Guardian</h3>
+      <p className={styles.panelNote}>Junior members need a guardian’s name and a record of how the guardian agreed.</p>
+      <div className={styles.fieldGrid}>
+        <label>Guardian’s name<input name="guardian_name" defaultValue={value("guardian_name")} required/></label>
+        <label>Guardian’s email <em>Optional</em><input type="email" name="guardian_email" defaultValue={value("guardian_email")}/></label>
+        <label>How did the guardian agree?<select name="guardian_consent_method" defaultValue={value("guardian_consent_method") || "paper_form"} required>{Object.entries(guardianConsentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label>Date agreed<input type="date" name="guardian_consent_on" defaultValue={value("guardian_consent_on") || today} max={today} required/></label>
+      </div>
+      <label>Anything to add <em>Optional</em><input name="guardian_consent_detail" defaultValue={value("guardian_consent_detail")} maxLength={300} placeholder="For example: form witnessed by the treasurer."/></label>
+    </section> : null}
+
     <section className={styles.formSection}>
       <h3 className={styles.formTitle}>Payment</h3>
-      <p className={styles.panelNote}>Leave “Payment received in full” unticked if the money has not arrived yet.</p>
+      <OfficerFeeSummary eligibility={eligibility}/>
       <div className={styles.fieldGrid}>
-        <label>Payment method<select name="payment_method" defaultValue={value("payment_method") || "cash"}><option value="cash">Cash</option><option value="bank_transfer">Bank transfer</option><option value="cheque">Cheque</option></select></label>
-        <label>Receipt or payment reference<input name="payment_reference" defaultValue={value("payment_reference")}/></label>
+        <label>Payment method<select name="payment_method" value={method} onChange={(event) => setMethod(event.target.value as keyof typeof paymentMethods)}>{Object.entries(paymentMethods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <fieldset className={styles.segmented}>
+          <legend>Payment status</legend>
+          <label className="checkbox-row"><input type="radio" name="payment_received" value="off" checked={!paid} onChange={() => setPaid(false)}/>Not paid yet</label>
+          <label className="checkbox-row"><input type="radio" name="payment_received" value="on" checked={paid} onChange={() => setPaid(true)}/>Paid in full</label>
+        </fieldset>
       </div>
-      <label className="checkbox-row"><input type="checkbox" name="payment_received" defaultChecked={ticked("payment_received")}/>Payment received in full</label>
-      <label className="checkbox-row"><input type="checkbox" name="cleared" defaultChecked={ticked("cleared")}/>Cheque cleared <em>Cheque payments only</em></label>
-      <details className={styles.disclosure} open={Boolean(value("duplicate_override_reason") || state.error === "possible-duplicate") || undefined}>
-        <summary>Already on the register?</summary>
-        <p className={styles.panelNote}>If someone with the same email address, or the same name and date of birth, is already a member, adding another record is blocked. If this really is a different person, say why here and add them again.</p>
-        <label>Why is this a different person?<textarea name="duplicate_override_reason" rows={2} minLength={5} maxLength={500} defaultValue={value("duplicate_override_reason")}/></label>
-      </details>
+      {paid ? <>
+        <label>Receipt or payment reference<input name="payment_reference" defaultValue={value("payment_reference")} required/></label>
+        {method === "cheque" ? <>
+          <label className="checkbox-row"><input type="checkbox" name="cleared" defaultChecked={values.cleared === "on"} required/>The cheque has cleared</label>
+          <p className={styles.panelNote}>If it has not cleared yet, choose “Not paid yet” and record it from the Inbox when it does.</p>
+        </> : null}
+        <p className={styles.panelNote}>The payment is recorded as received on the start date, {dateLabel(eligibility.startDate) || "today"}.</p>
+      </> : <p className={styles.panelNote}>It appears under Payments in the Inbox until the money arrives.</p>}
     </section>
+
     {message ? <p ref={alert} className="form-message error" role="alert">{message}</p> : null}
-    <div className={styles.actionRow}><p className={styles.panelNote}>The membership becomes active once full payment is recorded. Unpaid ones appear under Payments in the Inbox.</p><PendingSubmitButton pendingLabel="Adding member…">Add member</PendingSubmitButton></div>
+    <div className={`${styles.actionRow} ${styles.stickyActions}`}><span/><PendingSubmitButton pendingLabel="Adding member…">Add member</PendingSubmitButton></div>
   </form>;
 }

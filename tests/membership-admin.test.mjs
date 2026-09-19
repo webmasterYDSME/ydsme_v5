@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { legacyMembershipRedirect } from "../lib/membership-admin/legacy-urls.ts";
 import { membershipErrorMessage } from "../lib/membership-admin/messages.ts";
@@ -165,8 +166,19 @@ test("keeps what an officer typed when adding a member fails", () => {
   form.set("$ACTION_ID_abc", "hidden framework field");
   form.set("upload", new File(["x"], "x.txt"));
   assert.deepEqual(submittedValues(form), { full_name: "Ada Lovelace", payment_received: "on" });
-  assert.deepEqual(emptyOfficerMemberState, { error: null, attempt: 0, values: {} });
+  assert.deepEqual(emptyOfficerMemberState, { error: null, attempt: 0, values: {}, created: null });
   assert.match(membershipErrorMessage("possible-duplicate"), /Already on the register/);
   assert.equal(membershipErrorMessage("something-unknown"), null);
   assert.equal(membershipErrorMessage(null), null);
+});
+
+test("records how and when an officer-added member agreed to the newsletter", async () => {
+  const migration = await readFile(new URL("../supabase/migrations/202609180001_officer_newsletter_consent.sql", import.meta.url), "utf8");
+  assert.match(migration, /newsletter_consent_source/);
+  assert.match(migration, /newsletter_consent_recorded_by_actor_id/);
+  assert.match(migration, /drop function public\.create_officer_managed_membership\(/);
+  assert.match(migration, /membership_newsletter_email_required/);
+  assert.match(migration, /membership_newsletter_consent_evidence_required/);
+  assert.match(migration, /'newsletter_opt_in',v_newsletter/);
+  assert.match(migration, /grant execute on function public\.create_officer_managed_membership\(.*boolean,text,date\)/);
 });
