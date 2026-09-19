@@ -65,9 +65,11 @@ export default async function MembershipMembers({ searchParams }: { searchParams
         <div className={`${styles.registerRow} ${styles.registerHead}`} aria-hidden="true"><span>Member</span><span>Membership</span><span>Status</span><span>Paid until</span><span/></div>
         {visible.map((member) => <article className={styles.registerRow} key={member.id}>
           <div><strong>{member.fullName}</strong><small>{member.email || "No correspondence email"}</small></div>
-          <span>{member.plan || "—"}</span>
-          <span><span className={`${styles.pill} ${stateClass(member.state)}`}>{memberStateName(member.state)}</span></span>
-          <span>{member.state === "honorary" ? "Lifetime" : member.paidUntil ? dateLabel(member.paidUntil) : "—"}</span>
+          <div className={styles.registerMeta}>
+            <span>{member.plan || "—"}</span>
+            <span><span className={`${styles.pill} ${stateClass(member.state)}`}>{memberStateName(member.state)}</span></span>
+            <span>{member.state === "honorary" ? "Lifetime" : member.paidUntil ? dateLabel(member.paidUntil) : "—"}</span>
+          </div>
           <Link className="button outline" href={`/admin/memberships/members/${member.id}`} prefetch={false}>View membership</Link>
         </article>)}
       </div>

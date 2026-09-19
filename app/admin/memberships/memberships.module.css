@@ -69,6 +69,7 @@
 .registerRow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 190px 130px auto; align-items: center; gap: 18px; padding: 15px 22px; border-bottom: 1px solid rgba(16,24,20,.12); }
 .registerRow:last-child { border-bottom: 0; }
 .registerHead { padding-block: 10px; background: #f1ecdd; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #56625b; }
+.registerMeta { display: contents; }
 .registerRow small { display: block; margin-top: 3px; color: #56625b; font-size: 13px; overflow-wrap: anywhere; }
 .registerRow strong { font: 500 24px/1.12 var(--font-display); overflow-wrap: anywhere; }
 .registerNote { margin: 14px 2px 0; color: #56625b; font-size: 13px; }
@@ -111,16 +112,33 @@
   .subnav { grid-auto-flow: column; grid-auto-columns: max-content; overflow-x: auto; }
 }
 @media (max-width: 900px) {
-  .taskRow { grid-template-columns: 1fr auto; gap: 8px 14px; padding: 16px 18px; }
-  .taskRow > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+  /* Task rows: the button sits beside the name instead of taking a full-width row of its own. */
+  .taskRow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 13px 16px; }
+  .taskRow > :nth-child(2) { grid-column: 1; grid-row: 2; }
   .taskRow > :nth-child(3) { grid-column: 2; grid-row: 1; justify-self: end; }
-  .taskRow > a { grid-column: 1 / -1; grid-row: 3; margin-top: 6px; }
+  .workspace .taskRow > a { grid-column: 2; grid-row: 2; align-self: center; width: auto; min-height: 40px; padding: 0 14px; }
   .registerHead { display: none; }
-  .registerRow { grid-template-columns: 1fr auto; gap: 8px 14px; padding: 16px 18px; }
-  .registerRow > :first-child { grid-column: 1 / -1; }
-  .registerRow > a { grid-column: 1 / -1; justify-self: start; }
+  /* Register rows: name and button on one line, plan, status and paid-until on the next. */
+  .registerRow { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 13px 16px; }
+  .registerRow > :first-child { grid-column: 1; grid-row: 1; }
+  .registerMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; grid-column: 1 / -1; grid-row: 2; font-size: 14px; }
+  .workspace .registerRow > a { grid-column: 2; grid-row: 1; align-self: start; justify-self: end; min-height: 40px; padding: 0 14px; }
 }
 @media (max-width: 720px) {
+  /* Heading: title and the Add membership button share a line. */
+  .workspace .heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; margin-bottom: 14px; }
+  .heading > div { display: contents; }
+  .heading :global(.eyebrow) { grid-column: 1 / -1; margin-bottom: 0; }
+  .heading h1 { grid-column: 1; margin-bottom: 0; }
+  .heading > a { grid-column: 2; grid-row: 2; }
+  .heading > div > p:last-child { grid-column: 1 / -1; margin: 6px 0 0; }
+  .search { flex-wrap: nowrap; gap: 8px; padding: 12px; }
+  .search label { flex: 1 1 0; min-width: 0; }
+  .search input { min-height: 42px; }
+  .search > button { flex: none; min-height: 42px; padding: 0 14px; }
+  .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; }
   .profile { flex-direction: column; align-items: flex-start; padding: 20px 18px; }
   .profileActions { width: 100%; }
   .panelBody { padding: 22px 18px 30px; }
@@ -132,3 +150,17 @@
 .workspace.workspace :global(.editor-form) label em, .workspace.workspace :global(.stack-form) label em { font-size: 12px; }
 .panelBody :global(.membership-manual-create-form) { grid-template-columns: 1fr; margin-top: 0; }
 .card :global(.membership-cash-renewal-form) { grid-template-columns: 1fr; margin-top: 16px; padding: 0; border: 0; background: transparent; }
+
+/* Tablet and phone: tabs, chips and buttons shrink so the content starts sooner. */
+@media (max-width: 1024px) {
+  .workspace .heading { margin-bottom: 18px; }
+  .workspace .heading > a { min-height: 40px; padding: 0 16px; margin-top: 0; }
+  .workspace :global(.portal-tabs) { margin-bottom: 14px; padding: 4px; }
+  .workspace :global(.portal-tabs) a { min-height: 40px; padding: 0 14px; font-size: 13px; }
+  .filterBar { flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 12px; }
+  .chips { gap: 6px; max-width: 100%; }
+  .chip { min-height: 36px; padding: 0 12px; font-size: 13px; }
+  .chip span { padding: 1px 7px; font-size: 11px; }
+  .health { font-size: 12px; }
+  .tabNote { margin-bottom: 12px; }
+}

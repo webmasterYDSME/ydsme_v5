@@ -16,8 +16,8 @@ export default async function MembershipLayout({ children }: { children: ReactNo
   await requireCapability("memberships.manage");
   const [inboxCount, reviewCount] = await Promise.all([countInboxTasks(), countMigrationReviews()]);
   return <div className={`portal-content membership-admin-page ${styles.workspace}`}>
-    <header className="portal-heading">
-      <div><p className="eyebrow dark">Membership team</p><h1>Manage memberships</h1><p>Review applications, record payments and look after the member register.</p></div>
+    <header className={`portal-heading ${styles.heading}`}>
+      <div><p className="eyebrow dark">Membership team</p><h1>Manage memberships</h1><p>Review applications, record payments and member registrations.</p></div>
       <Link className="button dark" href="/admin/memberships/members?add=member"><UserPlus/>Add membership</Link>
     </header>
     {reviewCount > 0 ? <p className="form-message error">Website membership cannot be moved to live public use until {reviewCount} imported record{reviewCount === 1 ? "" : "s"} have been reviewed. <Link href="/admin/memberships/setup?tab=import">Review imported records</Link>.</p> : null}
