@@ -6,11 +6,11 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("the account page is split into sections, each in its own component", async () => {
   const page = await read("app/account/page.tsx");
-  for (const section of ["AccountBanner", "MembershipSection", "ProfileSection", "SignInSection", "EmailPreferencesSection", "UpdatesSection"]) {
+  for (const section of ["AccountBanner", "MembershipSection", "ProfileSection", "SignInSection", "AddressSection", "NotificationsSection", "EmailPreferencesSection"]) {
     assert.match(page, new RegExp(`<${section}\\b`), `${section} is used on the page`);
     await read(`app/account/_components/${section}.tsx`);
   }
-  assert.ok(page.split("\n").length < 100, "the page only loads data and composes sections");
+  assert.ok(page.split("\n").length < 110, "the page only loads data and composes sections");
   assert.match(page, /requireUser\(\)/);
 });
 
@@ -38,4 +38,27 @@ test("the page explains each result instead of a generic message where it can", 
   for (const key of ["profile-updated", "newsletter-subscribed", "newsletter-unsubscribed", "newsletter-address-blocked", "renewal-unavailable"]) {
     assert.match(format, new RegExp(`"${key}"`));
   }
+});
+
+test("members keep their own address and date of birth through their own session", async () => {
+  const [section, action, reader, migration] = await Promise.all([
+    read("app/account/_components/AddressSection.tsx"), read("lib/actions/account.ts"),
+    read("lib/member-details.ts"), read("supabase/migrations/202609190025_member_own_address_and_birth_date.sql"),
+  ]);
+  assert.match(section, /updateMemberDetails/);
+  assert.match(section, /contact the membership officer/);
+  assert.match(action, /consumeRateLimit\("account-details"/);
+  assert.doesNotMatch(action, /createServiceClient|createAdminClient/);
+  assert.doesNotMatch(reader, /createServiceClient|createAdminClient/);
+  assert.match(migration, /auth\.uid\(\)/);
+  assert.match(migration, /member_birth_date_locked/);
+  assert.match(migration, /revoke all on function public\.update_own_member_details\(text, text, text, text, date\) from public, anon/);
+});
+
+test("membership updates are shown as notifications that link only to pages on this site", async () => {
+  const [section, format] = await Promise.all([read("app/account/_components/NotificationsSection.tsx"), read("app/account/format.ts")]);
+  assert.match(section, /Mark all as read/);
+  assert.match(section, /safeInternalHref/);
+  assert.match(format, /startsWith\("\/"\)/);
+  for (const key of ["address-updated", "address-birth-date-locked"]) assert.match(format, new RegExp(`"${key}"`));
 });

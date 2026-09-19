@@ -3,21 +3,18 @@ import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { setNewsletterPreference } from "@/lib/actions/account";
 import type { NewsletterPreference } from "@/lib/newsletter-preference";
 import { date } from "../format";
+import { SectionNotice, type SectionMessage } from "./SectionMessage";
 import styles from "../account.module.css";
 
 /** The one optional email the Society sends. Everything else is a system email and cannot be switched off here. */
-export function EmailPreferencesSection({ newsletter, message }: {
-  newsletter: NewsletterPreference | null;
-  /** The result of the last newsletter change, shown here so it is not scrolled out of sight. */
-  message: { tone: "success" | "error"; text: string } | null;
-}) {
+export function EmailPreferencesSection({ newsletter, message }: { newsletter: NewsletterPreference | null; message: SectionMessage | null }) {
   return <section className={styles.card} id="email-preferences" aria-labelledby="email-preferences-heading">
     <header className={styles.cardHead}>
       <span className={styles.badge}><MailCheck/></span>
       <div className={styles.headText}><h2 id="email-preferences-heading">Email preferences</h2><p>Choose whether you would like the Society newsletter. It is optional, and you can change your mind at any time.</p></div>
     </header>
     <div className={styles.cardBodyLoose}>
-      {message ? <p className={`${styles.message} ${message.tone === "error" ? styles.messageError : styles.messageSuccess}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p> : null}
+      <SectionNotice message={message}/>
       <Newsletter newsletter={newsletter}/>
       <div className={styles.system} role="note">
         <ShieldCheck aria-hidden="true"/>

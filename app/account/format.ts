@@ -56,6 +56,7 @@ export const accountNotices: Record<string, string> = {
   "student-request-sent": "Your Student membership request was sent to the membership officer.",
   "newsletter-subscribed": "You are subscribed to the Society newsletter.",
   "newsletter-unsubscribed": "You are unsubscribed from the Society newsletter.",
+  "address-updated": "Your address and date of birth were saved.",
 };
 
 export const accountErrors: Record<string, string> = {
@@ -73,8 +74,43 @@ export const accountErrors: Record<string, string> = {
   "newsletter-rate-limited": "You have changed this several times. Please wait a little before trying again.",
   "newsletter-address-blocked": "Emails to your membership address could not be delivered, so we cannot add it to the newsletter. Please contact the membership officer.",
   "newsletter-email-required": "Add a membership email address before subscribing to the newsletter.",
+  "address-invalid": "Please check the address. One of the lines is too long.",
+  "address-birth-date-invalid": "Enter a real date of birth that is not in the future.",
+  "address-birth-date-locked": "Your date of birth is already recorded. Please contact the membership officer to change it.",
+  "address-rate-limited": "You have saved this several times. Please wait a little before trying again.",
+  "address-failed": "We could not save your details. Nothing was changed.",
+  "address-no-membership": "Your account is not linked to a membership record yet, so there is nothing to change.",
   "newsletter-no-membership": "Your account is not linked to a membership record yet, so there is no newsletter choice to change.",
 };
 
 export const genericNotice = "Your account and membership settings were updated.";
 export const genericError = "The requested account change could not be completed.";
+
+/** A message meant for one section, picked out of the page address by the section's prefix (for example "newsletter-"). */
+export function sectionMessage(query: { error?: string; notice?: string }, prefix: string): { tone: "success" | "error"; text: string } | null {
+  if (query.error?.startsWith(prefix)) return { tone: "error", text: accountErrors[query.error] || genericError };
+  if (query.notice?.startsWith(prefix)) return { tone: "success", text: accountNotices[query.notice] || genericNotice };
+  return null;
+}
+
+/** "3 hours ago", or the date once it is more than a month old. */
+export function relativeTime(value: string, now = new Date()) {
+  const then = new Date(value);
+  const seconds = Math.round((then.getTime() - now.getTime()) / 1000);
+  const formatter = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
+  const steps: Array<[Intl.RelativeTimeFormatUnit, number]> = [["minute", 60], ["hour", 3600], ["day", 86400], ["week", 604800]];
+  const age = Math.abs(seconds);
+  if (age < 60) return "just now";
+  if (age >= 30 * 86400) return then.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
+  let unit = steps[0];
+  for (const step of steps) if (age >= step[1]) unit = step;
+  return formatter.format(Math.trunc(seconds / unit[1]), unit[0]);
+}
+
+/** A link inside this website only: never another site, and never a protocol-relative address. */
+export function safeInternalHref(href: string | null) {
+  return href && href.startsWith("/") && !href.startsWith("//") && !href.includes("\\") ? href : null;
+}
+
+/** London's calendar date today as yyyy-mm-dd. */
+export const londonToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());

@@ -3674,6 +3674,7 @@ export type Database = {
           title: string
         }[]
       }
+      get_own_member_details: { Args: never; Returns: Json }
       get_own_newsletter_preference: { Args: never; Returns: Json }
       grant_lifetime_honorary_membership: {
         Args: {
@@ -3938,6 +3939,16 @@ export type Database = {
         Returns: Json
       }
       target_donation_total_pence: { Args: never; Returns: number }
+      update_own_member_details: {
+        Args: {
+          p_address_line_one: string
+          p_address_line_two: string
+          p_city: string
+          p_date_of_birth?: string
+          p_postcode: string
+        }
+        Returns: undefined
+      }
       update_own_member_profile: {
         Args: { p_contact_number: string; p_full_name: string; p_title: string }
         Returns: undefined

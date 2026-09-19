@@ -4,6 +4,21 @@
   display: grid;
   gap: 22px;
   min-width: 0;
+  container-type: inline-size;
+  container-name: account;
+}
+
+/* Cards run in reading order. Once there is room they flow into two columns that balance themselves,
+   so a long notifications list or a short membership card never leaves one column much taller than the other. */
+.layout { display: block; }
+
+.layout > .card {
+  margin-bottom: 22px;
+  break-inside: avoid;
+}
+
+@container account (min-width: 820px) {
+  .layout { column-count: 2; column-gap: 22px; }
 }
 
 /* Who is signed in */
@@ -86,6 +101,8 @@
   background: currentColor;
 }
 
+.chipLink { text-decoration: none; }
+.chipLink:hover { background: rgba(240, 207, 132, .14); }
 .chipGood { color: #a9d6b3; border-color: rgba(169, 214, 179, .5); }
 .chipWarn { color: #f0cf84; border-color: rgba(240, 207, 132, .55); }
 .chipBad { color: #f2a898; border-color: rgba(242, 168, 152, .55); }
@@ -133,6 +150,7 @@
   border-radius: 3px;
   background: #fbf8f1;
   scroll-margin-top: 24px;
+  container-type: inline-size;
 }
 
 .cardHead {
@@ -239,6 +257,33 @@
   outline: 3px solid rgba(213, 168, 75, .35);
   outline-offset: 0;
   border-color: var(--brass);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.wide { grid-column: 1 / -1; }
+
+.fixedValue {
+  margin: 0;
+  padding: 11px 0 0;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hint {
+  color: #6b746e;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.5;
+  text-transform: none;
 }
 
 .formFoot { margin-top: 20px; }
@@ -379,34 +424,129 @@
 .system strong { display: block; font-size: 15px; }
 .system p { margin: 5px 0 0; font-size: 13.5px; line-height: 1.6; }
 
-/* Membership updates */
-.updates { display: grid; }
+/* Notifications */
+.count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--rust);
+  color: #fff;
+  font: 700 13px/1 var(--font-sans);
+  vertical-align: 4px;
+}
 
-.update {
+.listTools { display: flex; justify-content: flex-end; padding: 14px 0 4px; }
+
+.linkButton {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--rust);
+  cursor: pointer;
+  font: 700 12px var(--font-sans);
+  letter-spacing: .08em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-transform: uppercase;
+}
+
+.linkButton:hover { color: var(--forest); }
+.linkButton:disabled { cursor: wait; opacity: .6; }
+
+.notices { display: grid; margin: 0; padding: 0; list-style: none; }
+
+.notice {
+  position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 0;
+  gap: 14px;
+  padding: 18px 14px 18px 16px;
   border-top: 1px solid var(--line);
 }
 
-.update:first-child { border-top: 0; }
-.update strong { display: block; }
-.update p { margin: 4px 0 0; color: #4d5852; font-size: 14px; line-height: 1.55; }
-.update small { display: block; margin-top: 6px; color: #6b746e; font-size: 12.5px; }
-.update form { flex: 0 0 auto; }
+.notice:first-child { border-top: 0; }
 
-.unread strong::before {
+.noticeUnread { background: #f3eedf; }
+
+.noticeUnread::before {
   content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 9px;
-  border-radius: 50%;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
   background: var(--rust);
-  vertical-align: 2px;
 }
+
+.noticeIcon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+}
+
+.noticeIcon svg { width: 19px; height: 19px; }
+.toneGood { background: #dfe9de; color: #2d6a3d; }
+.toneWarn { background: #f6e7c4; color: #86601d; }
+.toneBad { background: #f3ddd6; color: #8c4033; }
+.toneInfo { background: #e4ebe1; color: var(--forest); }
+
+.noticeBody { min-width: 0; flex: 1; }
+
+.noticeTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 14px;
+  flex-wrap: wrap;
+}
+
+.noticeTop strong { font-size: 15px; line-height: 1.35; }
+.noticeTop time { color: #6b746e; font-size: 12.5px; white-space: nowrap; }
+.notice p { margin: 5px 0 0; color: #4d5852; font-size: 14px; line-height: 1.55; }
+.noticeActions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; }
+.noticeActions form { display: contents; }
+
+.noticeLink {
+  color: var(--forest);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-transform: uppercase;
+}
+
+.noticeLink:hover { color: var(--rust); }
+.notice:not(.noticeUnread) strong { font-weight: 600; }
+.notice:not(.noticeUnread) { color: #59635d; }
+
+.older { margin-top: 6px; border-top: 1px solid var(--line); }
+
+.older summary {
+  cursor: pointer;
+  padding: 14px 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.older summary:hover { color: var(--rust); }
+
+.emptyState {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 30px 12px 22px;
+  text-align: center;
+}
+
+.emptyState p { margin: 0; max-width: 34ch; color: #5a645e; font-size: 14px; line-height: 1.55; }
+.emptyState strong { margin-top: 6px; font-size: 16px; }
 
 .empty { margin: 0; padding: 22px 0 4px; color: #5a645e; }
 
@@ -422,15 +562,20 @@
   white-space: nowrap;
 }
 
+/* Rows and forms adapt to the width of their own card, not the screen. */
+@container (max-width: 560px) {
+  .row { grid-template-columns: 1fr; padding: 20px 0; }
+  .fields { grid-template-columns: 1fr; }
+  .formGrid { grid-template-columns: 1fr; }
+  .panel, .pref { flex-direction: column; align-items: stretch; }
+  .panel :global(.button), .pref :global(.button) { width: 100%; }
+}
+
 @media (max-width: 760px) {
   .banner { grid-template-columns: 1fr; padding: 24px 22px; }
   .avatar { width: 62px; height: 62px; font-size: 25px; }
   .cardHead { padding: 20px 20px 16px; }
   .cardBody { padding: 4px 20px 22px; }
   .cardBodyLoose { padding: 20px; }
-  .row { grid-template-columns: 1fr; padding: 20px 0; }
-  .fields { grid-template-columns: 1fr; }
-  .panel, .pref, .update { flex-direction: column; align-items: stretch; }
-  .panel :global(.button), .pref :global(.button) { width: 100%; }
-  .update form { align-self: flex-start; }
+  .notice { padding-inline: 12px; }
 }
