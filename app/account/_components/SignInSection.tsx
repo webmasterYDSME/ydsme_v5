@@ -1,3 +1,4 @@
+import { KeyRound } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { updateLoginEmail } from "@/lib/actions/auth";
 import { requestOwnMembershipContactChange } from "@/lib/actions/membership";
@@ -12,7 +13,7 @@ export function SignInSection({ loginEmail, correspondence, memberMojoLink }: {
   correspondence: { email: string; role: string } | null;
   memberMojoLink: boolean;
 }) {
-  return <Section id="sign-in" title="Sign-in and contact" description="The email address you sign in with, and where membership messages are sent.">
+  return <Section id="sign-in" eyebrow="Sign-in" title="Sign-in and contact" icon={KeyRound} description="The email address you sign in with, and where membership messages are sent.">
     <div className={styles.rows}>
       <div className={styles.row}>
         <div className={styles.rowText}><strong>Login email</strong><p>Used only to sign in. We ask you to confirm the new address before it changes.</p></div>

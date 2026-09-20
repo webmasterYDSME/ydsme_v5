@@ -4,11 +4,12 @@ import { getOwnMemberDetails } from "@/lib/member-details";
 import { getMembershipAccount, getOpenMembershipRenewalCampaign } from "@/lib/membership";
 import { getOwnNewsletterPreference } from "@/lib/newsletter-preference";
 import { createClient } from "@/lib/supabase/server";
-import { AccountBanner, type AccountTabLink } from "./_components/AccountBanner";
+import { AccountHeader, type AccountTabLink } from "./_components/AccountHeader";
 import { AddressSection } from "./_components/AddressSection";
 import { EmailPreferencesSection } from "./_components/EmailPreferencesSection";
 import { MembershipSection } from "./_components/MembershipSection";
-import { NotificationsSection, type AccountNotification } from "./_components/NotificationsSection";
+import { NotificationList, type AccountNotification } from "./_components/NotificationList";
+import { NotificationsBell } from "./_components/NotificationsBell";
 import { ProfileSection } from "./_components/ProfileSection";
 import { SignInSection } from "./_components/SignInSection";
 import { accountErrors, accountNotices, accountTabLabels, genericError, genericNotice, londonToday, pickAccountTab, sectionMessage, type AccountTab } from "./format";
@@ -53,43 +54,40 @@ export default async function Account({ searchParams }: { searchParams: Promise<
     label: accountTabLabels[id],
     href: `/account?tab=${id}`,
     current: id === current,
-    count: id === "membership" ? unreadNotifications : undefined,
   }));
 
   return <div className="portal-content">
     <div className={styles.page}>
-      <AccountBanner
+      <AccountHeader
         name={profile.full_name || profile.email}
         email={profile.email}
         role={role}
         membershipState={membership?.member.effective_state ?? null}
         tabs={tabs}
+        bell={membershipEnabled ? <NotificationsBell unread={unreadNotifications}><NotificationList notifications={notifications}/></NotificationsBell> : null}
       />
-      {query.error && !belongsToSection(query.error) ? <p className={`${styles.message} ${styles.messageError}`} role="alert">{accountErrors[query.error] || genericError}</p> : null}
-      {query.notice && !belongsToSection(query.notice) ? <p className={`${styles.message} ${styles.messageSuccess}`} role="status">{accountNotices[query.notice] || genericNotice}</p> : null}
+      {query.error && !belongsToSection(query.error) ? <p className="form-message error" role="alert">{accountErrors[query.error] || genericError}</p> : null}
+      {query.notice && !belongsToSection(query.notice) ? <p className="form-message success" role="status">{accountNotices[query.notice] || genericNotice}</p> : null}
 
       <div className={styles.sections}>
-        {current === "membership" ? <>
-          <MembershipSection
-            membership={membership}
-            campaignYear={campaign?.membership_year ?? null}
-            renewalAvailable={renewalAvailable}
-            honoraryTransitionPayment={honoraryTransitionPayment}
-          />
-          <NotificationsSection notifications={notifications}/>
-        </> : null}
-        {current === "details" ? <>
+        {current === "membership" ? <MembershipSection
+          membership={membership}
+          campaignYear={campaign?.membership_year ?? null}
+          renewalAvailable={renewalAvailable}
+          honoraryTransitionPayment={honoraryTransitionPayment}
+        /> : null}
+        {current === "details" ? <div className={styles.pair}>
           <ProfileSection title={profile.title || ""} fullName={profile.full_name || ""} contactNumber={profile.contact_number || ""}/>
           <AddressSection details={details} message={sectionMessage(query, "address-")} today={londonToday()}/>
-        </> : null}
-        {current === "settings" ? <>
+        </div> : null}
+        {current === "settings" ? <div className={styles.pair}>
           <EmailPreferencesSection newsletter={newsletter} message={sectionMessage(query, "newsletter-")}/>
           <SignInSection
             loginEmail={profile.email}
             correspondence={membership ? { email: membership.member.contact_email ?? "", role: membership.member.contact_role } : null}
             memberMojoLink={!membershipEnabled}
           />
-        </> : null}
+        </div> : null}
       </div>
     </div>
   </div>;

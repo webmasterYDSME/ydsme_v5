@@ -6,7 +6,7 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
 test("the account page is split into sections, each in its own component", async () => {
   const page = await read("app/account/page.tsx");
-  for (const section of ["AccountBanner", "MembershipSection", "ProfileSection", "SignInSection", "AddressSection", "NotificationsSection", "EmailPreferencesSection"]) {
+  for (const section of ["AccountHeader", "MembershipSection", "ProfileSection", "SignInSection", "AddressSection", "NotificationList", "EmailPreferencesSection"]) {
     assert.match(page, new RegExp(`<${section}\\b`), `${section} is used on the page`);
     await read(`app/account/_components/${section}.tsx`);
   }
@@ -56,7 +56,7 @@ test("members keep their own address and date of birth through their own session
 });
 
 test("membership updates are shown as notifications that link only to pages on this site", async () => {
-  const [section, format] = await Promise.all([read("app/account/_components/NotificationsSection.tsx"), read("app/account/format.ts")]);
+  const [section, format] = await Promise.all([read("app/account/_components/NotificationList.tsx"), read("app/account/format.ts")]);
   assert.match(section, /Mark all as read/);
   assert.match(section, /safeInternalHref/);
   assert.match(format, /startsWith\("\/"\)/);
@@ -64,12 +64,24 @@ test("membership updates are shown as notifications that link only to pages on t
 });
 
 test("the page is split into three tabs, and a result message returns people to the tab they were on", async () => {
-  const [page, format, banner] = await Promise.all([read("app/account/page.tsx"), read("app/account/format.ts"), read("app/account/_components/AccountBanner.tsx")]);
+  const [page, format, banner] = await Promise.all([read("app/account/page.tsx"), read("app/account/format.ts"), read("app/account/_components/AccountHeader.tsx")]);
   assert.match(page, /pickAccountTab\(query, membershipEnabled\)/);
-  assert.match(page, /current === "membership"[\s\S]*<NotificationsSection/);
   assert.match(page, /current === "details"[\s\S]*<AddressSection/);
   assert.match(page, /current === "settings"[\s\S]*<EmailPreferencesSection[\s\S]*<SignInSection/);
   assert.match(format, /const available: AccountTab\[\] = membershipEnabled \? \["membership", "details", "settings"\] : \["details", "settings"\]/);
   assert.match(format, /newsletter-\|contact-/);
   assert.match(banner, /aria-current=\{tab\.current \? "page" : undefined\}/);
+});
+
+test("notifications live behind a bell in the page heading, with an unread badge, and only when the membership area is on", async () => {
+  const [page, bell, section] = await Promise.all([
+    read("app/account/page.tsx"), read("app/account/_components/NotificationsBell.tsx"), read("app/account/_components/NotificationList.tsx"),
+  ]);
+  assert.match(page, /bell=\{membershipEnabled \? <NotificationsBell unread=\{unreadNotifications\}><NotificationList/);
+  assert.doesNotMatch(page, /NotificationsSection/);
+  assert.match(bell, /aria-expanded=\{open\}/);
+  assert.match(bell, /Escape/);
+  assert.match(bell, /unread\} unread/);
+  assert.match(section, /markMembershipNotificationRead/);
+  assert.match(section, /markAllMembershipNotificationsRead/);
 });

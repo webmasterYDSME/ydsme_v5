@@ -1,20 +1,29 @@
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 import styles from "../account.module.css";
 
-/** One part of the account page: what it is on the left, the content on the right. No box, just space and a rule. */
-export function Section({ id, title, description, count, children }: {
+/** One card on the account page, built from the same parts as the dashboard cards: a small label, a display heading and a rule. */
+export function Section({ id, eyebrow, title, description, icon: Icon, accent, children }: {
   id: string;
+  /** Small uppercase label above the title. */
+  eyebrow: string;
   title: string;
   description?: string;
-  /** Shown as a small badge beside the title, for example unread notifications. */
-  count?: number;
+  /** A quiet line icon at the right of the heading. */
+  icon?: ComponentType<{ "aria-hidden"?: boolean }>;
+  /** The coloured top edge that marks the main card, as on the dashboard. */
+  accent?: "rust" | "brass";
   children: ReactNode;
 }) {
-  return <section className={styles.section} id={id} aria-labelledby={`${id}-heading`}>
-    <header className={styles.sectionHead}>
-      <h2 id={`${id}-heading`}>{title}{count ? <span className={styles.count} aria-label={`${count} unread`}>{count}</span> : null}</h2>
-      {description ? <p>{description}</p> : null}
+  const accentClass = accent === "rust" ? "dashboard-primary-card" : accent === "brass" ? "dashboard-latest-card" : "";
+  return <section className={`portal-card ${accentClass} ${styles.card}`} id={id} aria-labelledby={`${id}-heading`}>
+    <header className="card-heading">
+      <div>
+        <p className="eyebrow dark">{eyebrow}</p>
+        <h2 id={`${id}-heading`}>{title}</h2>
+        {description ? <p className={styles.cardIntro}>{description}</p> : null}
+      </div>
+      {Icon ? <span className={styles.cardIcon}><Icon aria-hidden/></span> : null}
     </header>
-    <div className={styles.sectionBody}>{children}</div>
+    <div className={styles.cardBody}>{children}</div>
   </section>;
 }

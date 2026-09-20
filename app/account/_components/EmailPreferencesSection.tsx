@@ -1,4 +1,4 @@
-import { ShieldCheck } from "lucide-react";
+import { Mail, ShieldCheck } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { setNewsletterPreference } from "@/lib/actions/account";
 import type { NewsletterPreference } from "@/lib/newsletter-preference";
@@ -9,7 +9,7 @@ import styles from "../account.module.css";
 
 /** The one optional email the Society sends. Everything else is a system email and cannot be switched off here. */
 export function EmailPreferencesSection({ newsletter, message }: { newsletter: NewsletterPreference | null; message: SectionMessage | null }) {
-  return <Section id="email-preferences" title="Email preferences" description="Choose whether you would like the Society newsletter. It is optional, and you can change your mind at any time.">
+  return <Section id="email-preferences" eyebrow="Emails" title="Email preferences" icon={Mail} description="Choose whether you would like the Society newsletter. It is optional, and you can change your mind at any time.">
     <SectionNotice message={message}/>
     <Newsletter newsletter={newsletter}/>
     <p className={styles.note} role="note">
