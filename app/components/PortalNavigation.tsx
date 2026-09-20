@@ -4,14 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
+  Bell, BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
   LayoutDashboard, LogOut, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings,
   TicketCheck, UserRound, Wrench, X, type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { PortalSearch } from "@/app/components/PortalSearch";
+import { openNotificationsEvent } from "@/app/components/portal-events";
 import {
   accountLink, attentionCount, initials, itemIsCurrent, navItems, portalSidebarCollapsed,
   portalSidebarCookie, portalSidebarExpanded, type PortalIcon, type PortalNavItem, type PortalNavSection,
@@ -39,18 +40,24 @@ type PortalNavigationProps = {
   roleLabel: string;
   initialCollapsed: boolean;
   canSearchMembers: boolean;
+  /** The notifications list, drawn on the server. Null when the membership area is off, and the bell is left out. */
+  notificationPanel: ReactNode | null;
+  unreadNotifications: number;
 };
 
+const unreadText = (count: number) => (count ? `Notifications, ${count} unread` : "Notifications");
 const taskText = (count: number) => `${count} ${count === 1 ? "task needs" : "tasks need"} attention`;
 const cx = (...names: (string | false | undefined)[]) => names.filter(Boolean).join(" ");
 
-export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, canSearchMembers }: PortalNavigationProps) {
+export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, canSearchMembers, notificationPanel, unreadNotifications }: PortalNavigationProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   // Each panel remembers the page it was opened on, so it closes by itself when the page changes.
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const [accountPath, setAccountPath] = useState<string | null>(null);
   const [searchPath, setSearchPath] = useState<string | null>(null);
+  const [notificationsPath, setNotificationsPath] = useState<string | null>(null);
+  const notificationsOpen = notificationsPath === pathname;
   const menuOpen = menuPath === pathname;
   const accountOpen = accountPath === pathname;
   const searchOpen = searchPath === pathname;
@@ -59,6 +66,7 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
   const panel = useRef<HTMLDivElement>(null);
   const accountArea = useRef<HTMLDivElement>(null);
   const accountButton = useRef<HTMLButtonElement>(null);
+  const notificationsArea = useRef<HTMLDivElement>(null);
 
   const items = navItems(sections);
   const attention = attentionCount(sections);
@@ -70,6 +78,7 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
         event.preventDefault();
         setMenuPath(null);
         setAccountPath(null);
+        setNotificationsPath(null);
         setSearchPath(pathname);
       }
     }
@@ -137,10 +146,50 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
     };
   }, [accountOpen]);
 
+  // Anything on a page can ask for the notifications to open (the dashboard has a button for it).
+  useEffect(() => {
+    if (!notificationPanel) return;
+    function open() {
+      setMenuPath(null);
+      setAccountPath(null);
+      setNotificationsPath(pathname);
+    }
+    window.addEventListener(openNotificationsEvent, open);
+    return () => window.removeEventListener(openNotificationsEvent, open);
+  }, [pathname, notificationPanel]);
+
+  // The notifications panel closes on Escape or a click outside it (the bell buttons handle their own clicks).
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    function closeOutside(event: PointerEvent) {
+      const target = event.target as Element | null;
+      if (notificationsArea.current?.contains(target) || target?.closest("[data-notifications-trigger]")) return;
+      setNotificationsPath(null);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setNotificationsPath(null);
+      document.querySelector<HTMLElement>("[data-notifications-trigger]:not([hidden])")?.focus();
+    }
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [notificationsOpen]);
+
+  function toggleNotifications() {
+    setMenuPath(null);
+    setAccountPath(null);
+    setNotificationsPath(notificationsOpen ? null : pathname);
+  }
+
   function toggleCollapsed() {
     const next = !collapsed;
     setCollapsed(next);
     setAccountPath(null);
+    setNotificationsPath(null);
     try {
       const secure = window.location.protocol === "https:" ? "; secure" : "";
       document.cookie = `${portalSidebarCookie}=${next ? portalSidebarCollapsed : portalSidebarExpanded}; path=/; max-age=31536000; samesite=lax${secure}`;
@@ -152,6 +201,7 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
   function openSearch() {
     setMenuPath(null);
     setAccountPath(null);
+    setNotificationsPath(null);
     setSearchPath(pathname);
   }
 
@@ -182,6 +232,10 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
         </button>
         <div className={styles.topActions}>
           <button type="button" className={styles.iconButton} aria-label="Search" onClick={openSearch}><Search aria-hidden="true"/></button>
+          {notificationPanel ? <button type="button" data-notifications-trigger className={cx(styles.iconButton, styles.bellTop)} aria-label={unreadText(unreadNotifications)} aria-expanded={notificationsOpen} aria-controls="portal-notifications" onClick={toggleNotifications}>
+            <Bell aria-hidden="true"/>
+            {unreadNotifications > 0 ? <span className={styles.bellBadge} aria-hidden="true">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span> : null}
+          </button> : null}
           <button ref={menuButton} type="button" className={styles.menuButton} aria-controls="portal-navigation" aria-expanded={menuOpen} onClick={() => setMenuPath(menuOpen ? null : pathname)}>
             <Menu aria-hidden="true"/>Menu
             {attention > 0 ? <span className={styles.menuBadge}><span className={styles.srOnly}>{taskText(attention)}</span><span aria-hidden="true">{attention}</span></span> : null}
@@ -207,6 +261,12 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
             </div>)}
         </nav>
 
+        {notificationPanel ? <div className={cx(styles.bellWrap, styles.desktopOnly)}><button type="button" data-notifications-trigger className={cx(styles.link, styles.bellRow, notificationsOpen && styles.linkOn)} data-tip="Notifications" aria-label={unreadText(unreadNotifications)} aria-expanded={notificationsOpen} aria-controls="portal-notifications" onClick={toggleNotifications}>
+          <Bell aria-hidden="true"/>
+          <span className={styles.label}>Notifications</span>
+          {unreadNotifications > 0 ? <span className={styles.count} aria-hidden="true">{unreadNotifications}</span> : null}
+        </button></div> : null}
+
         <div ref={accountArea} className={styles.footer}>
           <div className={styles.desktopAccount}>
             {accountOpen ? <div id="portal-account-menu" className={styles.pop}>
@@ -230,6 +290,7 @@ export function PortalNavigation({ sections, name, roleLabel, initialCollapsed, 
         </div>
       </div>
     </aside>
+    {notificationPanel ? <div id="portal-notifications" ref={notificationsArea} className={cx(styles.notifyPanel, collapsed && styles.notifyPanelRail)} role="region" aria-label="Notifications" hidden={!notificationsOpen}>{notificationPanel}</div> : null}
     {searchOpen ? <PortalSearch items={items} canSearchMembers={canSearchMembers} onClose={() => setSearchPath(null)}/> : null}
   </>;
 }

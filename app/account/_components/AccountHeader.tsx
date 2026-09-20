@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { membershipStatus, statusTone } from "../format";
 import styles from "../account.module.css";
 
@@ -7,15 +6,13 @@ const toneClass = { good: styles.chipGood, warn: styles.chipWarn, bad: styles.ch
 
 export type AccountTabLink = { id: string; label: string; href: string; current: boolean };
 
-/** The same heading as the dashboard (label, name, a line of detail), the notifications bell where the dashboard has its action, and the tabs. */
-export function AccountHeader({ name, email, role, membershipState, tabs, bell }: {
+/** The same heading as the dashboard (label, name, a line of detail), and the tabs. The notifications bell is in the sidebar and top bar, on every page. */
+export function AccountHeader({ name, email, role, membershipState, tabs }: {
   name: string;
   email: string;
   role: string;
   membershipState: string | null;
   tabs: AccountTabLink[];
-  /** The notifications bell. Left out when the membership area is off. */
-  bell: ReactNode;
 }) {
   return <>
     <header className={`portal-heading ${styles.head}`}>
@@ -30,7 +27,6 @@ export function AccountHeader({ name, email, role, membershipState, tabs, bell }
           </span>
         </div>
       </div>
-      {bell}
     </header>
     <nav className={styles.tabs} aria-label="Account sections">
       {tabs.map((tab) => <Link key={tab.id} href={tab.href} scroll={false} aria-current={tab.current ? "page" : undefined}>{tab.label}</Link>)}

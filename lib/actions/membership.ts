@@ -1020,7 +1020,8 @@ export async function markMembershipNotificationRead(formData: FormData) {
   await (await createServerClient()).rpc("mark_own_membership_notification_read", {
     p_notification_id: notificationId,
   });
-  revalidatePath("/account");
+  // The bell is in the shared portal layout, so every page must refresh, not only /account.
+  revalidatePath("/", "layout");
 }
 
 export async function completeManualMembershipContact(formData: FormData) {

@@ -5,13 +5,17 @@ import { canViewContentManagement, isAdministrator } from "@/lib/auth";
 import { PortalNavigation } from "@/app/components/PortalNavigation";
 import { getMembershipNavigationTaskCount } from "@/lib/portal-navigation";
 import { buildPortalNav, portalSidebarCollapsed, portalSidebarCookie, roleLabel } from "@/lib/portal-nav";
-import { membershipAdministrationEnabled } from "@/lib/features";
+import { membershipAdministrationEnabled, membershipBillingEnabled } from "@/lib/features";
+import { getOwnNotifications } from "@/lib/member-notifications";
+import { NotificationList } from "@/app/components/NotificationList";
 
 export async function PortalShell({ children, role, name, membershipOfficer = false }: { children: ReactNode; role: AppRole; name: string; membershipOfficer?: boolean }) {
   const membershipEnabled = membershipAdministrationEnabled();
-  const [membershipTaskCount, cookieStore] = await Promise.all([
+  const showNotifications = membershipBillingEnabled();
+  const [membershipTaskCount, cookieStore, own] = await Promise.all([
     membershipOfficer && membershipEnabled ? getMembershipNavigationTaskCount() : 0,
     cookies(),
+    getOwnNotifications(),
   ]);
   const sections = buildPortalNav({
     role,
@@ -28,6 +32,8 @@ export async function PortalShell({ children, role, name, membershipOfficer = fa
       roleLabel={roleLabel(role, membershipOfficer)}
       initialCollapsed={cookieStore.get(portalSidebarCookie)?.value === portalSidebarCollapsed}
       canSearchMembers={membershipOfficer && membershipEnabled}
+      unreadNotifications={own.unread}
+      notificationPanel={showNotifications ? <NotificationList notifications={own.notifications}/> : null}
     />
     <main className="portal-main">{children}</main>
   </div>;

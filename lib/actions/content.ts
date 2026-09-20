@@ -405,17 +405,19 @@ export async function retryWorkshopReservationEmail(formData: FormData) {
   redirect(mail.sent ? "/admin/workshops?notice=reservation-email-sent" : "/admin/workshops?error=Workshop+email+delivery+failed.+Try+again+later.");
 }
 
-export async function createMessage(formData: FormData) {
+/** Posts a notice to every member. The result is returned, not redirected, so the form can show it next to the button the member just pressed. */
+export async function createMessage(formData: FormData): Promise<{ ok: true } | { ok: false; error: string }> {
   const { user, role } = await requireUser();
   const parsed = z.object({ title: text(2, 120), message: text(2, 2000) }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) redirect("/dashboard?error=Please+write+a+title+and+message.");
-  if (!await consumeRateLimit("member-notice", 5, 60 * 60, user.id)) redirect("/dashboard?error=You+have+posted+too+many+notices.+Please+try+again+later.");
+  if (!parsed.success) return { ok: false, error: "Please write a title and a message. The title can be up to 120 characters and the message up to 2,000." };
+  if (!await consumeRateLimit("member-notice", 5, 60 * 60, user.id)) return { ok: false, error: "You have posted five notices in the last hour. Please try again a little later." };
   const admin = createAdminClient();
   const { data: profile } = await admin.from("users").select("full_name").eq("id", user.id).maybeSingle();
   const { data, error } = await admin.from("feeds").insert({ type: "message", ...parsed.data, author_id: user.id, author_name: profile?.full_name || user.email, lifecycle_status: "published" }).select("id").single();
-  if (error) redirect("/dashboard?error=The+notice+could+not+be+posted.");
+  if (error) return { ok: false, error: "The notice could not be posted. Please try again." };
   await writeAudit({ actorUserId: user.id, actorRole: role, action: "notice.created", entityType: "notice", entityId: data.id, summary: parsed.data.title });
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 export async function deleteMessage(formData: FormData) {

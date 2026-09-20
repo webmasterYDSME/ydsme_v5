@@ -899,7 +899,7 @@ test("links member-facing activation notices to newly created portal accounts", 
     read("supabase/migrations/202608200032_membership_activation_notice_wording.sql"),
     read("supabase/migrations/202608200033_membership_guardian_notification_isolation.sql"),
     read("supabase/migrations/202608210004_member_notification_ownership.sql"),
-    readAccountSource(),
+    read("lib/member-notifications.ts"),
     read("lib/actions/membership.ts"),
   ]);
   assert.match(routing, /route_membership_notification_to_portal/);

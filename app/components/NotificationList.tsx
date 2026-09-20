@@ -3,18 +3,9 @@ import { Award, Bell, CalendarClock, CircleCheck, CreditCard, GraduationCap, Inf
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { markAllMembershipNotificationsRead } from "@/lib/actions/account";
 import { markMembershipNotificationRead } from "@/lib/actions/membership";
-import { relativeTime, safeInternalHref } from "../format";
-import styles from "../account.module.css";
-
-export type AccountNotification = {
-  id: string;
-  title: string;
-  body: string;
-  kind: string;
-  action_href: string | null;
-  created_at: string;
-  read_at: string | null;
-};
+import { relativeTime, safeInternalHref } from "@/app/account/format";
+import type { MemberNotification } from "@/lib/member-notifications";
+import styles from "./notification-list.module.css";
 
 type Tone = "good" | "warn" | "bad" | "info";
 
@@ -36,7 +27,7 @@ const toneClass: Record<Tone, string> = { good: styles.toneGood, warn: styles.to
 const RECENT_READ_SHOWN = 3;
 
 /** What is inside the bell's panel: unread notices first and highlighted, a few recent read ones, and the rest behind a link. */
-export function NotificationList({ notifications }: { notifications: AccountNotification[] }) {
+export function NotificationList({ notifications }: { notifications: MemberNotification[] }) {
   const unread = notifications.filter((notice) => !notice.read_at);
   const read = notifications.filter((notice) => notice.read_at);
   const recent = read.slice(0, RECENT_READ_SHOWN);
@@ -64,7 +55,7 @@ export function NotificationList({ notifications }: { notifications: AccountNoti
   </>;
 }
 
-function Notice({ notice }: { notice: AccountNotification }) {
+function Notice({ notice }: { notice: MemberNotification }) {
   const { Icon, tone } = look(notice.kind);
   const href = safeInternalHref(notice.action_href);
   const isUnread = !notice.read_at;

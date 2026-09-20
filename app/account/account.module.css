@@ -1,5 +1,5 @@
 /* Account page. It borrows everything from the dashboard (heading, cards, buttons, messages, colours) and only adds
-   what the dashboard does not have: the bell and its panel, the tabs, and the layout of the forms inside cards. */
+   what the dashboard does not have: the tabs, and the layout of the forms inside cards. */
 
 .page {
   display: grid;
@@ -9,15 +9,7 @@
   container-name: account;
 }
 
-/* Heading: the dashboard's .portal-heading, with the bell where the dashboard has its "Public website" button */
-.page .head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 18px;
-  margin-bottom: 0;
-}
-
+/* Heading: the dashboard's .portal-heading */
 .headText { min-width: 0; }
 .head .headText h1 { overflow-wrap: anywhere; }
 
@@ -73,63 +65,6 @@
 /* Messages: the dashboard's .form-message, with the page's spacing */
 .page :global(.form-message) { margin: 0; }
 .message { margin: 0 0 4px; }
-
-/* The bell and its panel */
-.bell { position: relative; }
-
-.bellButton {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 50px;
-  height: 50px;
-  border: 1px solid #bcb7aa;
-  border-radius: 2px;
-  background: #fffdf7;
-  color: var(--forest);
-  cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
-}
-
-.bellButton svg { width: 22px; height: 22px; }
-.bellButton:hover, .bellButtonOpen { border-color: var(--forest); background: var(--forest); color: #fff; }
-.bellButton:focus-visible { outline: 3px solid rgba(213, 168, 75, .55); outline-offset: 2px; }
-
-.bellBadge {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  display: grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border: 2px solid var(--paper);
-  border-radius: 999px;
-  background: var(--rust);
-  color: #fff;
-  font: 700 11px/1 var(--font-sans);
-}
-
-.bellPanel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 12px);
-  right: 0;
-  width: min(440px, calc(100vw - 28px));
-  max-height: min(72vh, 620px);
-  overflow-y: auto;
-  padding: 24px;
-  border: 1px solid var(--line);
-  border-top: 4px solid var(--brass);
-  background: #f9f6ef;
-  box-shadow: 0 22px 48px rgba(16, 24, 20, .2);
-}
-
-.bellPanel[hidden] { display: none; }
-.bellHead { margin-bottom: 4px; }
-.bellHead h2 { margin: 0; font-family: var(--font-display); font-size: 28px; font-weight: 600; }
-.bellHead form { align-self: center; }
 
 /* Cards */
 .sections { display: grid; min-width: 0; }
@@ -364,111 +299,6 @@
 .note svg { flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; color: var(--forest); }
 .note strong { color: var(--ink); }
 
-/* Notifications, inside the bell's panel */
-.linkButton {
-  padding: 4px 0;
-  border: 0;
-  background: none;
-  color: var(--rust);
-  cursor: pointer;
-  font: 700 11px var(--font-sans);
-  letter-spacing: .12em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.linkButton:hover { color: var(--forest); }
-.linkButton:disabled { cursor: wait; opacity: .6; }
-
-.notices { display: grid; gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
-
-.notice {
-  display: flex;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  background: #fffdf7;
-}
-
-.noticeUnread { border-left: 3px solid var(--rust); background: #f5f0e2; }
-
-.noticeIcon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-.noticeIcon svg { width: 17px; height: 17px; }
-.toneGood { background: #dfe9de; color: #2d6a3d; }
-.toneWarn { background: #f6e7c4; color: #86601d; }
-.toneBad { background: #f3ddd6; color: #8c4033; }
-.toneInfo { background: #e4ebe1; color: var(--forest); }
-
-.noticeBody { min-width: 0; flex: 1; }
-
-.noticeTop {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 2px 12px;
-  flex-wrap: wrap;
-}
-
-.noticeTop strong { font-size: 15px; line-height: 1.35; }
-.noticeTop time { color: #6b746e; font-size: 12px; white-space: nowrap; }
-.notice p { margin: 5px 0 0; color: #4d5852; font-size: 13.5px; line-height: 1.55; white-space: pre-line; }
-.noticeActions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; }
-.noticeActions form { display: contents; }
-
-.noticeLink {
-  color: var(--forest);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-transform: uppercase;
-}
-
-.noticeLink:hover { color: var(--rust); }
-.notice:not(.noticeUnread) strong { font-weight: 600; }
-.notice:not(.noticeUnread) { color: #59635d; }
-
-.older { margin-top: 10px; border-top: 1px solid var(--line); }
-
-.older summary {
-  cursor: pointer;
-  padding: 14px 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-}
-
-.older summary:hover { color: var(--rust); }
-
-.badge {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #e4ebe1;
-  color: var(--forest);
-}
-
-.badge svg { width: 21px; height: 21px; }
-
-.emptyState { display: grid; justify-items: start; gap: 6px; padding: 20px 0 4px; }
-.emptyState p { margin: 0; max-width: 42ch; color: #5a645e; font-size: 14px; line-height: 1.55; }
-.emptyState strong { margin-top: 6px; font-size: 16px; }
-
 .empty { margin: 0; color: #5a645e; line-height: 1.6; }
 
 .srOnly {
@@ -495,11 +325,7 @@
   .tabs { gap: 24px; }
 }
 
-/* On a phone the panel spans the page instead of hanging from the bell */
+/* Phones */
 @media (max-width: 640px) {
   .cardIcon { display: none; }
-  .bell { position: static; }
-  .page .head { position: relative; }
-  .bellPanel { top: calc(100% + 8px); right: 0; left: 0; width: auto; padding: 18px; }
-  .page .head { grid-template-columns: minmax(0, 1fr) auto; }
 }

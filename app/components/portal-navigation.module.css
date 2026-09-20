@@ -45,6 +45,22 @@
 .link:focus-visible,.search:focus-visible,.iconButton:focus-visible,.collapseButton:focus-visible,.accountButton:focus-visible,.popItem:focus-visible,.menuButton:focus-visible,.brand:focus-visible,.result:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 
 /* Collapsed to an icon rail (wide screens only). Labels stay in the page for screen readers. */
+.bellWrap{flex:none;padding-top:10px;border-top:1px solid rgba(255,255,255,.16)}
+.bellRow{width:100%;border:0;background:transparent;font-family:inherit;text-align:left;cursor:pointer;flex:none}
+.bellRow.linkOn{background:var(--forest)}
+.bellTop{position:relative}
+.bellBadge{position:absolute;top:-7px;right:-7px;min-width:20px;height:20px;padding:0 5px;display:grid;place-items:center;border:2px solid var(--deep);border-radius:11px;background:var(--brass);color:var(--deep);font-size:11px;font-weight:800;line-height:1}
+.notifyPanel{position:fixed;z-index:45;left:300px;bottom:16px;width:min(440px,calc(100vw - 324px));max-height:min(80svh,700px);overflow-y:auto;overscroll-behavior:contain;padding:24px;border:1px solid var(--line);border-top:4px solid var(--brass);background:#f9f6ef;color:var(--ink);box-shadow:0 22px 48px rgba(16,24,20,.28)}
+.notifyPanel[hidden]{display:none}
+@media(min-width:1025px){
+  .notifyPanelRail{left:92px;width:min(440px,calc(100vw - 116px))}
+  .rail .bellRow{justify-content:center;padding:0;position:relative}
+  .rail .bellRow .count{position:absolute;top:5px;right:9px;min-width:0;width:11px;height:11px;padding:0;box-sizing:content-box;border:2px solid var(--deep);font-size:0}
+  .rail .bellRow:hover::after,.rail .bellRow:focus-visible::after{content:attr(data-tip);position:absolute;left:calc(100% + 12px);top:50%;transform:translateY(-50%);padding:6px 10px;border-radius:6px;background:#fffdf8;color:var(--ink);font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:6}
+}
+@media(min-width:1025px) and (max-width:1200px){
+  .notifyPanel:not(.notifyPanelRail){left:276px;width:min(440px,calc(100vw - 300px))}
+}
 @media(min-width:1025px){
   .rail{width:80px;padding-inline:12px}
   .rail .top{flex-direction:column;padding:0}
@@ -67,6 +83,7 @@
 
 /* Tablets and phones: a top bar, and the navigation slides in from the left. */
 @media(max-width:1024px){
+  .notifyPanel{left:12px;right:12px;top:78px;bottom:auto;width:auto;max-height:calc(100svh - 96px);padding:18px}
   .sidebar{width:auto;height:68px;padding:0 16px;flex-direction:row;align-items:center;gap:10px;box-shadow:0 3px 18px rgba(4,9,7,.2)}
   .top{flex:1;padding:0}
   .brand img{width:40px;height:40px}
