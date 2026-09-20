@@ -10,7 +10,12 @@ type ClaimedNotification = {
   kind: string;
   action_href: string | null;
   email_attempts: number;
+  delivery_class: "immediate" | "bulk";
 };
+
+// The provider sends 429 for two different reasons: we are going too fast (wait a minute) or the
+// day's allowance is spent (wait an hour before asking again). Neither counts as a failed attempt.
+const PROVIDER_SPACING_MS = 600;
 
 const escapeHtml = (value: string) => value
   .replaceAll("&", "&amp;")
@@ -66,7 +71,25 @@ export default {
 
     let sent = 0;
     let failed = 0;
-    for (const notification of (data ?? []) as ClaimedNotification[]) {
+    let deferred = 0;
+    let stopped = false;
+    const claimed = (data ?? []) as ClaimedNotification[];
+    const defer = async (id: string, seconds: number, reason: string) => {
+      const { error: deferError } = await context.supabaseAdmin.rpc("defer_membership_notification", {
+        p_id: id,
+        p_seconds: seconds,
+        p_reason: reason,
+      });
+      if (deferError) console.error("Unable to defer membership notification", deferError.message);
+      deferred += 1;
+    };
+    for (const [index, notification] of claimed.entries()) {
+      if (stopped) {
+        // The provider asked us to stop, so hand back everything we have not sent yet.
+        await defer(notification.notification_id, 60, "Waiting for the email provider.");
+        continue;
+      }
+      if (index > 0 && !useLocalMailpit) await new Promise((resolve) => setTimeout(resolve, PROVIDER_SPACING_MS));
       const actionUrl = notification.action_href ? `${siteUrl}${notification.action_href}` : null;
       // Renewal emails point at the renewal page, not the member account, so they say so.
       const isRenewal = notification.kind === "membership.renewal-invitation" || notification.kind === "membership.renewal-reminder";
@@ -115,6 +138,23 @@ export default {
               html: htmlBody,
             }),
           });
+        if (response.status === 429 && !useLocalMailpit) {
+          const body = await response.json().catch(() => null) as { name?: string } | null;
+          const quota = body?.name === "daily_quota_exceeded" || body?.name === "monthly_quota_exceeded";
+          if (quota) {
+            await context.supabaseAdmin.rpc("pause_email_provider", {
+              p_seconds: 3600,
+              p_reason: "The email provider says the sending allowance has been used up.",
+            });
+          }
+          await defer(
+            notification.notification_id,
+            quota ? 3600 : Math.max(60, Number(response.headers.get("retry-after")) || 60),
+            quota ? "Email provider allowance used up." : "Email provider is busy.",
+          );
+          stopped = true;
+          continue;
+        }
         if (!response.ok) {
           deliveryError = `Email provider returned ${response.status}.`;
         } else if (!useLocalMailpit) {
@@ -137,7 +177,7 @@ export default {
     }
 
     return Response.json(
-      { ok: failed === 0, result: { claimed: (data ?? []).length, sent, failed } },
+      { ok: failed === 0, result: { claimed: claimed.length, sent, failed, deferred } },
       { status: failed === 0 ? 200 : 207, headers: { "Cache-Control": "no-store" } },
     );
   }),

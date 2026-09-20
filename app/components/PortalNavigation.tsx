@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bell, BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
-  LayoutDashboard, LogOut, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings,
+  LayoutDashboard, LogOut, Mail, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings,
   TicketCheck, UserRound, Wrench, X, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -32,6 +32,7 @@ const icons: Record<PortalIcon, LucideIcon> = {
   workshops: Wrench,
   settings: Settings,
   audit: History,
+  email: Mail,
 };
 
 type PortalNavigationProps = {

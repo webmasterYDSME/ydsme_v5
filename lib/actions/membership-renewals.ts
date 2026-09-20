@@ -10,9 +10,14 @@ import { writeAudit } from "@/lib/audit";
 
 const RENEWALS = "/admin/memberships/renewals";
 
+/**
+ * Opens the year for renewals: makes sure every membership type has a fee and switches the year on so
+ * members can renew from their account. It does not email anyone; sending the invitations is a separate step
+ * (sendRenewalInvitations) so an officer can look first and try a test email on themselves.
+ */
 export async function openRenewalCampaign(form: FormData) {
   if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
-  const { user } = await requireCapability("memberships.manage");
+  const { user, role } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   const admin = createServiceClient();
   const { data: plans, error: planError } = await admin.from("membership_plans").select("id").eq("active", true);
@@ -20,6 +25,27 @@ export async function openRenewalCampaign(form: FormData) {
   for (const plan of plans ?? []) await ensureMembershipPlanPrice(plan.id, year);
   const { error } = await admin.from("membership_renewal_campaigns").upsert({ membership_year: year, open: true, opened_by: user.id }, { onConflict: "membership_year", ignoreDuplicates: true });
   if (error) throw new Error("Unable to open renewals.");
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.renewals-opened",
+    entityType: "membership-renewal-campaign", entityId: String(year), summary: `Renewals opened for ${year}`,
+  });
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${RENEWALS}?year=${year}&notice=renewals-opened`);
+}
+
+/**
+ * Queues the renewal invitation for every member who has not been invited yet. The emails are bulk mail: they
+ * wait in the email queue and go out a few at a time, within the daily limit, so nothing is sent all at once.
+ * Running it again only queues members who were missed.
+ */
+export async function sendRenewalInvitations(form: FormData) {
+  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  const { user, role } = await requireCapability("memberships.manage");
+  const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
+  const admin = createServiceClient();
+  const { data: campaign } = await admin.from("membership_renewal_campaigns").select("open").eq("membership_year", year).maybeSingle();
+  if (!campaign?.open) redirect(`${RENEWALS}?year=${year}&error=renewals-not-open`);
+  let queued = 0;
   // Stable pages avoid silently dropping members beyond the API's row limit.
   let afterId: string | null = null;
   for (;;) {
@@ -28,17 +54,41 @@ export async function openRenewalCampaign(form: FormData) {
     if (membersError) throw new Error("Unable to prepare renewal invitations.");
     for (const member of members ?? []) {
       const token = membershipToken();
-      const { error: queueError } = await admin.rpc("queue_membership_renewal_invitation", {
+      const { data: created, error: queueError } = await admin.rpc("queue_membership_renewal_invitation", {
         p_member_id: member.id, p_year: year, p_actor: user.id, p_token: token, p_token_hash: membershipTokenHash(token),
       });
-      if (queueError) throw new Error("Unable to queue renewals. Retry opening the year to continue safely.");
+      if (queueError) throw new Error("Unable to queue renewals. Send the invitations again to continue safely.");
+      if (created) queued += 1;
     }
     if (!members || members.length < 200) break;
     afterId = members[members.length - 1].id;
   }
+  if (queued > 0) {
+    await admin.rpc("request_membership_notification_delivery");
+    await writeAudit({
+      actorUserId: user.id, actorRole: role, action: "membership.renewal-invitations-queued",
+      entityType: "membership-renewal-campaign", entityId: String(year), summary: `${queued} renewal invitations queued for ${year}`,
+    });
+  }
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${RENEWALS}?year=${year}&notice=${queued > 0 ? "renewal-invitations-queued" : "renewal-invitations-none"}`);
+}
+
+/** Sends the officer a copy of a renewal invitation, addressed only to them, so they can see it before it goes to members. */
+export async function sendRenewalTestEmail(form: FormData) {
+  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  const { user, role } = await requireCapability("memberships.manage");
+  const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
+  if (!user.email) redirect(`${RENEWALS}?year=${year}&error=renewal-test-failed`);
+  const admin = createServiceClient();
+  const { data: made, error } = await admin.rpc("queue_membership_renewal_test", { p_year: year, p_actor: user.id, p_recipient: user.email });
+  if (error || !made) redirect(`${RENEWALS}?year=${year}&error=renewal-test-failed`);
   await admin.rpc("request_membership_notification_delivery");
-  revalidatePath("/admin/memberships");
-  redirect(`${RENEWALS}?year=${year}&notice=renewals-opened`);
+  await writeAudit({
+    actorUserId: user.id, actorRole: role, action: "membership.renewal-test-sent",
+    entityType: "membership-renewal-campaign", entityId: String(year), summary: `Renewal test email sent to the officer for ${year}`,
+  });
+  redirect(`${RENEWALS}?year=${year}&notice=renewal-test-sent`);
 }
 
 /** Emails a reminder to invited members who have not paid. The database limits this to one reminder per member every seven days. */

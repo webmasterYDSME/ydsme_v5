@@ -5,7 +5,7 @@ export type PortalRole = "member" | "committee" | "administrator";
 
 export type PortalIcon =
   | "overview" | "workbench" | "library" | "memberships" | "accounts" | "donations"
-  | "announcements" | "events" | "bookings" | "workshops" | "settings" | "audit";
+  | "announcements" | "events" | "bookings" | "workshops" | "settings" | "audit" | "email";
 
 export type PortalNavItem = {
   key: string;
@@ -54,6 +54,7 @@ const website: PortalNavItem[] = [
 
 const administration: PortalNavItem[] = [
   { key: "settings", href: "/settings", label: "Site settings", icon: "settings" },
+  { key: "email-queue", href: "/administrator/email-queue", label: "Email queue", icon: "email" },
   { key: "audit", href: "/admin/audit", label: "Important changes", icon: "audit" },
 ];
 

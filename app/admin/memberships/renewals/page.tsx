@@ -2,6 +2,8 @@ import Link from "next/link";
 import { UsersRound } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
 import { membershipBillingEnabled } from "@/lib/features";
+import { loadEmailQueueOverview } from "@/lib/email-queue";
+import { bulkPerDay } from "@/lib/email-queue-format";
 import { money } from "@/lib/membership-admin/format";
 import { loadPlansAndPrices, loadRenewalWorkspace } from "@/lib/membership-admin/records";
 import { feeInForce, filterRenewalRows, type RenewalRowStatus, type RenewalShow } from "@/lib/membership-admin/renewals";
@@ -25,8 +27,8 @@ const statusClass = (status: RenewalRowStatus) => status === "renewed" ? styles.
 
 export default async function MembershipRenewals({ searchParams }: { searchParams: Promise<Query> }) {
   const query = await searchParams;
-  await requireCapability("memberships.manage");
-  const [work, { plans, prices }] = await Promise.all([loadRenewalWorkspace(one(query.year)), loadPlansAndPrices()]);
+  const { role } = await requireCapability("memberships.manage");
+  const [work, { plans, prices }, queueOverview] = await Promise.all([loadRenewalWorkspace(one(query.year)), loadPlansAndPrices(), loadEmailQueueOverview()]);
   const { currentYear, year, rows, summary } = work;
   const years = [currentYear, currentYear + 1];
 
@@ -66,6 +68,8 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
         year={year} years={years} yearHref={(option) => `${BASE}?year=${option}`}
         open={work.campaignOpen} summary={summary} lastReminderAt={work.lastReminderAt}
         missingFees={missingFees} billingOn={membershipBillingEnabled()}
+        queue={queueOverview ? { waiting: queueOverview.queued_bulk, perDay: bulkPerDay(queueOverview.budget) } : null}
+        queueHref={role === "administrator" ? "/administrator/email-queue" : null}
       />
 
       <section className={styles.card} id="renewals">

@@ -43,7 +43,7 @@ test("hides Memberships while membership administration is off, but keeps Donati
 test("shows an administrator everything, with Administration last", () => {
   const sections = buildPortalNav({ ...base, role: "administrator", canViewContent: true, administrator: true, membershipOfficer: true });
   assert.deepEqual(sections.map((section) => section.label), [null, "Membership and money", "Website", "Members\u2019 area", "Administration"]);
-  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Important changes"]);
+  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Email queue", "Important changes"]);
 });
 
 test("never repeats a link or an address", () => {

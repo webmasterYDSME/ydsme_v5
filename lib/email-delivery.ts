@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createServiceClient } from "@/lib/supabase/admin";
+
 export type TransactionalEmailAttachment = {
   content: string;
   filename: string;
@@ -73,14 +75,54 @@ async function sendToLocalMailpit(email: TransactionalEmail): Promise<EmailDeliv
   }
 }
 
+export const EMAIL_LIMIT_MESSAGE = "The daily email limit has been reached. Please try again tomorrow or contact an administrator.";
+
+// Every email that leaves straight from the website (tickets, sign-up codes, cancellations) takes a slot
+// from the same daily budget as queued mail. If the budget cannot be read we still send: losing a ticket
+// email is worse than going a little over budget.
+async function reserveSlot(source: string): Promise<{ id: number | null; refused: boolean }> {
+  try {
+    const { data, error } = await createServiceClient().rpc("reserve_email_slot", {
+      p_class: "immediate",
+      p_source: source,
+      p_notification_id: null,
+    });
+    if (error) return { id: null, refused: false };
+    if (data === null || data === undefined) return { id: null, refused: true };
+    return { id: Number(data), refused: false };
+  } catch {
+    return { id: null, refused: false };
+  }
+}
+
+async function settleSlot(id: number | null, sent: boolean) {
+  if (id === null) return;
+  try {
+    await createServiceClient().rpc("release_email_slot", { p_ledger_id: id, p_sent: sent });
+  } catch {
+    // The slot is tidied up by the next reservation.
+  }
+}
+
+async function pauseProvider(reason: string) {
+  try {
+    await createServiceClient().rpc("pause_email_provider", { p_seconds: 3600, p_reason: reason });
+  } catch {
+    // Best effort only.
+  }
+}
+
 export async function sendTransactionalEmail(
   email: TransactionalEmail,
   idempotencyKey?: string,
+  source = "transactional",
 ): Promise<EmailDeliveryResult> {
   if (usesLocalMailpit()) return sendToLocalMailpit(email);
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return { sent: false, error: "Email delivery is not configured." };
+  const slot = await reserveSlot(source);
+  if (slot.refused) return { sent: false, error: EMAIL_LIMIT_MESSAGE };
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -92,11 +134,18 @@ export async function sendTransactionalEmail(
       body: JSON.stringify(email),
     });
     if (!response.ok) {
-      const body = await response.json().catch(() => null) as { message?: string } | null;
+      const body = await response.json().catch(() => null) as { message?: string; name?: string } | null;
+      await settleSlot(slot.id, false);
+      if (response.status === 429 && (body?.name === "daily_quota_exceeded" || body?.name === "monthly_quota_exceeded")) {
+        await pauseProvider("The email provider says the sending allowance has been used up.");
+        return { sent: false, error: EMAIL_LIMIT_MESSAGE };
+      }
       return { sent: false, error: body?.message || `Email provider returned ${response.status}.` };
     }
+    await settleSlot(slot.id, true);
     return { sent: true };
   } catch (error) {
+    await settleSlot(slot.id, false);
     return { sent: false, error: error instanceof Error ? error.message : "Email delivery failed." };
   }
 }
