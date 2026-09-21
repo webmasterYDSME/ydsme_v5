@@ -13,7 +13,10 @@ export type DashboardEvent = {
   name: string;
   start_date: string;
   start_time: string;
+  end_date?: string | null;
+  end_time?: string | null;
   event_type: string;
+  descriptions?: string | null;
 };
 
 export type DashboardWorkshop = {
@@ -21,8 +24,13 @@ export type DashboardWorkshop = {
   title: string;
   date: string;
   start_time: string;
+  end_time?: string | null;
   venue: string;
   maximum_participants: number;
+  descriptions?: string | null;
+  host_name?: string | null;
+  notes?: string | null;
+  virtual_link?: string | null;
 };
 
 export type DashboardSharedSnapshot = {
@@ -36,13 +44,13 @@ async function loadDashboardSharedSnapshot(today: string): Promise<DashboardShar
   const admin = createAdminClient();
   const [eventsResult, workshopsResult] = await Promise.all([
     admin.from("events")
-      .select("id,name,start_date,start_time,event_type", { count: "exact" })
+      .select("id,name,start_date,start_time,end_date,end_time,event_type,descriptions", { count: "exact" })
       .eq("lifecycle_status", "published")
       .gte("end_date", today)
       .order("start_date")
       .limit(6),
     admin.from("workshops")
-      .select("id,title,date,start_time,venue,maximum_participants", { count: "exact" })
+      .select("id,title,date,start_time,end_time,venue,maximum_participants,descriptions,host_name,notes,virtual_link", { count: "exact" })
       .eq("lifecycle_status", "published")
       .gte("date", today)
       .order("date")

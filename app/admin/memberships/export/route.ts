@@ -10,7 +10,7 @@ const privateResponse = (message: string, status: number) => new Response(messag
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return privateResponse("Unauthorised", 401);
-  if (!membershipAdministrationEnabled()) return privateResponse("Forbidden", 403);
+  if (!(await membershipAdministrationEnabled())) return privateResponse("Forbidden", 403);
   const admin = createServiceClient();
   const [role, profileResult, officerResult] = await Promise.all([
     getRole(user.id),

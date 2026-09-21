@@ -433,7 +433,6 @@ SITE_URL = "http://localhost:3010"
 LOCAL_MAILPIT_URL = "http://inbucket:8025"
 MEMBERSHIP_FROM_EMAIL = "York Model Engineers <membership@example.com>"
 MEMBERSHIP_REPLY_TO = "treasurer@yorkmodelengineers.co.uk"
-MEMBERSHIP_MODE = "live"
 
 [analytics]
 enabled = false

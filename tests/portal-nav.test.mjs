@@ -29,21 +29,21 @@ test("puts a committee member's work ahead of the members' area", () => {
 
 test("adds Memberships and Donations for a membership officer, with the task count", () => {
   const sections = buildPortalNav({ ...base, role: "committee", canViewContent: true, membershipOfficer: true, membershipTaskCount: 8 });
-  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Memberships", "Website accounts", "Donations"]]);
+  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Memberships", "Website accounts", "Donations", "Officer handbook"]]);
   assert.equal(navItems(sections).find((item) => item.key === "memberships")?.count, 8);
   assert.equal(attentionCount(sections), 8);
 });
 
 test("hides Memberships while membership administration is off, but keeps Donations", () => {
   const sections = buildPortalNav({ ...base, role: "committee", canViewContent: true, membershipOfficer: true, membershipEnabled: false, membershipTaskCount: 5 });
-  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Website accounts", "Donations"]]);
+  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Website accounts", "Donations", "Officer handbook"]]);
   assert.equal(attentionCount(sections), 0);
 });
 
 test("shows an administrator everything, with Administration last", () => {
   const sections = buildPortalNav({ ...base, role: "administrator", canViewContent: true, administrator: true, membershipOfficer: true });
   assert.deepEqual(sections.map((section) => section.label), [null, "Membership and money", "Website", "Members\u2019 area", "Administration"]);
-  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Important changes"]);
+  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Membership system", "Email queue", "Important changes"]);
 });
 
 test("never repeats a link or an address", () => {
@@ -109,7 +109,7 @@ test("keeps member search behind the membership officer check and out of the cli
     read("app/components/PortalNavigation.tsx"),
   ]);
   assert.match(action, /^"use server";/);
-  assert.match(action, /requireUser\(\)[\s\S]*if \(!session\.membershipOfficer \|\| !membershipAdministrationEnabled\(\)\) return \[\]/);
+  assert.match(action, /requireUser\(\)[\s\S]*if \(!session\.membershipOfficer \|\| !\(await membershipAdministrationEnabled\(\)\)\) return \[\]/);
   assert.match(search, /searchMembersForPortal/);
   assert.match(shell, /canSearchMembers=\{membershipOfficer && membershipEnabled\}/);
   assert.match(shell, /cookieStore\.get\(portalSidebarCookie\)/);

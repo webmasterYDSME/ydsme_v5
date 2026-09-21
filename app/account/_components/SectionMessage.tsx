@@ -5,5 +5,5 @@ export type SectionMessage = { tone: "success" | "error"; text: string };
 
 export function SectionNotice({ message }: { message: SectionMessage | null }) {
   if (!message) return null;
-  return <p className={`${styles.message} ${message.tone === "error" ? styles.messageError : styles.messageSuccess}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p>;
+  return <p className={`form-message ${message.tone === "error" ? "error" : "success"} ${styles.message}`} role={message.tone === "error" ? "alert" : "status"}>{message.text}</p>;
 }

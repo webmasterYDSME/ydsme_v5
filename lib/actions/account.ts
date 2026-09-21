@@ -76,11 +76,12 @@ export async function updateMemberDetails(formData: FormData) {
 
 /** Marks every unread membership notice as read. */
 export async function markAllMembershipNotificationsRead() {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   await requireUser();
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_own_membership_notifications", { p_limit: 50 });
   await Promise.all((data ?? []).filter((notice) => !notice.read_at)
     .map((notice) => supabase.rpc("mark_own_membership_notification_read", { p_notification_id: notice.id })));
-  revalidatePath("/account");
+  // The bell is in the shared portal layout, so every page must refresh, not only /account.
+  revalidatePath("/", "layout");
 }

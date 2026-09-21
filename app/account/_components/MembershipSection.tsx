@@ -1,4 +1,4 @@
-import { CreditCard } from "lucide-react";
+import { CreditCard, IdCard, Receipt } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import {
   openMembershipBillingPortal,
@@ -21,22 +21,25 @@ type Props = {
   honoraryTransitionPayment: boolean;
 };
 
-/** Membership status, what to do about renewal, and the payment history. */
+/** Membership status and payment history, with what to do about renewal beside it. */
 export function MembershipSection({ membership, campaignYear, renewalAvailable, honoraryTransitionPayment }: Props) {
   const honorary = membership?.member.effective_state === "honorary";
-  return <Section
-    id="membership"
-    title={honorary ? "Lifetime honorary member" : membership?.plan?.name || "Membership"}
-    description="Your membership term, renewal and payment history.">
-    <div className={styles.stack}>
-      {membership ? <>
-        <Facts membership={membership}/>
-        <StudentRequest membership={membership}/>
-        <Renewal membership={membership} campaignYear={campaignYear} renewalAvailable={renewalAvailable} honoraryTransitionPayment={honoraryTransitionPayment}/>
-        <History membership={membership}/>
-      </> : <p className={styles.empty}>Your account has not yet been linked to the Society’s membership register. A membership officer can complete this for you.</p>}
-    </div>
-  </Section>;
+  const title = honorary ? "Lifetime honorary member" : membership?.plan?.name || "Membership";
+  if (!membership) {
+    return <Section id="membership" eyebrow="Membership" title={title} icon={IdCard} accent="rust" description="Your membership term, renewal and payment history.">
+      <p className={styles.empty}>Your account has not yet been linked to the Society’s membership register. A membership officer can complete this for you.</p>
+    </Section>;
+  }
+  return <div className={styles.split}>
+    <Section id="membership" eyebrow="Membership" title={title} icon={IdCard} accent="rust" description="Your membership term and payment history.">
+      <Facts membership={membership}/>
+      <History membership={membership}/>
+    </Section>
+    <Section id="renewal" eyebrow="Renewal" title="Renewal and payment" icon={Receipt} accent="brass" description="What to do next, and how you pay.">
+      <StudentRequest membership={membership}/>
+      <Renewal membership={membership} campaignYear={campaignYear} renewalAvailable={renewalAvailable} honoraryTransitionPayment={honoraryTransitionPayment}/>
+    </Section>
+  </div>;
 }
 
 function Facts({ membership }: { membership: MembershipAccount }) {
@@ -105,7 +108,7 @@ function Renewal({ membership, campaignYear, renewalAvailable, honoraryTransitio
   return <div className={`${styles.panel} ${styles.panelInfo}`}>
     <div>
       <strong>Membership paid</strong>
-      <p>Your {membership.term?.membership_year} membership is paid through {membership.term ? date(membership.term.ends_on) : "31 December"}. We will invite you when the membership officer opens annual renewals.</p>
+      <p>Your {membership.term?.membership_year} membership is paid through {membership.term ? date(membership.term.ends_on) : "31 December"}. We will notify you when annual renewals open.</p>
     </div>
   </div>;
 }

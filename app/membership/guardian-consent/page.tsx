@@ -19,7 +19,7 @@ export default async function GuardianConsentPage({
 }: {
   searchParams: Promise<{ token?: string; consent?: string }>;
 }) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const query = await searchParams;
   const token = query.token && query.token.length >= 20 && query.token.length <= 200 ? query.token : null;
   const confirmed = query.consent === "confirmed";

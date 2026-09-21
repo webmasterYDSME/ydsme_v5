@@ -3,7 +3,7 @@
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { AlertTriangle, Check, Database, FileSearch, FileUp, Mail, Pause, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Check, Database, FileSearch, FileUp, Mail, Pause, ShieldCheck, UserMinus } from "lucide-react";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import {
   applyMemberList,
@@ -20,6 +20,7 @@ const previewInitial: MemberImportPreviewState = { status: "idle" };
 const applyInitial: MemberImportApplyState = { status: "idle" };
 const inviteInitial: MemberInvitationState = { status: "idle" };
 
+const stateLabel = (state: string) => ({ active: "Active", grace: "Grace period", lapsed: "Lapsed", honorary: "Honorary" }[state] ?? state);
 const plural = (value: number, singular: string, pluralForm = `${singular}s`) => `${value} ${value === 1 ? singular : pluralForm}`;
 
 function ApplyForm({ preview }: { preview: MemberImportPreview }) {
@@ -31,6 +32,7 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
       <h3>{plural(result.added, "person", "people")} added, {plural(result.renewed, "member")} renewed for {preview.year}</h3>
       <p>{result.alreadyPaid} already paid for {preview.year} · {result.skipped} left out · {result.loginsLinked} linked to an existing website login.</p>
       {result.honorary ? <p>{plural(result.honorary, "person", "people")} became lifetime honorary members (Life or Associate Volunteer): no fee, no renewal.</p> : null}
+      {result.archived || result.restored ? <p>{result.archived ? `${plural(result.archived, "member")} not in the list archived: they no longer have website access. ` : ""}{result.restored ? `${plural(result.restored, "member")} restored because they are back in the list.` : ""}</p> : null}
       <p>{plural(result.newsletter, "new person", "new people")} subscribed to the newsletter.</p>
       <p>{plural(result.detailsFilled, "existing member")} had missing details (title, date of birth, phone or address) filled in.</p>
       <p>{plural(result.needInvitation, "person", "people")} can now be invited to the website. Use the invitations section below.</p>
@@ -45,11 +47,17 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
         <li>Renew {plural(preview.totals.renew, "existing member")} for {preview.year}.</li>
         <li>Fill in each person’s title, date of birth, phone number and address where the file has them. Existing members keep what is already on their record; only blank details are filled in.</li>
         <li>Subscribe {plural(preview.totals.newsletter, "new person", "new people")} to the newsletter: everyone with an email address (not Juniors) who has not unsubscribed from MemberMojo’s group emails. The club treats that as their agreement. Existing members are not changed, and each record shows where the consent came from.</li>
+        <li>Archive {plural(preview.totals.archive, "member")} who {preview.totals.archive === 1 ? "is" : "are"} not in this file. They lose website access and leave the active register. Nothing is deleted, and an administrator can restore them until the retention rules remove them.</li>
+        {preview.totals.restored ? <li>Restore {plural(preview.totals.restored, "member")} that an earlier import archived and who are back in the file.</li> : null}
         <li>Not send any email. Website invitations are sent separately, by you, afterwards.</li>
       </ul><strong>This will not:</strong><ul>
-        <li>Remove or change anyone who is not in this file.</li>
+        <li>Archive administrators or committee logins, anyone under a legal hold, suspended members or payments being checked.</li>
         <li>Charge anyone or change any payment.</li>
       </ul></div>
+      {preview.archiveConfirmation !== null ? <label className="member-import-archive-check">Type {preview.archiveConfirmation} to confirm that {plural(preview.archiveConfirmation, "member")} will be archived
+        <input name="archiveCount" inputMode="numeric" autoComplete="off" pattern="[0-9]*" required/>
+        <small>This is a large change. If the number is a surprise, this may be the wrong file.</small>
+      </label> : null}
       <label>Choose the same MemberMojo file again
         <input type="file" name="file" accept="text/csv,.csv" required/>
         <small>The file is read again for saving and must be exactly the one you checked. It is not kept.</small>
@@ -61,7 +69,8 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
   </section>;
 }
 
-export function MemberMojoImportForm() {
+/** `archives` is false while the website runs membership: the import then never archives anyone. */
+export function MemberMojoImportForm({ archives = true }: { archives?: boolean }) {
   const [state, formAction] = useActionState(previewMemberList, previewInitial);
   const preview = state.preview;
   return <div className="member-import-workspace">
@@ -70,7 +79,7 @@ export function MemberMojoImportForm() {
       <form action={formAction} className="stack-form member-import-form">
         <label>MemberMojo member-list file
           <input type="file" name="file" accept="text/csv,.csv" required/>
-          <small>Choose the CSV downloaded from MemberMojo. We read the name, email, Membership type, title, date of birth, phone number and address. Everyone in the file is made a full member for the current year.</small>
+          <small>Choose the CSV downloaded from MemberMojo. We read the name, email, Membership type, title, date of birth, phone number and address. Everyone in the file is made a full member for the current year.{archives ? " Members who are not in the file are archived." : " Nobody is archived for being missing from it."}</small>
         </label>
         <PendingSubmitButton className="button dark" pendingLabel="Checking the file…"><FileSearch/>Show me what will happen</PendingSubmitButton>
       </form>
@@ -83,9 +92,19 @@ export function MemberMojoImportForm() {
         <article><Database/><span>New people</span><strong>{preview.totals.add}</strong><small>{preview.totals.honorary ? `${preview.totals.honorary} honorary · ${preview.totals.add - preview.totals.honorary} full members` : "added as full members"}</small></article>
         <article><Check/><span>Existing members</span><strong>{preview.totals.renew} renewed</strong><small>{preview.totals.alreadyPaid} already paid for {preview.year}</small></article>
         <article><Mail/><span>Website login</span><strong>{preview.totals.needInvitation} to invite</strong><small>{preview.totals.loginsToLink} already have a login and are linked</small></article>
+        <article className={preview.totals.archive ? "has-warning" : ""}><UserMinus/><span>Not in the file</span><strong>{preview.totals.archive} to archive</strong><small>{preview.totals.kept ? `${preview.totals.kept} kept as they are` : "everyone else is in the file"}{preview.totals.restored ? ` · ${preview.totals.restored} restored` : ""}</small></article>
         <article className={preview.totals.noBirthDate ? "has-warning" : ""}><Database/><span>Personal details</span><strong>{preview.totals.noBirthDate} without a date of birth</strong><small>{preview.totals.withPhone} phone · {preview.totals.withAddress} address · {preview.totals.withTitle} title · {preview.totals.newsletter} newsletter</small></article>
         <article className={preview.totals.skipped || preview.flagged.length ? "has-warning" : ""}><AlertTriangle/><span>To look at</span><strong>{preview.flagged.length + preview.totals.skipped}</strong><small>{preview.totals.skipped} left out</small></article>
       </div>
+      {preview.toArchive.length ? <details className="member-import-details" open>
+        <summary>Will be archived ({preview.toArchive.length})</summary>
+        <p className="form-help">These members are on the website register but not in the MemberMojo file.</p>
+        <div className="member-import-review-list">{preview.toArchive.map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{[item.plan, item.email ?? "No email address", stateLabel(item.state), item.hasLogin ? "Has a website login" : null].filter(Boolean).join(" · ")}</p></article>)}</div>
+      </details> : null}
+      {preview.kept.length ? <details className="member-import-details">
+        <summary>Not in the file, but kept ({preview.kept.length})</summary>
+        <div className="member-import-review-list">{preview.kept.map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{[item.detail, item.email].filter(Boolean).join(" · ")}</p></article>)}</div>
+      </details> : null}
       {preview.skipped.length ? <details className="member-import-details" open>
         <summary>Left out ({preview.skipped.length})</summary>
         <div className="member-import-review-list">{preview.skipped.map((item, index) => <article key={`${item.name}-${index}`}><strong>{item.name}</strong><p>{item.detail}</p></article>)}</div>

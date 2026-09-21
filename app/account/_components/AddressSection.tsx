@@ -1,3 +1,4 @@
+import { MapPin } from "lucide-react";
 import { DatePicker } from "@/app/components/DatePicker";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { updateMemberDetails } from "@/lib/actions/account";
@@ -9,7 +10,7 @@ import styles from "../account.module.css";
 
 /** Postal address and date of birth. The address is theirs to change; the date of birth is add-only (see the migration). */
 export function AddressSection({ details, message, today }: { details: OwnMemberDetails | null; message: SectionMessage | null; today: string }) {
-  return <Section id="address" title="Address and date of birth" description="Where we can post things to you, and your date of birth so we charge the right fee.">
+  return <Section id="address" eyebrow="Address" title="Address and date of birth" icon={MapPin} description="Where we can post things to you, and your date of birth so we charge the right fee.">
     <SectionNotice message={message}/>
     {!details ? <p className={styles.empty}>We could not load these details just now. Please try again shortly.</p>
       : !details.linked ? <p className={styles.empty}>These details are kept on your membership record, and this account is not linked to one yet. A membership officer can link it for you.</p>

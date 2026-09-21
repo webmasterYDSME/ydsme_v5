@@ -7,7 +7,7 @@ import { MEMBERMOJO_MEMBERSHIP_URL, membershipBillingEnabled } from "@/lib/featu
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = new URL(request.url).searchParams.get("token") || "";
   if (token.length < 20 || token.length > 200) redirect("/membership/apply?application=link-invalid");
   const admin = createServiceClient();

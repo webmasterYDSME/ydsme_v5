@@ -15,7 +15,7 @@ const money = (pence: number) => new Intl.NumberFormat("en-GB", {
 }).format(pence / 100);
 
 export default async function MembershipCheckoutConfirmation({ searchParams }: { searchParams: Promise<{ token?: string; notice?: string }> }) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const query = await searchParams;
   const token = query.token ?? "";
   const summary = await getApplicationCheckoutSummaryFromToken(token);

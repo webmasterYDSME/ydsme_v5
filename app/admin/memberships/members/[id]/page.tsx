@@ -7,9 +7,12 @@ import { ageOn, dateLabel, londonToday, memberStateName, money, paymentMethodNam
 import { loadMemberRecord } from "@/lib/membership-admin/records";
 import { MemberBirthdatePanel, MemberContactPanel, MemberLoginPanel, PaymentProblemPanel } from "../../_components/MemberRecordPanels";
 import { MemberHonoraryPanel } from "../../_components/MemberHonoraryPanel";
+import { sendNewRenewalLink } from "@/lib/actions/membership-renewals";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { MemberPaymentPanel } from "../../_components/MemberPaymentPanel";
 import { MembershipFlash } from "../../_components/MembershipFlash";
 import styles from "../../memberships.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +68,7 @@ export default async function MembershipRecord({ params, searchParams }: { param
   return <>
     <MembershipFlash/>
     <Link className={styles.backLink} href="/admin/memberships/members"><ArrowLeft aria-hidden="true"/>Back to members</Link>
+    <p className={styles.tabNote}><HandbookHelp chapter="members" section="record">How to read this record</HandbookHelp></p>
     <section className={styles.profile}>
       <span className={styles.avatar} aria-hidden="true">{initials}</span>
       <div className={styles.profileMain}>
@@ -78,6 +82,12 @@ export default async function MembershipRecord({ params, searchParams }: { param
       </div>
       <div className={styles.profileActions}>
         <Link className="button dark" href={`${base}?panel=payment&year=${year}`} prefetch={false} scroll={false}><PoundSterling/>Record payment</Link>
+        {member.effective_state === "lapsed" && member.contact_email
+          ? <form action={sendNewRenewalLink}>
+            <input type="hidden" name="member_id" value={id}/>
+            <PendingSubmitButton className="button outline" pendingLabel="Sending…"
+              confirmMessage={`Email ${member.full_name} a new renewal link? It works for 30 days. They pay a part-year fee for the months left in the year, like a new member.`}>Send new renewal link</PendingSubmitButton>
+          </form> : null}
         {!anyHonorary ? <Link className="button outline" href={`${base}?panel=honorary`} prefetch={false} scroll={false}>Make honorary</Link> : null}
         {openHonorary ? <Link className="button outline" href={`${base}?panel=end-honorary`} prefetch={false} scroll={false}>End honorary</Link> : null}
       </div>

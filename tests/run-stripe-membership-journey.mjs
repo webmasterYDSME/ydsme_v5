@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { readLocalSupabaseEnvironment } from "./local-supabase.mjs";
+import { readLocalSupabaseEnvironment, holdLocalMembershipMode } from "./local-supabase.mjs";
 
 const local = readLocalSupabaseEnvironment("Stripe membership journey");
+holdLocalMembershipMode("website");
 assert.match(process.env.STRIPE_RESTRICTED_KEY || process.env.STRIPE_SECRET_KEY || "", /^(?:sk|rk)_test_/, "Stripe journeys require a test-mode key.");
 assert.match(process.env.STRIPE_MEMBERSHIP_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET || "", /^whsec_/, "Stripe journeys require a local webhook signing secret.");
 
@@ -14,7 +15,6 @@ const environment = {
   NEXT_PUBLIC_SUPABASE_URL: local.API_URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: local.PUBLISHABLE_KEY,
   SUPABASE_SERVICE_ROLE_KEY: local.SERVICE_ROLE_KEY,
-  MEMBERSHIP_MODE: "website",
   NEXT_PUBLIC_SITE_URL: siteUrl,
   STRIPE_JOURNEY_SITE_URL: siteUrl,
   RESEND_API_KEY: "",

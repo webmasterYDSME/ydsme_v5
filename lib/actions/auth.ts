@@ -73,7 +73,7 @@ export async function sendPasswordReset(formData: FormData) {
 }
 
 export async function switchPortalAccount(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const next = safeNext(formData.get("next"));
   const supabase = await createClient();
   await supabase.auth.signOut({ scope: "local" });

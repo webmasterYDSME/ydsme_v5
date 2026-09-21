@@ -7,6 +7,7 @@ import { legacyMembershipRedirect } from "@/lib/membership-admin/legacy-urls";
 import { InboxTaskPanel } from "./_components/InboxTaskPanel";
 import { MembershipFlash } from "./_components/MembershipFlash";
 import styles from "./memberships.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,7 @@ export default async function MembershipInbox({ searchParams }: { searchParams: 
 
   return <>
     <MembershipFlash/>
-    <p className={`${styles.tabNote} ${styles.hideOnPhone}`}>Everything that needs an action from membership officer, oldest first.</p>
+    <p className={`${styles.tabNote} ${styles.hideOnPhone}`}>Everything that needs an action from membership officer, oldest first. <HandbookHelp chapter="inbox">About the Inbox</HandbookHelp></p>
     <div className={styles.filterBar}>
       <nav className={styles.chips} aria-label="Filter tasks">
         {chips.map((chip) => <Link key={chip.key} className={`${styles.chip} ${chip.key === kind ? styles.chipOn : ""}`} href={inboxHref(chip.key)} prefetch={false} aria-current={chip.key === kind ? "true" : undefined}>{chip.label}<span>{chip.count}</span></Link>)}

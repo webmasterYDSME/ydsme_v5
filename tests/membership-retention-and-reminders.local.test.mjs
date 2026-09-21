@@ -109,11 +109,12 @@ begin
 end $test$;`);
 });
 
-test("renewal reminders go out on the four fixed dates, only to invited members who have not paid", () => {
-  runRolledBack("Renewal reminder schedule database test", String.raw`
+test("renewal reminders are sent only by an officer, and the email names the day the link really stops working", () => {
+  runRolledBack("Renewal reminder and link expiry database test", String.raw`
 do $test$
 declare
-  adult uuid; actor uuid:=gen_random_uuid(); m1 uuid; m2 uuid; m3 uuid; m4 uuid; r jsonb; y integer:=2031; queued integer;
+  adult uuid; actor uuid:=gen_random_uuid(); m1 uuid; m2 uuid; m3 uuid; m4 uuid; m5 uuid; r jsonb; y integer:=2031; queued integer;
+  before_count integer; email_body text; expiry timestamptz;
 begin
   select id into adult from public.membership_plans where slug='adult';
   insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
@@ -127,53 +128,108 @@ begin
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Reminder Two paid','r2@example.test',adult,'active','officer') returning id into m2;
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Reminder Three lapsed','r3@example.test',adult,'lapsed','officer') returning id into m3;
   insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Reminder Four uninvited','r4@example.test',adult,'active','officer') returning id into m4;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Reminder Five invited','r5@example.test',adult,'active','officer') returning id into m5;
 
   insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
    values(m2,(select id from public.membership_plan_prices where plan_id=adult and membership_year=y and active limit 1),y,make_date(y,1,1),make_date(y,12,31),make_date(y+1,3,1),'paid',2500,2500,'officer');
   insert into public.membership_renewal_invitations(member_id,membership_year,token_hash,expires_at)
-   select id,y,md5(id::text)||md5(id::text),make_date(y,12,31) from public.members where id in (m1,m2,m3);
+   select id,y,md5(id::text)||md5(id::text),public.membership_renewal_link_expires_at(y) from public.members where id in (m1,m2,m3);
   insert into public.membership_notifications(member_id,recipient_email,kind,title,body,action_href,portal_visible,deduplication_key)
    select id,contact_email,'membership.renewal-invitation','Renew','Please renew','/membership/renew?token=abc',false,'renewal-invitation-'||id||'-'||y
    from public.members where id in (m1,m2,m3);
 
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y-1,12,1));
-  if r->>'stage'<>'due-soon' or (r->>'year')::integer<>y or (r->>'queued')::integer<>1 then raise exception 'December reminder: %',r; end if;
-  if not exists(select 1 from public.membership_notifications where member_id=m1 and kind='membership.renewal-reminder' and title like '%due on 1 January%' and body like '%1 January 2031%') then raise exception 'M1 was not reminded'; end if;
-  if exists(select 1 from public.membership_notifications where member_id in (m2,m3,m4) and kind='membership.renewal-reminder') then raise exception 'a paid, lapsed or uninvited member was reminded'; end if;
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y-1,12,1));
-  if (r->>'queued')::integer<>0 then raise exception 'the same day queued twice'; end if;
-
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y,1,1));
-  if r->>'stage'<>'due-now' or (r->>'queued')::integer<>1 then raise exception 'January reminder: %',r; end if;
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y,2,1));
-  if r->>'stage'<>'one-month' or (r->>'queued')::integer<>1 then raise exception 'February reminder: %',r; end if;
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y,2,22));
-  if r->>'stage'<>'last-week' or (r->>'queued')::integer<>1 then raise exception 'late February reminder: %',r; end if;
-  if (select count(*) from public.membership_notifications where member_id=m1 and kind='membership.renewal-reminder')<>4 then raise exception 'M1 should have four reminders'; end if;
-
-  if public.run_membership_renewal_reminder_schedule(make_date(y,2,10)) is not null then raise exception 'reminder on an ordinary day'; end if;
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y,12,1));
-  if (r->>'campaign_open')::boolean then raise exception 'no campaign was open for the next year'; end if;
-  r:=public.run_membership_renewal_reminder_schedule(date '2025-12-01');
-  if r->>'skipped'<>'too-late' then raise exception 'an old day was replayed: %',r; end if;
-
-  -- A member who pays stops being reminded.
-  insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
-   values(m1,(select id from public.membership_plan_prices where plan_id=adult and membership_year=y and active limit 1),y,make_date(y,1,1),make_date(y,12,31),make_date(y+1,3,1),'paid',2500,2500,'officer');
-  update public.membership_notifications set created_at=created_at-interval '30 days' where member_id=m1 and kind='membership.renewal-reminder';
-  r:=public.run_membership_renewal_reminder_schedule(make_date(y,2,22));
-  if (r->>'queued')::integer<>0 then raise exception 'a paid member was reminded'; end if;
-
-  -- The officer's own button still works, and still keeps to one reminder a week.
-  queued:=public.queue_membership_renewal_reminders(y,actor);
-  if queued<>1 or exists(select 1 from public.membership_notifications where member_id=m1 and kind='membership.renewal-reminder' and created_at>now()-interval '1 day') then
-    raise exception 'manual reminders should reach only the lapsed member who has not paid: %',queued;
-  end if;
-  if public.queue_membership_renewal_reminders(y,actor)<>0 then raise exception 'the weekly limit did not hold'; end if;
-
-  -- The daily job runs both, and records what the reminders and retention did.
+  -- The scheduled reminders are gone: the routine no longer exists and the daily job sends none.
+  if to_regprocedure('public.run_membership_renewal_reminder_schedule(date)') is not null then raise exception 'the reminder schedule still exists'; end if;
+  if to_regprocedure('public.queue_membership_renewal_reminders_core(integer,text,date,integer)') is not null then raise exception 'the stage-based reminder routine still exists'; end if;
+  select count(*) into before_count from public.membership_notifications where kind='membership.renewal-reminder';
   r:=public.run_membership_daily_catch_up(current_date);
   if not (r ? 'retention') or not (r ? 'days_run') then raise exception 'daily job result: %',r; end if;
+  if r ? 'reminders' then raise exception 'the daily job still reports reminders: %',r; end if;
+  if (select count(*) from public.membership_notifications where kind='membership.renewal-reminder')<>before_count then raise exception 'the daily job queued a reminder'; end if;
+
+  -- The officer's button. An invitation still waiting in the email queue has not reached the member, so no reminder goes yet.
+  if public.queue_membership_renewal_reminders(y,actor)<>0 then raise exception 'a reminder was queued before the invitation was sent'; end if;
+  update public.membership_notifications set email_status='sent', email_sent_at=now() where deduplication_key like 'renewal-invitation-%-'||y and member_id in (m1,m2,m3);
+
+  queued:=public.queue_membership_renewal_reminders(y,actor);
+  if queued<>2 then raise exception 'the officer reminder should reach the active and the lapsed member who have not paid: %',queued; end if;
+  if not exists(select 1 from public.membership_notifications where member_id=m1 and kind='membership.renewal-reminder' and title='Please renew your YDSME '||y||' membership' and body like '%has not been renewed yet.%') then raise exception 'M1 was not reminded'; end if;
+  if not exists(select 1 from public.membership_notifications where member_id=m3 and kind='membership.renewal-reminder') then raise exception 'the lapsed member was not reminded'; end if;
+  if exists(select 1 from public.membership_notifications where member_id in (m2,m4) and kind='membership.renewal-reminder') then raise exception 'a paid or uninvited member was reminded'; end if;
+  if public.queue_membership_renewal_reminders(y,actor)<>0 then raise exception 'the weekly limit did not hold'; end if;
+
+  -- A member who pays stops being reminded, once a week has passed.
+  insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
+   values(m1,(select id from public.membership_plan_prices where plan_id=adult and membership_year=y and active limit 1),y,make_date(y,1,1),make_date(y,12,31),make_date(y+1,3,1),'paid',2500,2500,'officer');
+  update public.membership_notifications set created_at=created_at-interval '30 days',deduplication_key=deduplication_key||'-old' where kind='membership.renewal-reminder';
+  if public.queue_membership_renewal_reminders(y,actor)<>1 then raise exception 'only the lapsed member is still waiting'; end if;
+
+  -- The link: the invitation expires when the rule says, and the email names the last day of that.
+  if public.membership_renewal_link_expires_at(y)<>make_timestamptz(y,3,1,0,0,0,'Europe/London') then raise exception 'unexpected link expiry rule'; end if;
+  if not public.queue_membership_renewal_invitation(m5,y,actor,'token-for-member-five-'||md5(m5::text),md5(m5::text)||md5(m5::text)) then raise exception 'invitation was not queued'; end if;
+  select expires_at into expiry from public.membership_renewal_invitations where member_id=m5 and membership_year=y;
+  if expiry<>public.membership_renewal_link_expires_at(y) then raise exception 'invitation expiry is %',expiry; end if;
+  select n.body into email_body from public.membership_notifications n where n.member_id=m5 and n.kind='membership.renewal-invitation';
+  if email_body not like '%The link works until 28 February '||y||'.%' then raise exception 'the invitation does not name the real last day: %',email_body; end if;
+  -- The wording follows the stored expiry, not a fixed date.
+  update public.membership_renewal_invitations set expires_at=make_timestamptz(y,4,15,0,0,0,'Europe/London') where member_id=m5 and membership_year=y;
+  if public.membership_renewal_payment_text(m5,y) not like '%The link works until 14 April '||y||'.%' then raise exception 'the email ignored the stored expiry'; end if;
+  -- A member with no invitation yet (the officer's test email) gets the standard rule.
+  if public.membership_renewal_payment_text(m4,y) not like '%The link works until 28 February '||y||'.%' then raise exception 'the test email names the wrong day'; end if;
+  if has_function_privilege('authenticated','public.queue_membership_renewal_reminders(integer,uuid)','execute') then raise exception 'signed-in users can queue reminders'; end if;
+end $test$;`);
+});
+
+test("the grace period is one rule: the link, the email, the stored grace end and the daily job all follow it", () => {
+  runRolledBack("Grace period rule database test", String.raw`
+do $test$
+declare
+  adult uuid; actor uuid:=gen_random_uuid(); m uuid; g uuid; y integer:=2031; stored date; term uuid; email_body text;
+begin
+  select id into adult from public.membership_plans where slug='adult';
+  insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at)
+   values(actor,'authenticated','authenticated','grace-officer-'||actor||'@example.invalid',now(),'{"full_name":"Grace Officer"}',now(),now());
+  update public.user_roles set role='administrator' where user_id=actor;
+  insert into public.membership_plan_prices(plan_id,membership_year,version,amount_pence,active)
+   select adult,y,coalesce(max(version),0)+1,2500,true from public.membership_plan_prices where plan_id=adult and membership_year=y;
+  insert into public.membership_renewal_campaigns(membership_year,open,opened_by) values(y,true,actor);
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Grace Invited','grace1@example.test',adult,'active','officer') returning id into m;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source) values('Grace Waiting','grace2@example.test',adult,'grace','officer') returning id into g;
+
+  -- Today's rule: the grace period for a year ends on 1 March of that year.
+  if public.membership_grace_ends_on(y)<>make_date(y,3,1) then raise exception 'unexpected grace rule'; end if;
+  if public.membership_renewal_link_expires_at(y)<>make_timestamptz(y,3,1,0,0,0,'Europe/London') then raise exception 'the link does not expire when grace ends'; end if;
+
+  -- Whatever a function passes, a new term stores the grace end the rule gives (the term for y is graced until y+1's date).
+  insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
+   values(m,(select id from public.membership_plan_prices where plan_id=adult and membership_year=y and active limit 1),y,make_date(y,1,1),make_date(y,12,31),make_date(y+5,1,1),'paid',2500,2500,'officer')
+   returning id into term;
+  select grace_ends_on into stored from public.membership_terms where id=term;
+  if stored<>make_date(y+1,3,1) then raise exception 'the stored grace end ignored the rule: %',stored; end if;
+
+  -- The grace period changes: it now ends on 15 April. One replaced function, nothing else touched.
+  create or replace function public.membership_grace_ends_on(p_year integer)
+  returns date language sql immutable set search_path='' as $f$ select make_date(p_year,4,15); $f$;
+
+  -- The link and the email follow it.
+  if public.membership_renewal_link_expires_at(y)<>make_timestamptz(y,4,15,0,0,0,'Europe/London') then raise exception 'the link ignored the new grace period'; end if;
+  if not public.queue_membership_renewal_invitation(g,y,actor,'token-for-grace-member-'||md5(g::text),md5(g::text)||md5(g::text)) then raise exception 'invitation was not queued'; end if;
+  if (select expires_at from public.membership_renewal_invitations where member_id=g and membership_year=y)<>make_timestamptz(y,4,15,0,0,0,'Europe/London') then raise exception 'the invitation was not given the new expiry'; end if;
+  select n.body into email_body from public.membership_notifications n where n.member_id=g and n.kind='membership.renewal-invitation';
+  if email_body not like '%The link works until 14 April '||y||'.%' then raise exception 'the email does not name the new last day: %',email_body; end if;
+
+  -- New terms store it.
+  insert into public.membership_terms(member_id,plan_price_id,membership_year,starts_on,ends_on,grace_ends_on,status,amount_due_pence,amount_paid_pence,source)
+   values(m,(select id from public.membership_plan_prices where plan_id=adult and membership_year=y and active limit 1),y+1,make_date(y+1,1,1),make_date(y+1,12,31),make_date(y+9,1,1),'paid',2500,2500,'officer')
+   returning id into term;
+  select grace_ends_on into stored from public.membership_terms where id=term;
+  if stored<>make_date(y+2,4,15) then raise exception 'a new term ignored the new grace period: %',stored; end if;
+
+  -- The daily job keeps the member in grace on the old date and lapses them on the new one.
+  perform public.run_membership_daily(make_date(y,3,1));
+  if (select effective_state from public.members where id=g)<>'grace' then raise exception 'the member lapsed on the old grace date'; end if;
+  perform public.run_membership_daily(make_date(y,4,15));
+  if (select effective_state from public.members where id=g)<>'lapsed' then raise exception 'the member did not lapse when the new grace period ended'; end if;
 end $test$;`);
 });
 
