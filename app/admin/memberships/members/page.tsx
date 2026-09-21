@@ -7,6 +7,7 @@ import { PortalPagination } from "@/app/components/PortalPagination";
 import { AddMemberPanel } from "../_components/AddMemberPanel";
 import { MembershipFlash } from "../_components/MembershipFlash";
 import styles from "../memberships.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function MembershipMembers({ searchParams }: { searchParams
 
   return <>
     <MembershipFlash/>
-    <p className={styles.tabNote}>Search the register, open someone’s record, or add a person who joined offline.</p>
+    <p className={styles.tabNote}>Search the register, open someone’s record, or add a person who joined offline. <HandbookHelp chapter="members">Members in the handbook</HandbookHelp></p>
     <form className={styles.search} method="get">
       {group.key !== "all" ? <input type="hidden" name="status" value={group.key}/> : null}
       <label>Find a membership<input name="q" defaultValue={one(query.q) || ""} placeholder="Name or correspondence email"/></label>

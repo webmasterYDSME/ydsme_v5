@@ -3,6 +3,7 @@ import { CircleCheck, Clock, CreditCard, ShieldAlert, ShieldCheck } from "lucide
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { membershipTokenHash, ensureMembershipPlanPrice } from "@/lib/membership";
+import { returningMemberFee } from "@/lib/membership-rules";
 import { payRenewalInvitation } from "@/lib/actions/membership-renewals";
 import { membershipBillingEnabled } from "@/lib/features";
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
@@ -25,14 +26,14 @@ function Card({ icon, title, children, done }: { icon: ReactNode; title: string;
 }
 
 export default async function Renewal({ searchParams }: { searchParams: Promise<{ token?: string; error?: string }> }) {
-  if (!membershipBillingEnabled()) redirect("/membership");
+  if (!(await membershipBillingEnabled())) redirect("/membership");
   const query = await searchParams;
   const token = query.token || "";
   if (token.length < 20 || token.length > 200) redirect("/membership");
   const admin = createServiceClient();
   const { data: invitation } = await admin.from("membership_renewal_invitations").select("member_id,membership_year")
     .eq("token_hash", membershipTokenHash(token)).gt("expires_at", new Date().toISOString()).maybeSingle();
-  if (!invitation) return <Card icon={<Clock/>} title="This renewal link has expired"><p>Please contact the membership officer, who can send you a new one.</p></Card>;
+  if (!invitation) return <Card icon={<Clock/>} title="This renewal link has expired"><p>Renewal links stop working when the renewal period ends. Please contact the membership officer, who can send you a new link.</p></Card>;
   const { data: campaign } = await admin.from("membership_renewal_campaigns").select("open").eq("membership_year", invitation.membership_year).single();
   const { data: member } = await admin.from("members").select("full_name,contact_email,current_plan_id,effective_state").eq("id", invitation.member_id).single();
   if (!member || !campaign?.open || ["suspended", "archived", "honorary", "payment_review"].includes(member.effective_state)) {
@@ -62,13 +63,18 @@ export default async function Renewal({ searchParams }: { searchParams: Promise<
   const { data: previousPlan } = transition?.from_plan_id && transition.from_plan_id !== transition.to_plan_id
     ? await admin.from("membership_plans").select("name").eq("id", transition.from_plan_id).single() : { data: null };
   const year = invitation.membership_year;
+  // A lapsed member coming back pays the part-year fee, like a new member. The amount charged is worked out again
+  // when they press pay, from the same rule.
+  const amountToPay = returningMemberFee({ effectiveState: member.effective_state, annualPence: price.amount_pence, membershipYear: year });
+  const partYear = amountToPay < price.amount_pence;
   return <Card icon={<CreditCard/>} title="Renew your membership">
     <p>{member.full_name} · Membership for {year}</p>
     <dl className={styles.summary}>
       <div><dt>Membership</dt><dd>{plan?.name}{previousPlan ? ` (was ${previousPlan.name})` : ""}</dd></div>
-      <div><dt>Runs</dt><dd>1 January – 31 December {year}</dd></div>
-      <div className={styles.total}><dt>To pay</dt><dd>{pounds(price.amount_pence)}</dd></div>
+      <div><dt>Runs</dt><dd>{partYear ? `From when you rejoin to 31 December ${year}` : `1 January – 31 December ${year}`}</dd></div>
+      <div className={styles.total}><dt>To pay</dt><dd>{pounds(amountToPay)}</dd></div>
     </dl>
+    {partYear ? <div className={confirmation.note}><Clock aria-hidden="true"/><span>Because your membership has lapsed, this is the part-year fee for the months left in {year}, the same as for a new member. The full annual fee is {pounds(price.amount_pence)}.</span></div> : null}
     <div className={confirmation.note}><ShieldCheck aria-hidden="true"/><span>One payment by card on a secure payment page. No automatic subscription or future charge is set up.</span></div>
     {query.error ? <p className={styles.alert} role="alert">Payment is unavailable or already processing. Please check your membership or contact the officer before trying again.</p> : null}
     <form className={styles.pay} action={payRenewalInvitation}>

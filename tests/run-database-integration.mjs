@@ -27,8 +27,10 @@ try {
     "tests/administrator-bootstrap.local.test.mjs",
     "tests/membermojo-apply.local.test.mjs",
     "tests/membermojo-list-import.local.test.mjs",
+    "tests/membership-mode.local.test.mjs",
     "tests/membermojo-invitation-run.local.test.mjs",
     "tests/member-newsletter-preference.local.test.mjs",
+    "tests/email-queue.local.test.mjs",
     "tests/member-own-details.local.test.mjs",
     "tests/membership-price-carry-forward.local.test.mjs",
     "tests/membership-plan-view-security.local.test.mjs",
@@ -40,6 +42,7 @@ try {
     "tests/membership-payment-settings.local.test.mjs",
     "tests/membership-review-fixes.local.test.mjs",
     "tests/membership-retention-and-reminders.local.test.mjs",
+    "tests/membership-returning-member.local.test.mjs",
     "tests/public-project-featuring.local.test.mjs",
   ];
   run(process.execPath, ["--experimental-strip-types", "--test", ...localTests]);

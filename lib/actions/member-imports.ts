@@ -42,8 +42,8 @@ export async function previewMemberList(_previous: MemberImportPreviewState, for
 
 export async function applyMemberList(_previous: MemberImportApplyState, formData: FormData): Promise<MemberImportApplyState> {
   const { user } = await requireRole(["administrator"]);
-  const details = z.object({ fileSha256: z.string().regex(/^[a-f0-9]{64}$/), confirmed: z.literal("yes") })
-    .safeParse({ fileSha256: formData.get("fileSha256"), confirmed: formData.get("confirmed") });
+  const details = z.object({ fileSha256: z.string().regex(/^[a-f0-9]{64}$/), confirmed: z.literal("yes"), archiveCount: z.string().max(10) })
+    .safeParse({ fileSha256: formData.get("fileSha256"), confirmed: formData.get("confirmed"), archiveCount: String(formData.get("archiveCount") ?? "") });
   const file = formData.get("file");
   if (!details.success) return { status: "error", message: "Tick the box to confirm." };
   if (!(file instanceof File) || !file.size || file.size > MEMBER_LIST_MAX_BYTES) {
@@ -53,7 +53,7 @@ export async function applyMemberList(_previous: MemberImportApplyState, formDat
     return { status: "error", message: "This has been tried several times. Please wait before saving again." };
   }
   try {
-    const result = await applyMemberListImport(user.id, new Uint8Array(await file.arrayBuffer()), details.data.fileSha256);
+    const result = await applyMemberListImport(user.id, new Uint8Array(await file.arrayBuffer()), details.data.fileSha256, details.data.archiveCount);
     revalidatePath("/administrator/member-import");
     revalidatePath("/admin/members");
     return { status: "success", message: "The member list was saved.", result };

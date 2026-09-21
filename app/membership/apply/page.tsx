@@ -147,7 +147,7 @@ type OfflinePaymentMethod = typeof offlineOutcomeMethods[keyof typeof offlineOut
 export default async function MembershipApplication({ searchParams }: { searchParams: Promise<{ application?: string; token?: string }> }) {
   const query = await searchParams;
   const signup = await getSignupVerification();
-  const enabled = membershipBillingEnabled();
+  const enabled = await membershipBillingEnabled();
   if (!enabled) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const outcome = query.application ? applicationOutcomes[query.application] : null;
   const offlinePaymentMethod = query.application && query.application in offlineOutcomeMethods

@@ -3,19 +3,9 @@ import { Award, Bell, CalendarClock, CircleCheck, CreditCard, GraduationCap, Inf
 import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { markAllMembershipNotificationsRead } from "@/lib/actions/account";
 import { markMembershipNotificationRead } from "@/lib/actions/membership";
-import { relativeTime, safeInternalHref } from "../format";
-import { Section } from "./Section";
-import styles from "../account.module.css";
-
-export type AccountNotification = {
-  id: string;
-  title: string;
-  body: string;
-  kind: string;
-  action_href: string | null;
-  created_at: string;
-  read_at: string | null;
-};
+import { relativeTime, safeInternalHref } from "@/app/account/format";
+import type { MemberNotification } from "@/lib/member-notifications";
+import styles from "./notification-list.module.css";
 
 type Tone = "good" | "warn" | "bad" | "info";
 
@@ -36,18 +26,24 @@ const toneClass: Record<Tone, string> = { good: styles.toneGood, warn: styles.to
 
 const RECENT_READ_SHOWN = 3;
 
-/** Membership notices in the style of a notification list: unread first and highlighted, with a quick way to clear them. */
-export function NotificationsSection({ notifications }: { notifications: AccountNotification[] }) {
+/** What is inside the bell's panel: unread notices first and highlighted, a few recent read ones, and the rest behind a link. */
+export function NotificationList({ notifications }: { notifications: MemberNotification[] }) {
   const unread = notifications.filter((notice) => !notice.read_at);
   const read = notifications.filter((notice) => notice.read_at);
   const recent = read.slice(0, RECENT_READ_SHOWN);
   const older = read.slice(RECENT_READ_SHOWN);
 
-  return <Section id="notifications" title="Notifications" count={unread.length} description="Updates about your membership, kept here as well as in your inbox.">
-    {notifications.length ? <>
-      {unread.length > 1 ? <form action={markAllMembershipNotificationsRead} className={styles.listTools}>
+  return <>
+    <header className={`card-heading ${styles.bellHead}`}>
+      <div>
+        <p className="eyebrow dark">{unread.length ? `${unread.length} unread` : "All read"}</p>
+        <h2>Notifications</h2>
+      </div>
+      {unread.length > 1 ? <form action={markAllMembershipNotificationsRead}>
         <PendingSubmitButton className={styles.linkButton} pendingLabel="Marking…">Mark all as read</PendingSubmitButton>
       </form> : null}
+    </header>
+    {notifications.length ? <>
       <ul className={styles.notices}>
         {[...unread, ...recent].map((notice) => <Notice key={notice.id} notice={notice}/>)}
       </ul>
@@ -55,11 +51,11 @@ export function NotificationsSection({ notifications }: { notifications: Account
         <summary>Show {older.length} older {older.length === 1 ? "notification" : "notifications"}</summary>
         <ul className={styles.notices}>{older.map((notice) => <Notice key={notice.id} notice={notice}/>)}</ul>
       </details> : null}
-    </> : <div className={styles.emptyState}><span className={styles.badge}><Bell/></span><strong>You are all caught up</strong><p>Notices about renewals, payments and changes to your membership will appear here.</p></div>}
-  </Section>;
+    </> : <div className={styles.emptyState}><span className={styles.badge}><Bell/></span><strong>You are all caught up</strong><p>Notices about renewals, payments and changes to your membership will appear here, as well as in your inbox.</p></div>}
+  </>;
 }
 
-function Notice({ notice }: { notice: AccountNotification }) {
+function Notice({ notice }: { notice: MemberNotification }) {
   const { Icon, tone } = look(notice.kind);
   const href = safeInternalHref(notice.action_href);
   const isUnread = !notice.read_at;

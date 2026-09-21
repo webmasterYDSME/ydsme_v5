@@ -492,3 +492,124 @@ test("the activation email explains a missing website login in plain words, in i
   assert.doesNotMatch(source, /officer-confirmed portal assignment/);
   assert.doesNotMatch(source, /correspondence email already has a website login/);
 });
+
+test("the renewal link's last day in the email comes from the same rule that expires the invitation", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609210001_membership_renewal_link_expiry_and_manual_reminders.sql", import.meta.url), "utf8");
+  // One rule sets the expiry: the start of 1 January after the renewal year, London time.
+  assert.match(sql, /function public\.membership_renewal_link_expires_at\(p_year integer\)[\s\S]*make_timestamptz\(p_year\+1,1,1,0,0,0,'Europe\/London'\)/);
+  assert.match(sql, /values\(m\.id,p_year,p_token_hash,public\.membership_renewal_link_expires_at\(p_year\)\)/);
+  // The email reads the invitation's stored expiry and only falls back to the rule, and no date is typed into the wording.
+  assert.match(sql, /i\.expires_at from public\.membership_renewal_invitations i where i\.member_id=p_member_id and i\.membership_year=p_year/);
+  assert.match(sql, /The link works until '\|\|public\.membership_renewal_link_last_day_text\(p_member_id,p_year\)\|\|'\./);
+  assert.doesNotMatch(sql, /until 31 December/);
+  // The wording is otherwise the same as before: the payment blocks and the closing note are still there.
+  assert.match(sql, /Pay by bank transfer \(preferred\)/);
+  assert.match(sql, /This is an automated email\. If you have already paid/);
+});
+
+test("renewal reminders are only sent by an officer: no scheduled stages, no reminders in the daily job", async () => {
+  const [sql, overview, inbox] = await Promise.all([
+    readFile(new URL("../supabase/migrations/202609210001_membership_renewal_link_expiry_and_manual_reminders.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/memberships/_components/RenewalsOverview.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/membership-admin/inbox.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(sql, /drop function if exists public\.run_membership_renewal_reminder_schedule\(date\)/);
+  assert.match(sql, /drop function if exists public\.queue_membership_renewal_reminders_core\(integer, text, date, integer\)/);
+  const catchUp = sql.slice(sql.indexOf("function public.run_membership_daily_catch_up"), sql.indexOf("drop function if exists public.run_membership_renewal_reminder_schedule"));
+  assert.match(catchUp, /run_membership_retention\(p_today\)/);
+  assert.doesNotMatch(catchUp, /reminder/);
+  // The officer's button keeps its rules.
+  assert.match(sql, /function public\.queue_membership_renewal_reminders\(p_year integer, p_actor uuid\)/);
+  assert.match(sql, /membership_renewal_campaigns where membership_year = p_year and open/);
+  assert.match(sql, /invitation_notice\.email_status = 'sent'/);
+  assert.match(sql, /interval '7 days'/);
+  assert.match(sql, /m\.effective_state in \('active', 'grace', 'lapsed'\)/);
+  assert.match(sql, /grant execute on function public\.queue_membership_renewal_reminders\(integer, uuid\) to service_role/);
+  // Nothing on the officer's screens promises automatic reminders any more.
+  assert.doesNotMatch(overview, /go out by themselves|1 December|22 February/);
+  assert.doesNotMatch(inbox, /1 December, 1 January, 1 February/);
+  assert.match(overview, /Nothing is sent automatically/);
+});
+
+test("the grace period is one rule that the link, the stored grace end and the daily job read", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609210002_membership_grace_rule.sql", import.meta.url), "utf8");
+  // The rule, and the link expiry built on it.
+  assert.match(sql, /function public\.membership_grace_ends_on\(p_year integer\)[\s\S]*?select make_date\(p_year,3,1\)/);
+  assert.match(sql, /function public\.membership_renewal_link_expires_at\(p_year integer\)[\s\S]*?public\.membership_grace_ends_on\(p_year\)::timestamp\) at time zone 'Europe\/London'/);
+  // Every new term stores the grace end from the rule, whatever the calling function passes.
+  assert.match(sql, /new\.grace_ends_on := public\.membership_grace_ends_on\(new\.membership_year\+1\)/);
+  assert.match(sql, /create trigger membership_terms_set_grace_end before insert on public\.membership_terms/);
+  // The daily job lapses on the rule's date, not on a typed 1 March, and the grace notice names it.
+  assert.match(sql, /if p_today = public\.membership_grace_ends_on\(v_year\) then/);
+  assert.doesNotMatch(sql, /extract\(month from p_today\) = 3/);
+  assert.match(sql, /current_date < public\.membership_grace_ends_on\(extract\(year from current_date\)::integer\)/);
+  assert.match(sql, /public\.membership_grace_ends_on\(v_year\+1\)/);
+  // Outside the rule function and comments, no function body types the date in again.
+  const code = sql.replace(/--.*$/gm, "");
+  assert.equal((code.match(/make_date\([^)]*,\s*3\s*,\s*1\)/g) ?? []).length, 1);
+  assert.doesNotMatch(code, /before 1 March|through February|,2,28\)/);
+});
+
+test("the expired renewal page points the member to the officer, who can send a new link", async () => {
+  const page = await readFile(new URL("../app/membership/renew/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /This renewal link has expired/);
+  assert.match(page, /contact the membership officer, who can send you a new link/);
+});
+
+test("the officer's new renewal link lasts 30 days, is audited, and only lapsed members can be sent one", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609210003_membership_returning_member_fee_and_new_link.sql", import.meta.url), "utf8");
+  const action = await readFile(new URL("../lib/actions/membership-renewals.ts", import.meta.url), "utf8");
+  const messages = await readFile(new URL("../lib/membership-admin/messages.ts", import.meta.url), "utf8");
+  const memberPage = await readFile(new URL("../app/admin/memberships/members/[id]/page.tsx", import.meta.url), "utf8");
+  const renewalsPage = await readFile(new URL("../app/admin/memberships/renewals/page.tsx", import.meta.url), "utf8");
+  // 30 days counting today, never shortening a longer link; officer only; lapsed only; renewals must be open.
+  assert.match(sql, /\(v_today\+31\)::timestamp\) at time zone 'Europe\/London'/);
+  assert.match(sql, /greatest\(/);
+  assert.match(sql, /has_membership_management_capability\(p_actor\)/);
+  assert.match(sql, /m\.effective_state<>'lapsed'/);
+  assert.match(sql, /membership_renewal_campaigns where membership_year=p_year and open/);
+  assert.match(sql, /membership\.renewal-link-reissued/);
+  assert.match(sql, /grant execute on function public\.reissue_membership_renewal_link\(uuid,integer,uuid,text,text\) to service_role/);
+  assert.doesNotMatch(sql, /grant execute on function public\.reissue_membership_renewal_link[^;]*(authenticated|anon)/);
+  // It is one email the officer asked for, so it does not wait in the bulk queue.
+  assert.match(sql, /deduplication_key like 'renewal-link-%' then 'immediate'/);
+  // The screens: a button on the member record and on the Renewals list, and every result has a message.
+  assert.match(action, /export async function sendNewRenewalLink/);
+  assert.match(action, /rpc\("reissue_membership_renewal_link"/);
+  assert.match(memberPage, /Send new renewal link/);
+  assert.match(renewalsPage, /Send new link/);
+  for (const key of ["renewal-link-sent", "renewal-link-not-open", "renewal-link-no-email", "renewal-link-unavailable", "renewal-link-failed"]) {
+    assert.ok(messages.includes(`"${key}"`), `${key} has a message`);
+    assert.ok(action.includes(key), `${key} is used`);
+  }
+});
+
+test("a returning member's fee is worked out in one place and every payment route follows it", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609210003_membership_returning_member_fee_and_new_link.sql", import.meta.url), "utf8");
+  const membership = await readFile(new URL("../lib/membership.ts", import.meta.url), "utf8");
+  const offline = await readFile(new URL("../lib/actions/membership.ts", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/membership/renew/page.tsx", import.meta.url), "utf8");
+  // Same rule as a new member, for a lapsed member paying for the current year only.
+  assert.match(sql, /m\.effective_state='lapsed'[\s\S]*?p_year=extract\(year from p_on\)::integer[\s\S]*?prorated_membership_fee_pence\(p_annual_pence,p_on\)/);
+  // The email quote, the offline entry, and the card payment (checked against the checkout's own month) all use it.
+  assert.match(sql, /fee_pence:=public\.membership_returning_member_fee_pence\(/);
+  assert.match(sql, /else public\.membership_returning_member_fee_pence\(p_member_id,p_membership_year,v_price\.amount_pence,p_received_on\) end/);
+  assert.match(sql, /attempt\.stripe_checkout_session_id=p_stripe_checkout_session_id/);
+  assert.match(sql, /p_amount_pence not in \(v_expected,v_returning\)/);
+  // The website charges, shows and defaults to the same amount.
+  assert.match(membership, /returningMemberFee\(\{ effectiveState: member\.effective_state/);
+  assert.match(offline, /returningMemberFee\(\{ effectiveState: member\.effective_state/);
+  assert.match(page, /returningMemberFee\(/);
+});
+
+test("a lapsed member is told what to do next, in the email and when they try to sign in", async () => {
+  const sql = await readFile(new URL("../supabase/migrations/202609210003_membership_returning_member_fee_and_new_link.sql", import.meta.url), "utf8");
+  const auth = await readFile(new URL("../lib/auth.ts", import.meta.url), "utf8");
+  const signin = await readFile(new URL("../app/signin/page.tsx", import.meta.url), "utf8");
+  assert.match(sql, /contact the membership officer, who will send you a new renewal link/);
+  assert.doesNotMatch(sql, /online or offline renewal can reinstate/);
+  assert.match(sql, /case when new\.effective_state='lapsed' then null else '\/account' end/);
+  assert.match(auth, /membership_status === "lapsed"\) redirect\(`\/signin\?error=\$\{encodeURIComponent\(LAPSED_ACCESS_MESSAGE\)\}`\)/);
+  assert.match(auth, /Please contact the membership officer, who will send you a new link to renew/);
+  assert.match(signin, /LAPSED_ACCESS_MESSAGE/);
+});

@@ -1,0 +1,383 @@
+/* Dashboard additions: the personal and officer strips, details under events and workshops, and the tidier empty states.
+   The cards, headings, buttons and colours are the shared portal ones from globals.css. */
+
+.page { min-width: 0; }
+
+/* Cards should be as tall as their content, not stretched to match a busier neighbour. */
+.page :global(.dashboard-section-grid) { align-items: start; }
+
+/* On a phone the shared heading rule turns .card-heading into a grid, which drops the link or icon onto its own line. */
+
+/* Personal strip */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 1279px) {
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.tile {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 20px 22px 22px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--line);
+  background: #f9f6ef;
+}
+
+.toneGood { border-top-color: #4f865b; }
+.toneWarn { border-top-color: var(--brass); }
+.toneBad { border-top-color: var(--rust); }
+.toneQuiet { border-top-color: var(--line); }
+
+.tileLabel {
+  margin: 0;
+  color: #896820;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .23em;
+  text-transform: uppercase;
+}
+
+.tileHeadline {
+  margin: 4px 0 0;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 600;
+  font-variant-numeric: lining-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.tileDetail { margin: 0; color: #5a645e; font-size: 14px; line-height: 1.55; }
+
+.tileAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--rust);
+  cursor: pointer;
+  font: 700 11px var(--font-sans);
+  letter-spacing: .12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.tileAction:hover { color: var(--forest); text-decoration: underline; text-underline-offset: 3px; }
+.tileAction svg { width: 14px; height: 14px; }
+
+/* Officer strip */
+.attention {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--rust);
+  background: #f9f6ef;
+}
+
+.attentionHead { display: flex; align-items: center; gap: 16px; }
+.attentionHead > svg { flex: none; width: 30px; height: 30px; color: var(--rust); }
+.attentionHead > div { flex: 1; min-width: 0; }
+.attentionHead h2 { margin: 2px 0 0; font-family: var(--font-display); font-size: 26px; font-weight: 600; }
+
+.attentionAll, .attentionClear a {
+  color: var(--rust);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.attentionAll:hover, .attentionClear a:hover { color: var(--forest); }
+
+.attentionList { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; padding: 0; list-style: none; }
+
+.attentionList a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid #bcb7aa;
+  border-radius: 2px;
+  background: #fffdf7;
+  text-decoration: none;
+}
+
+.attentionList a:hover { border-color: var(--forest); background: #fff; }
+.attentionList strong { color: var(--rust); font-size: 20px; }
+.attentionList span { color: #465049; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+
+.attentionClear { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-left-color: #4f865b; }
+.attentionClear > svg { flex: none; width: 22px; height: 22px; color: #2d6a3d; }
+.attentionClear > p { flex: 1; margin: 0; }
+
+/* Details under an event or a workshop */
+.more { margin-top: 8px; }
+
+.more > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--rust);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::after { content: "▾"; font-size: 12px; }
+.more[open] > summary::after { content: "▴"; }
+.more > summary:hover { color: var(--forest); }
+
+.moreBody { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.moreBody p { margin: 0; color: #4d5852; font-size: 13.5px; line-height: 1.6; white-space: pre-line; }
+.moreBody dl { display: grid; gap: 4px; margin: 0; }
+.moreBody dl div { display: flex; gap: 8px; font-size: 13px; }
+.moreBody dt { color: #6b746e; font-weight: 700; }
+.moreBody dd { margin: 0; overflow-wrap: anywhere; }
+
+.moreLink {
+  justify-self: start;
+  color: var(--forest);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-transform: uppercase;
+}
+
+.moreLink:hover { color: var(--rust); }
+
+.booked {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: #dfe9de;
+  color: #204f30;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  font-style: normal;
+  vertical-align: 3px;
+}
+
+/* Empty states with a next step */
+.empty { display: grid; justify-items: start; gap: 6px; padding-top: 6px; }
+.empty p { margin: 0; color: #5a645e; }
+.empty a, .empty span { color: var(--rust); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.empty span { color: #6b746e; letter-spacing: 0; text-transform: none; font-weight: 500; font-size: 13.5px; }
+.empty a:hover { color: var(--forest); }
+
+.byline { display: block; margin-top: 6px; color: #6b746e; font-size: 12.5px; }
+
+/* Society library card */
+.libraryList { display: grid; margin: 4px 0 0; padding: 0; list-style: none; }
+.libraryList li + li { border-top: 1px solid var(--line); }
+
+.libraryList a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.libraryList a:hover { color: var(--rust); }
+.libraryList svg { flex: none; width: 18px; height: 18px; color: var(--rust); }
+.libraryList span { margin-left: auto; color: #6b746e; font-size: 13px; font-weight: 600; }
+
+
+/* Add a notice: what to write, and the form */
+.composeIntro { margin: 12px 0 0; max-width: 62ch; color: #5a645e; font-size: 14px; line-height: 1.6; }
+
+.composerWrap { container-type: inline-size; margin-top: 20px; }
+.composer { display: grid; gap: 22px; }
+
+@container (min-width: 640px) {
+  .composer { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 32px; align-items: start; }
+}
+
+.guide {
+  padding: 20px 22px;
+  border-left: 3px solid var(--brass);
+  background: #f1ecdd;
+}
+
+.guide h3 { margin: 0 0 12px; font-family: var(--font-display); font-size: 21px; font-weight: 600; }
+.guide ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.guide li { position: relative; padding-left: 18px; color: #3f4a44; font-size: 13.5px; line-height: 1.55; }
+.guide li::before { content: ""; position: absolute; left: 0; top: .6em; width: 7px; height: 7px; border-radius: 50%; background: var(--brass); }
+.guide li strong { color: var(--ink); }
+.guide > p { margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: #5a645e; font-size: 13px; line-height: 1.6; }
+
+.composeForm { display: grid; gap: 6px; min-width: 0; }
+
+.composeForm label {
+  margin-top: 10px;
+  color: #465049;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.composeForm label:first-child { margin-top: 0; }
+
+.composeForm input,
+.composeForm textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #bcb7aa;
+  border-radius: 3px;
+  background: #fffdf7;
+  color: var(--ink);
+  font: 500 15px/1.5 var(--font-sans);
+}
+
+.composeForm input { min-height: 50px; }
+.composeForm textarea { min-height: 150px; resize: vertical; }
+.composeForm ::placeholder { color: #8b918c; font-weight: 400; }
+
+.composeForm input:focus-visible,
+.composeForm textarea:focus-visible {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px rgba(213, 168, 75, .22);
+}
+
+.count { display: block; text-align: right; color: #6b746e; font-size: 12px; }
+
+.composeActions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+
+.composeResult { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0 0; padding: 12px 14px; border-left: 3px solid; border-radius: 3px; font-size: 14px; line-height: 1.5; }
+.composeResult svg { flex: none; width: 18px; height: 18px; margin-top: 2px; }
+.composeGood { border-color: #4f865b; background: #dfe9de; color: #204f30; }
+.composeBad { border-color: var(--rust); background: #f3ddd6; color: #6d281d; }
+
+/* Notice board */
+/* Two balanced columns on wide screens: running days and workshops on the left, the notice board and library on the right.
+   On narrower screens the columns dissolve and the cards stack in this order: running days, notice board, workshops, library. */
+.columns { display: flex; flex-direction: column; gap: 18px; margin-bottom: 18px; }
+.column { display: contents; }
+.orderEvents { order: 1; }
+.orderBoard { order: 2; }
+.orderWorkshops { order: 3; }
+.orderLibrary { order: 4; }
+.columns > .column > section { margin: 0; }
+
+@media (min-width: 1241px), (min-width: 901px) and (max-width: 1024px) {
+  .columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; margin-bottom: 24px; }
+  .column { display: grid; gap: 24px; min-width: 0; align-content: start; }
+  .orderEvents, .orderBoard, .orderWorkshops, .orderLibrary { order: 0; }
+}
+@media (max-width: 480px) {
+  .columns { gap: 14px; margin-bottom: 14px; }
+}
+
+.composeTrigger {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 52px; margin-top: 18px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fffdf8; cursor: pointer;
+  color: var(--forest); font: inherit; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  transition: border-color .15s, background .15s;
+}
+.composeTrigger:hover { border-color: var(--forest); background: white; }
+.composeTrigger:focus-visible { outline: 3px solid var(--rust); outline-offset: 2px; }
+.composeTrigger svg { flex: none; width: 17px; height: 17px; color: var(--rust); }
+
+/* The dialog that holds the guidance and the form */
+.dialog {
+  width: min(920px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px);
+  margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain;
+  border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; color: var(--ink);
+  box-shadow: 0 24px 70px rgba(9, 20, 15, .38);
+}
+.dialog::backdrop { background: rgba(9, 20, 15, .58); }
+.dialogHead {
+  position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding: 22px 24px 16px; border-bottom: 1px solid var(--line); background: #fffdf8;
+}
+.dialogHead :global(.eyebrow) { margin: 0 0 6px; }
+.dialogHead .dialogTitle { margin: 0; font-family: var(--font-display); font-size: 32px; font-weight: 600; line-height: 1.05; }
+.dialogClose {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px; margin: -6px -8px 0 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer;
+}
+.dialogClose:hover { background: #eee7d7; }
+.dialogClose:focus-visible { outline: 3px solid var(--rust); outline-offset: 0; }
+.dialogClose svg { width: 22px; height: 22px; }
+.dialogBody { padding: 18px 24px 26px; }
+.dialogBody .composeIntro { margin-top: 0; }
+.dialogBody .composerWrap { margin-top: 20px; }
+
+@media (max-width: 640px) {
+  .dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+  .dialogHead { padding: 18px 16px 14px; }
+  .dialogHead .dialogTitle { font-size: 27px; }
+  .dialogBody { padding: 16px 16px 28px; }
+}
+
+.readMore { margin: 10px 0 0; }
+.readMore > summary { display: block; cursor: pointer; list-style: none; }
+.readMore > summary::-webkit-details-marker { display: none; }
+.readMore > summary::marker { content: ""; }
+.readMore > summary:focus-visible { outline: 3px solid var(--rust); outline-offset: 2px; }
+.preview { display: block; font-style: normal; color: #56615a; font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.readMoreOpen, .readMoreClose { display: inline-block; margin-top: 8px; color: var(--rust); font-size: 12px; font-weight: 700; }
+.readMoreClose { display: none; }
+.readMore[open] .preview, .readMore[open] .readMoreOpen { display: none; }
+.readMore[open] .readMoreClose { display: inline-block; }
+.readMore > p { margin: 0; overflow-wrap: anywhere; }
+.readMore[open] > summary { margin-top: 0; }
+.noticeEmpty { margin: 0; padding-top: 18px; }
+
+.archived { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; }
+.archived > summary { cursor: pointer; color: #5a645e; font-weight: 700; }
+.archived form { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.archived form button { border: 0; background: none; padding: 0; color: var(--rust); font-size: 11px; font-weight: 700; text-transform: uppercase; cursor: pointer; }
+
+/* Society library: the newest upload under the section links */
+.latestUpload { display: grid; gap: 4px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; }
+.latestUpload .eyebrow { margin: 0 0 4px; }
+.latestUpload a, .latestUpload strong { color: var(--rust); font-weight: 700; }
+.latestUpload strong { color: var(--ink); }
+.latestUpload time, .latestUpload span { color: #6b746e; font-size: 13px; }
+
+/* Club shop: the dark banner, a little slimmer than before, at the foot of the page */
+@media (min-width: 1025px) {
+  .page .merch { min-height: 136px; padding: 26px 34px; margin: 8px 0 0; }
+  .page .merch h2 { font-size: 34px; }
+}
+
+.merch { margin-top: 8px; margin-bottom: 0; }
+
+/* Phones (kept last so it wins over the rules above) */
+@media (max-width: 640px) {
+  .page :global(.card-heading) { display: flex; }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .tile { padding: 14px 14px 16px; }
+  .tileHeadline { font-size: 19px; }
+  .tileDetail { font-size: 13px; }
+  .tileLabel { font-size: 10px; letter-spacing: .16em; }
+}

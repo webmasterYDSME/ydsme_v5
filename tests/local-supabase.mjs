@@ -38,3 +38,37 @@ export function readLocalSupabaseEnvironment(purpose) {
     ANON_KEY: environment.ANON_KEY || environment.PUBLISHABLE_KEY,
   };
 }
+
+const LOCAL_DATABASE_CONTAINER = "supabase_db_ydsme_v5";
+
+function localSql(sql) {
+  return execFileSync("docker", ["exec", "-i", LOCAL_DATABASE_CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-tA", "-v", "ON_ERROR_STOP=1"], {
+    input: sql, encoding: "utf8",
+  }).trim();
+}
+
+/**
+ * Who runs membership is a database setting, not an environment variable. The browser and journey runs need
+ * the website to run it, so they switch the isolated local database over and put it back when they finish.
+ * Returns the mode that was there before.
+ */
+export function setLocalMembershipMode(mode) {
+  assert.ok(mode === "membermojo" || mode === "website", "The membership mode must be membermojo or website.");
+  readLocalSupabaseEnvironment("Changing the membership mode");
+  const previous = localSql("select public.membership_mode();");
+  localSql(`update public.membership_mode_settings set mode = '${mode}', changed_at = now(),
+    website_since = case when '${mode}' = 'website' and mode <> 'website' then now() else website_since end where id;`);
+  return previous;
+}
+
+/** Switches the local database to the given mode now and restores the earlier one when the process ends. */
+export function holdLocalMembershipMode(mode) {
+  const previous = setLocalMembershipMode(mode);
+  let restored = false;
+  process.on("exit", () => {
+    if (restored) return;
+    restored = true;
+    try { setLocalMembershipMode(previous); } catch { /* the local stack may already be stopped */ }
+  });
+  return previous;
+}

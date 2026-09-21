@@ -1,0 +1,89 @@
+.stack { display: grid; gap: 18px; }
+.card { padding: 22px 24px; border: 1px solid var(--line); border-radius: 8px; background: #fffdf8; }
+.cardHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cardHead h2 { margin: 0; font: 500 28px/1.12 var(--font-display); }
+.note { margin: 0; color: #56625b; font-size: 13px; line-height: 1.55; }
+.gap { margin-top: 14px; }
+.banner { margin: 0; padding: 13px 16px; border-radius: 6px; font-size: 14px; line-height: 1.5; }
+.bannerWarn { background: #f2e8cc; color: #5c430c; border-left: 3px solid #b8892b; }
+.bannerGood { background: #dfeadb; color: #24502e; border-left: 3px solid #4f865b; }
+.bannerBad { background: #f6d6ce; color: #84241a; border-left: 3px solid #b3402f; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.stats > div { padding: 12px 14px; border: 1px solid rgba(16,24,20,.14); border-radius: 6px; background: #f7f4ec; }
+.stats dt { color: #56625b; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.stats dd { margin: 2px 0 0; font: 500 30px/1.1 var(--font-display); }
+.stats dd small { font: 500 14px var(--font-sans); color: #56625b; }
+.meter { height: 8px; margin-top: 16px; border-radius: 999px; background: #e6e2d6; overflow: hidden; display: flex; }
+.meter > span { display: block; height: 100%; }
+.meterUsed { background: var(--forest); }
+.meterReserve { background: repeating-linear-gradient(135deg, #d5a84b 0 5px, #e8cd8b 5px 10px); margin-left: auto; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.actions form { margin: 0; }
+.danger { border-color: #b85c4e !important; color: #8e3529 !important; background: #fff7f4 !important; }
+
+.settings summary { cursor: pointer; font-weight: 700; color: var(--forest); font-size: 14px; }
+.settingsGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 14px 18px; align-items: start; margin-top: 14px; }
+.settingsGrid > button { margin-top: 25px; }
+.settingsGrid label { display: grid; gap: 7px; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: #59625c; }
+.settingsGrid input { min-height: 46px; padding: 10px 12px; border: 1px solid #a9a597; border-radius: 4px; background: #fff; font-size: 15px; }
+.settingsGrid small { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 12px; color: #56625b; line-height: 1.4; }
+
+.pill { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.pillWait { background: #f2e8cc; color: #6b4f10; }
+.pillSending { background: #e2e6f0; color: #2b3a63; }
+.pillSent { background: #dfeadb; color: #24502e; }
+.pillFailed { background: #f6d6ce; color: #84241a; }
+.pillStopped { background: #e6e2d6; color: #3f4a44; }
+.pillBulk { background: #e2e6f0; color: #2b3a63; }
+.pillNow { background: #efe0d9; color: #7a3524; }
+
+.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 12px 22px; background: #f1ecdd; border-bottom: 1px solid rgba(16,24,20,.12); }
+.selectAll { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; }
+.selectAll input, .row > input { width: 18px; height: 18px; accent-color: var(--forest); }
+.list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fffdf8; }
+.row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 150px 210px; align-items: start; column-gap: 18px; padding: 14px 22px; border-bottom: 1px solid rgba(16,24,20,.12); }
+.row:last-child { border-bottom: 0; }
+.row:hover { background: #f8f4e8; }
+.who strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.who span { display: block; margin-top: 2px; color: #2d3832; font-size: 14px; overflow-wrap: anywhere; }
+.who small, .when small { display: block; margin-top: 4px; color: #56625b; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.who .err { color: #84241a; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.when { font-size: 13px; }
+.rowActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.rowBtn { min-height: 34px; padding: 0 12px; border: 1px solid rgba(16,24,20,.22); border-radius: 6px; background: #fffdf8; color: var(--ink, #101814); font: 600 13px var(--font-sans); cursor: pointer; }
+.rowBtn:hover:not(:disabled) { background: #14302a; border-color: #14302a; color: #fff; }
+.rowBtn:disabled { opacity: .55; cursor: default; }
+.empty { padding: 34px 22px; text-align: center; color: #56625b; }
+.filters { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 12px; align-items: end; }
+.filters label { display: grid; gap: 7px; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: #59625c; }
+.filters input, .filters select { min-height: 46px; padding: 10px 12px; border: 1px solid #a9a597; border-radius: 4px; background: #fff; font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1px solid #c9c3b4; border-radius: 999px; background: #fffdf8; color: #2d3832; font-size: 14px; font-weight: 700; text-decoration: none; }
+.chip span { padding: 2px 8px; border-radius: 20px; background: #ece6d6; font-size: 12px; }
+.chipOn, .chipOn:hover { background: var(--forest); border-color: var(--forest); color: #fff; }
+.chipOn span { background: rgba(255,255,255,.22); color: #fff; }
+
+@media (max-width: 1024px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row { grid-template-columns: 22px minmax(0, 1fr); row-gap: 10px; }
+  .row .tags, .row .when { grid-column: 2; }
+  .settingsGrid { grid-template-columns: 1fr; }
+  .filters { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .card { padding: 18px 16px; }
+  .row { padding: 14px 16px; }
+  .toolbar { padding: 12px 16px; }
+  .stats dd { font-size: 26px; }
+}
+
+/* Everything clickable says so, and switched-off buttons say that too. */
+.card button, .card summary, .card select, .card label, .chip, .rowBtn { cursor: pointer; }
+.card button:disabled, .card input:disabled, .rowBtn:disabled { cursor: not-allowed; }
+.card button:disabled { opacity: .5; }
+.selectAll input:disabled { cursor: not-allowed; }
+.settingsGrid input, .filters input, .filters select { width: 100%; }
+@media (max-width: 1024px) { .settingsGrid > button { margin-top: 0; justify-self: start; } }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MailCheck, ShieldCheck } from "lucide-react";
 import { SignInCard } from "@/app/components/SignInCard";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, LAPSED_ACCESS_MESSAGE } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import styles from "./signin.module.css";
 
@@ -18,7 +18,7 @@ export default async function SignIn({ searchParams }: Props) {
   const isEmailSent = isMagicLinkSent || isPasswordResetSent;
   const initialMode = query.method === "password" || query.method === "password-reset" ? query.method : undefined;
 
-  if (query.error === "Your Society access is not active.") {
+  if (query.error === "Your Society access is not active." || query.error === LAPSED_ACCESS_MESSAGE) {
     const user = await getCurrentUser();
     if (user) {
       const { data: profile } = await createAdminClient()

@@ -23,7 +23,7 @@ const planOrder = new Map([["adult", 0], ["concession", 1], ["student", 2], ["ju
 
 export default async function Membership({ searchParams }: { searchParams: Promise<{ application?: string }> }) {
   const query = await searchParams;
-  const enabled = membershipBillingEnabled();
+  const enabled = await membershipBillingEnabled();
   if (enabled && query.application) redirect(`/membership/apply?application=${encodeURIComponent(query.application)}`);
   const plans = enabled ? [...await getPublicMembershipPlans()].sort((a, b) => (planOrder.get(a.slug) ?? 9) - (planOrder.get(b.slug) ?? 9)) : [];
   const year = plans[0]?.membership_year ?? new Date().getFullYear();
