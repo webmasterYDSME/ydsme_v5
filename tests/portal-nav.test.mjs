@@ -29,14 +29,14 @@ test("puts a committee member's work ahead of the members' area", () => {
 
 test("adds Memberships and Donations for a membership officer, with the task count", () => {
   const sections = buildPortalNav({ ...base, role: "committee", canViewContent: true, membershipOfficer: true, membershipTaskCount: 8 });
-  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Memberships", "Website accounts", "Donations"]]);
+  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Memberships", "Website accounts", "Donations", "Officer handbook"]]);
   assert.equal(navItems(sections).find((item) => item.key === "memberships")?.count, 8);
   assert.equal(attentionCount(sections), 8);
 });
 
 test("hides Memberships while membership administration is off, but keeps Donations", () => {
   const sections = buildPortalNav({ ...base, role: "committee", canViewContent: true, membershipOfficer: true, membershipEnabled: false, membershipTaskCount: 5 });
-  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Website accounts", "Donations"]]);
+  assert.deepEqual(labels(sections)[1], ["Membership and money", ["Website accounts", "Donations", "Officer handbook"]]);
   assert.equal(attentionCount(sections), 0);
 });
 

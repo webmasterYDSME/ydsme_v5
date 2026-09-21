@@ -273,3 +273,30 @@ test("fees, billing years and ages follow the London date, as the database does,
   assert.equal(ageOn("2000-07-01", new Date("2027-06-30T23:30:00Z")), 27);
   assert.equal(ageOn("2000-07-01", new Date("2027-06-30T22:30:00Z")), 26);
 });
+
+test("a returning (lapsed) member pays the part-year fee like a new member, for the current year only", async () => {
+  const { returningMemberFee, buildRenewalChoices } = await import("../lib/membership-rules.ts");
+  const september = new Date(Date.UTC(2026, 8, 15, 12));
+  const december = new Date(Date.UTC(2026, 11, 10, 12));
+  assert.equal(returningMemberFee({ effectiveState: "lapsed", annualPence: 6000, membershipYear: 2026, onDate: september }), proratedMembershipFee(6000, september));
+  assert.equal(returningMemberFee({ effectiveState: "lapsed", annualPence: 6000, membershipYear: 2026, onDate: september }), 2000);
+  assert.equal(returningMemberFee({ effectiveState: "lapsed", annualPence: 6000, membershipYear: 2026, onDate: december }), 6000);
+  assert.equal(returningMemberFee({ effectiveState: "grace", annualPence: 6000, membershipYear: 2026, onDate: september }), 6000);
+  assert.equal(returningMemberFee({ effectiveState: "active", annualPence: 6000, membershipYear: 2026, onDate: september }), 6000);
+  assert.equal(returningMemberFee({ effectiveState: "lapsed", annualPence: 6000, membershipYear: 2027, onDate: september }), 6000);
+
+  // The officer's Renewals list and record-a-payment form default to the same amount, and say why.
+  const members = [
+    { id: "lapsed", current_plan_id: "adult", effective_state: "lapsed", honorary_memberships: null },
+    { id: "grace", current_plan_id: "adult", effective_state: "grace", honorary_memberships: null },
+  ];
+  const choices = buildRenewalChoices({
+    members, prices: [{ plan_id: "adult", membership_year: 2026, amount_pence: 6000 }, { plan_id: "adult", membership_year: 2027, amount_pence: 6000 }],
+    transitions: [], terms: [], currentYear: 2026, formatMoney: (pence) => `£${(pence / 100).toFixed(2)}`, today: september,
+  });
+  const pick = (id, year) => choices.find((choice) => choice.member_id === id && choice.membership_year === year);
+  assert.equal(pick("lapsed", 2026).amount_pence, 2000);
+  assert.match(pick("lapsed", 2026).note, /Part-year fee for a returning member, the same as a new member/);
+  assert.equal(pick("lapsed", 2027).amount_pence, 6000);
+  assert.equal(pick("grace", 2026).amount_pence, 6000);
+});

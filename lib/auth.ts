@@ -71,6 +71,9 @@ export const isMembershipOfficer = cache(async (userId: string, role: AppRole) =
     .eq("capability", "memberships.manage")
     .maybeSingle()).data)));
 
+/** Shown to a signed-in member whose membership has lapsed. The sign-in page recognises it too. */
+export const LAPSED_ACCESS_MESSAGE = "Your membership has lapsed, so your access to the members’ area is closed. Please contact the membership officer, who will send you a new link to renew.";
+
 export const requireUser = cache(async () => {
   const user = await getCurrentUser();
   if (!user) redirect("/signin");
@@ -79,6 +82,8 @@ export const requireUser = cache(async () => {
     admin.from("users").select("membership_status,full_name").eq("id", user.id).maybeSingle(),
     getRole(user.id),
   ]);
+  // A lapsed member is told why and what to do, not just that access is off.
+  if (profile?.membership_status === "lapsed") redirect(`/signin?error=${encodeURIComponent(LAPSED_ACCESS_MESSAGE)}`);
   if (profile?.membership_status !== "active") redirect("/signin?error=Your+Society+access+is+not+active.");
   const membershipOfficer = await isMembershipOfficer(user.id, role);
   return { user, role, fullName: profile.full_name, membershipOfficer };

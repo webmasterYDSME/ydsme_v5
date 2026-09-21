@@ -16,6 +16,8 @@ type ClaimedNotification = {
 // The provider sends 429 for two different reasons: we are going too fast (wait a minute) or the
 // day's allowance is spent (wait an hour before asking again). Neither counts as a failed attempt.
 const PROVIDER_SPACING_MS = 600;
+const CLAIM_SIZE = 25;
+const MAX_ROUNDS = 3;
 
 const escapeHtml = (value: string) => value
   .replaceAll("&", "&amp;")
@@ -63,17 +65,11 @@ export default {
       return Response.json({ ok: false }, { status: 503, headers: { "Cache-Control": "no-store" } });
     }
 
-    const { data, error } = await context.supabaseAdmin.rpc("claim_membership_notifications", { p_limit: 25 });
-    if (error) {
-      console.error("Unable to claim membership notifications", error.message);
-      return Response.json({ ok: false }, { status: 500, headers: { "Cache-Control": "no-store" } });
-    }
-
     let sent = 0;
     let failed = 0;
     let deferred = 0;
+    let claimedTotal = 0;
     let stopped = false;
-    const claimed = (data ?? []) as ClaimedNotification[];
     const defer = async (id: string, seconds: number, reason: string) => {
       const { error: deferError } = await context.supabaseAdmin.rpc("defer_membership_notification", {
         p_id: id,
@@ -83,6 +79,16 @@ export default {
       if (deferError) console.error("Unable to defer membership notification", deferError.message);
       deferred += 1;
     };
+    // Several rounds, so mail added in a burst is not left waiting for the next minute's job.
+    for (let round = 0; round < MAX_ROUNDS && !stopped; round += 1) {
+    const { data, error } = await context.supabaseAdmin.rpc("claim_membership_notifications", { p_limit: CLAIM_SIZE });
+    if (error) {
+      console.error("Unable to claim membership notifications", error.message);
+      if (round === 0) return Response.json({ ok: false }, { status: 500, headers: { "Cache-Control": "no-store" } });
+      break;
+    }
+    const claimed = (data ?? []) as ClaimedNotification[];
+    claimedTotal += claimed.length;
     for (const [index, notification] of claimed.entries()) {
       if (stopped) {
         // The provider asked us to stop, so hand back everything we have not sent yet.
@@ -176,8 +182,11 @@ export default {
       else sent += 1;
     }
 
+    if (claimed.length < CLAIM_SIZE) break;
+    }
+
     return Response.json(
-      { ok: failed === 0, result: { claimed: claimed.length, sent, failed, deferred } },
+      { ok: failed === 0, result: { claimed: claimedTotal, sent, failed, deferred } },
       { status: failed === 0 ? 200 : 207, headers: { "Cache-Control": "no-store" } },
     );
   }),

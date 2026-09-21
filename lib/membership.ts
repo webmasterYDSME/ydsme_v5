@@ -13,6 +13,7 @@ import {
   membershipBillingYear,
   membershipRenewalYear,
   proratedMembershipFee,
+  returningMemberFee,
 } from "@/lib/membership-rules";
 
 export { ageOn, membershipBillingYear, membershipRenewalAt, proratedMembershipFee } from "@/lib/membership-rules";
@@ -745,7 +746,8 @@ export async function createMemberRenewalCheckout(userId: string, autoRenew = fa
   }
   const amount = transitionDate && (transitionDate.getUTCMonth() !== 0 || transitionDate.getUTCDate() !== 1)
     ? proratedMembershipFee(price.amount_pence, transitionDate)
-    : price.amount_pence;
+    // A lapsed member coming back pays the part-year fee, like a new member.
+    : returningMemberFee({ effectiveState: member.effective_state, annualPence: price.amount_pence, membershipYear });
   const subscriptions = member.membership_subscriptions as Array<{ stripe_customer_id: string; status: string }> | null;
   if (subscriptions?.[0] && !["canceled", "incomplete_expired"].includes(subscriptions[0].status)) {
     throw new Error("An existing automatic renewal must be managed instead of replaced.");

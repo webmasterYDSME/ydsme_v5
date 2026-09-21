@@ -91,3 +91,16 @@ test("the queue page opens on what needs attention", () => {
   assert.equal(defaultQueueStatus({ waiting: 0, sending: 1, failed: 0 }), "queued");
   assert.equal(defaultQueueStatus({ waiting: 0, sending: 0, failed: 0 }), "sent");
 });
+
+test("hardening: invitations use the daily budget, delivery drains bursts, reminders wait for the invitation", async () => {
+  const [automation, edge, hardening] = await Promise.all([
+    read("supabase/functions/run-membership-automation/index.ts"),
+    read("supabase/functions/deliver-membership-notifications/index.ts"),
+    read("supabase/migrations/202609200004_email_delivery_hardening.sql"),
+  ]);
+  assert.match(automation, /reserve_email_slot/);
+  assert.match(automation, /release_email_slot/);
+  assert.match(edge, /MAX_ROUNDS/);
+  assert.match(hardening, /skip locked/);
+  assert.match(hardening, /invitation_notice\.email_status = 'sent'/);
+});

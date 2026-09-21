@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { UsersRound } from "lucide-react";
 import { requireCapability } from "@/lib/auth";
+import { sendNewRenewalLink } from "@/lib/actions/membership-renewals";
+import { membershipBillingYear } from "@/lib/membership-rules";
+import { PendingSubmitButton } from "@/app/components/PendingSubmitButton";
 import { membershipBillingEnabled } from "@/lib/features";
 import { loadEmailQueueOverview } from "@/lib/email-queue";
 import { bulkPerDay } from "@/lib/email-queue-format";
@@ -10,10 +13,11 @@ import { feeInForce, filterRenewalRows, type RenewalRowStatus, type RenewalShow 
 import { PortalPagination } from "@/app/components/PortalPagination";
 import { MemberPaymentPanel } from "../_components/MemberPaymentPanel";
 import { MembershipFlash } from "../_components/MembershipFlash";
-import { RenewalFees } from "../_components/RenewalFees";
+import { RenewalFees, feeSummary } from "../_components/RenewalFees";
 import { FeeChangePanel, PlanDetailsPanel } from "../_components/RenewalPanels";
 import { RenewalsOverview } from "../_components/RenewalsOverview";
 import styles from "../memberships.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +58,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
     return `${BASE}?${params}`;
   };
   const closeHref = href({ panel: "", member: "", plan: "", page: "" });
+  const feesHref = href({ panel: "fees", plan: "", member: "" });
 
   const missingFees = plans.filter((plan) => plan.active && !feeInForce(prices, plan.id, year)).map((plan) => plan.name as string);
   const panel = one(query.panel);
@@ -62,7 +67,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
 
   return <>
     <MembershipFlash/>
-    <p className={styles.tabNote}>Open the yearly renewals, remind members who have not paid, record cash, bank and cheque payments, and keep the annual fees.</p>
+    <p className={styles.tabNote}>Open the yearly renewals, remind members who have not paid, record cash, bank and cheque payments, and keep the annual fees. <HandbookHelp chapter="renewals">Renewals in the handbook</HandbookHelp></p>
     <div className={styles.stack}>
       <RenewalsOverview
         year={year} years={years} yearHref={(option) => `${BASE}?year=${option}`}
@@ -70,6 +75,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
         missingFees={missingFees} billingOn={membershipBillingEnabled()}
         queue={queueOverview ? { waiting: queueOverview.queued_bulk, perDay: bulkPerDay(queueOverview.budget) } : null}
         queueHref={role === "administrator" ? "/administrator/email-queue" : null}
+        fees={feeSummary(plans, prices, year)} feesHref={feesHref}
       />
 
       <section className={styles.card} id="renewals">
@@ -100,19 +106,22 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
                 <span>{row.amountPence === null ? "—" : money(row.amountPence)}</span>
               </div>
               {row.status === "waiting"
-                ? <Link className={styles.rowAction} href={href({ panel: "payment", member: row.id })} prefetch={false} scroll={false}>Record payment</Link>
+                ? <div className={styles.rowActions}>
+                  {row.state === "lapsed" && row.email && work.campaignOpen && year === membershipBillingYear()
+                    ? <form action={sendNewRenewalLink}>
+                      <input type="hidden" name="member_id" value={row.id}/>
+                      <input type="hidden" name="return_to" value="renewals"/>
+                      <PendingSubmitButton className={styles.rowActionButton} pendingLabel="Sending…"
+                        confirmMessage={`Email ${row.name} a new renewal link? It works for 30 days. They pay a part-year fee for the months left in the year, like a new member.`}>Send new link</PendingSubmitButton>
+                    </form> : null}
+                  <Link className={styles.rowAction} href={href({ panel: "payment", member: row.id })} prefetch={false} scroll={false}>Record payment</Link>
+                </div>
                 : <span/>}
             </article>)}
           </div>
           <PortalPagination currentPage={page} totalPages={pages} totalItems={filtered.length} itemLabel="members" href={(next) => href({ page: String(next) })} ariaLabel="Renewals list pages"/>
         </> : <div className="membership-empty-state"><UsersRound/><strong>{q ? "No members found" : show === "waiting" ? "Nobody is waiting" : "Nothing to show"}</strong><p>{q ? "Try another name or email address." : show === "waiting" ? `Everyone who can renew for ${year} has renewed.` : "Try another filter."}</p></div>}
       </section>
-
-      <RenewalFees
-        plans={plans} prices={prices} years={years}
-        feeHref={(planId) => href({ panel: "fee", plan: planId })}
-        typeHref={(planId) => href({ panel: "type", plan: planId })}
-      />
     </div>
 
     {panel === "payment" && panelRow
@@ -121,8 +130,14 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
         choices={work.choices.filter((choice) => choice.member_id === panelRow.id)} currentYear={currentYear} year={year}
         closeHref={closeHref} yearHref={(option) => href({ panel: "payment", member: panelRow.id, year: String(option) })} returnTo="renewals"
       /> : null}
+    {panel === "fees"
+      ? <RenewalFees
+        plans={plans} prices={prices} years={years} closeHref={closeHref}
+        feeHref={(planId) => href({ panel: "fee", plan: planId })}
+        typeHref={(planId) => href({ panel: "type", plan: planId })}
+      /> : null}
     {panel === "fee" && panelPlan
-      ? <FeeChangePanel plan={panelPlan} prices={prices} years={years} defaultYear={year} affected={work.affectedByPlan[panelPlan.id] ?? 0} closeHref={closeHref}/> : null}
-    {panel === "type" && panelPlan ? <PlanDetailsPanel plan={panelPlan} closeHref={closeHref}/> : null}
+      ? <FeeChangePanel plan={panelPlan} prices={prices} years={years} defaultYear={year} affected={work.affectedByPlan[panelPlan.id] ?? 0} closeHref={feesHref}/> : null}
+    {panel === "type" && panelPlan ? <PlanDetailsPanel plan={panelPlan} closeHref={feesHref}/> : null}
   </>;
 }

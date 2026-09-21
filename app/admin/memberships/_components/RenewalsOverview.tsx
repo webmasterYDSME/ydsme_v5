@@ -9,7 +9,7 @@ import styles from "../memberships.module.css";
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
 /** How the chosen year's renewals are going, and the two things an officer does about it: open them, and remind people. */
-export function RenewalsOverview({ year, years, yearHref, open, summary, lastReminderAt, missingFees, billingOn, queue, queueHref }: {
+export function RenewalsOverview({ year, years, yearHref, open, summary, lastReminderAt, missingFees, billingOn, queue, queueHref, fees, feesHref }: {
   year: number;
   years: number[];
   yearHref: (year: number) => string;
@@ -23,6 +23,9 @@ export function RenewalsOverview({ year, years, yearHref, open, summary, lastRem
   queue: { waiting: number; perDay: number } | null;
   /** The email queue page, for administrators only. */
   queueHref: string | null;
+  /** This year's fee for each membership type that is offered, and where to open the panel that changes them. */
+  fees: { name: string; amount: string | null }[];
+  feesHref: string;
 }) {
   const blocked = missingFees.length > 0;
   return <section className={styles.card}>
@@ -33,6 +36,11 @@ export function RenewalsOverview({ year, years, yearHref, open, summary, lastRem
       <h2>{year} renewals</h2>
       <span className={`${styles.pill} ${open ? styles.pillOk : styles.pillMute}`}>{open ? "Open" : "Not opened yet"}</span>
     </div>
+    <p className={styles.feeLine}>
+      <strong>{year} fees</strong>
+      {fees.map((fee) => <span key={fee.name}>{fee.name} {fee.amount ? <b>{fee.amount}</b> : <em className={styles.warnText}>no fee</em>}</span>)}
+      <Link className={styles.cardLink} href={feesHref} prefetch={false} scroll={false}>Fees and types</Link>
+    </p>
     {open
       ? <dl className={`${styles.stats} ${styles.cardGap}`}>
         <div><dt>Invited</dt><dd>{summary.invited}</dd></div>
@@ -42,11 +50,11 @@ export function RenewalsOverview({ year, years, yearHref, open, summary, lastRem
       : <p className={`${styles.panelNote} ${styles.cardGap}`}>Opening lets members renew from their account. It does not email anyone. Once it is open you can send yourself a test, then send each member who has not paid an email with their own renewal link{summary.toInvite ? ` (about ${plural(summary.toInvite, "member")})` : ""}. Members without an email address get a task in the Inbox instead.</p>}
     {open && queue && queue.waiting > 0
       ? <p className={`${styles.panelNote} ${styles.cardGap}`} role="status">{plural(queue.waiting, "email")} {queue.waiting === 1 ? "is" : "are"} waiting in the email queue. They go out a few at a time, within the daily limit. {clearEstimateLabel(queue.waiting, queue.perDay)}{queueHref ? <> <Link href={queueHref} prefetch={false}>Open the email queue</Link></> : null}</p> : null}
-    {blocked ? <p className={`form-message error ${styles.cardGap}`} role="alert">Set a {year} fee for {missingFees.join(", ")} first (see Membership types and fees below).</p> : null}
+    {blocked ? <p className={`form-message error ${styles.cardGap}`} role="alert">Set a {year} fee for {missingFees.join(", ")} first. <Link href={feesHref} prefetch={false} scroll={false}>Open fees and types</Link>.</p> : null}
     {!billingOn ? <p className={`${styles.panelNote} ${styles.cardGap}`}>Online renewals are switched off, so renewals cannot be opened.</p> : null}
     {open && summary.waitingWithoutEmail ? <p className={`${styles.panelNote} ${styles.cardGap}`}>{plural(summary.waitingWithoutEmail, "waiting member")} {summary.waitingWithoutEmail === 1 ? "has" : "have"} no email address, so {summary.waitingWithoutEmail === 1 ? "needs" : "need"} contacting another way.</p> : null}
     <div className={`${styles.actionRow} ${styles.cardGap}`}>
-      <p className={styles.panelNote}>{open ? `${lastReminderAt ? `Last reminder sent ${timestampDateLabel(lastReminderAt)}.` : "No reminder sent yet."} Reminders also go out by themselves on 1 December, 1 January, 1 February and 22 February, to invited members who are still active or in their grace period and have not paid.` : ""}</p>
+      <p className={styles.panelNote}>{open ? `${lastReminderAt ? `Last reminder sent ${timestampDateLabel(lastReminderAt)}.` : "No reminder sent yet."} Reminders are only sent when you choose Send reminder. Nothing is sent automatically.` : ""}</p>
       <div className={styles.buttonPair}>
         {open
           ? <>

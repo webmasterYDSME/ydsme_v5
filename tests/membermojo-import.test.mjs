@@ -138,3 +138,23 @@ test("invitations are sent by a background job that an administrator starts once
   assert.match(migration, /'\*\/5 \* \* \* \*'/);
   assert.match(migration, /interval '15 minutes'/);
 });
+
+test("the import archives people who are missing from the list, asks for a typed number when the clear-out is large, and protects officers", async () => {
+  const [membermojo, actions, form, migration] = await Promise.all([
+    read("lib/membermojo.ts"), read("lib/actions/member-imports.ts"), read("app/components/MemberMojoImportForm.tsx"),
+    read("supabase/migrations/202609210004_membermojo_import_archives_absent_members.sql"),
+  ]);
+  // A large archive needs the number typed back, checked on the server as well as shown in the form.
+  assert.match(membermojo, /ARCHIVE_CONFIRMATION_FROM = 10/);
+  assert.match(membermojo, /archiveNeedsTypedConfirmation\(archiveCount, register\) && typedArchiveCount\.trim\(\) !== String\(archiveCount\)/);
+  assert.match(actions, /archiveCount/);
+  assert.match(form, /name="archiveCount"/);
+  assert.match(form, /Will be archived/);
+  // Archive, never delete; administrators, committee logins, legal holds and suspended members are kept.
+  assert.doesNotMatch(migration, /delete from public\.members|anonymise_membership_member/);
+  assert.match(migration, /ur\.role <> 'member'/);
+  assert.match(migration, /public\.committees c where c\.user_id/);
+  assert.match(migration, /'keep_hold'/);
+  assert.match(migration, /'keep_state'/);
+  assert.match(migration, /archive_reason = 'membermojo_import'/);
+});

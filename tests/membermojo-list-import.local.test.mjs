@@ -146,3 +146,111 @@ end
 $test$;
 `);
 });
+
+test("MemberMojo list import: members missing from the list are archived, protected people are not, and returners are restored", () => {
+  runRolledBack("MemberMojo list import archive test", String.raw`
+do $test$
+declare
+  adult uuid; tag text := substr(md5(random()::text), 1, 8);
+  officer uuid := gen_random_uuid(); gone_login uuid := gen_random_uuid(); lapsed_login uuid := gen_random_uuid(); boss_login uuid := gen_random_uuid(); back_login uuid := gen_random_uuid();
+  gone uuid; lapsed_login_member uuid; gone_bare uuid; boss uuid; suspended uuid; twin uuid; returner uuid; kept_archived uuid; term_price uuid;
+  rows jsonb; r jsonb; m record; u record; yr integer := extract(year from current_date)::integer;
+begin
+  select id into adult from public.membership_plans where slug='adult';
+  select id into term_price from public.membership_plan_prices where plan_id=adult and active order by membership_year desc, version desc limit 1;
+  insert into auth.users(id,aud,role,email,email_confirmed_at,raw_user_meta_data,created_at,updated_at) values
+   (officer,'authenticated','authenticated','arch-officer-'||tag||'@example.invalid',now(),'{"full_name":"Archive Officer"}',now(),now()),
+   (gone_login,'authenticated','authenticated','gone-'||tag||'@example.test',now(),'{"full_name":"Gone Person"}',now(),now()),
+   (lapsed_login,'authenticated','authenticated','lapsed-login-'||tag||'@example.test',now(),'{"full_name":"Lapsed Login"}',now(),now()),
+   (boss_login,'authenticated','authenticated','boss-'||tag||'@example.test',now(),'{"full_name":"Boss Person"}',now(),now()),
+   (back_login,'authenticated','authenticated','back-'||tag||'@example.test',now(),'{"full_name":"Returner Person"}',now(),now());
+  update public.user_roles set role='administrator' where user_id in (officer, boss_login);
+
+  insert into public.members(auth_user_id,full_name,contact_email,current_plan_id,effective_state,source)
+   values(gone_login,'Gone Person','gone-'||tag||'@example.test',adult,'active','officer') returning id into gone;
+  insert into public.members(auth_user_id,full_name,contact_email,current_plan_id,effective_state,source)
+   values(lapsed_login,'Lapsed Login','lapsed-login-'||tag||'@example.test',adult,'lapsed','officer') returning id into lapsed_login_member;
+  update public.users set membership_status='lapsed' where id=lapsed_login;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source,portal_invitation_status)
+   values('Gone Bare','bare-'||tag||'@example.test',adult,'lapsed','membermojo_cutover','eligible') returning id into gone_bare;
+  insert into public.members(auth_user_id,full_name,contact_email,current_plan_id,effective_state,source)
+   values(boss_login,'Boss Person','boss-'||tag||'@example.test',adult,'active','officer') returning id into boss;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
+   values('Suspended Person','susp-'||tag||'@example.test',adult,'suspended','officer') returning id into suspended;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
+   values('Twin Person','old-twin-'||tag||'@example.test',adult,'active','officer') returning id into twin;
+  insert into public.members(auth_user_id,full_name,contact_email,current_plan_id,effective_state,source,archived_at,archive_reason)
+   values(back_login,'Returner Person','back-'||tag||'@example.test',adult,'archived','officer',now(),'membermojo_import') returning id into returner;
+  update public.users set membership_status='archived', archived_at=now(), retention_until=now()+interval '300 days' where id=back_login;
+  insert into public.members(full_name,contact_email,current_plan_id,effective_state,source)
+   values('Officer Archived','off-arch-'||tag||'@example.test',adult,'archived','officer') returning id into kept_archived;
+
+  rows := jsonb_build_array(
+    jsonb_build_object('full_name','Twin Person','email','new-twin-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','Returner Person','email','back-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','Lapsed Login','email','lapsed-login-'||tag||'@example.test','membership_type','Adult member'),
+    jsonb_build_object('full_name','Officer Archived','email','off-arch-'||tag||'@example.test','membership_type','Adult member'));
+
+  -- What the check says, per person.
+  for m in select * from public.membermojo_import_removals(rows) where member_id in (gone, gone_bare, boss, suspended, twin, returner, kept_archived) loop
+    if m.member_id in (gone, gone_bare) and m.decision <> 'archive' then raise exception 'expected archive for %: %', m.full_name, m.decision; end if;
+    if m.member_id = boss and m.decision <> 'keep_role' then raise exception 'an administrator login was not protected: %', m.decision; end if;
+    if m.member_id = suspended and m.decision <> 'keep_state' then raise exception 'suspended not kept: %', m.decision; end if;
+    if m.member_id = twin and m.decision <> 'keep_name' then raise exception 'same name not kept: %', m.decision; end if;
+    if m.member_id in (returner, kept_archived) then raise exception 'an archived member should not be listed'; end if;
+  end loop;
+  if (select count(*) from public.membermojo_import_removals(rows) where member_id in (gone, gone_bare, boss, suspended, twin)) <> 5 then
+    raise exception 'expected five listed people';
+  end if;
+  if (select action from public.membermojo_import_plan(rows, yr) where full_name = 'Returner Person') <> 'renew' then
+    raise exception 'an import-archived member back in the file should be restored';
+  end if;
+  if (select action from public.membermojo_import_plan(rows, yr) where full_name = 'Officer Archived') <> 'skip' then
+    raise exception 'a member archived by an officer must be left alone';
+  end if;
+
+  r := public.apply_membermojo_import(officer, rows, yr, repeat('b',64));
+  if (r->>'restored')::int <> 1 then raise exception 'expected one restored: %', r; end if;
+  if (r->>'archived')::int < 2 then raise exception 'expected at least two archived: %', r; end if;
+
+  select * into m from public.members where id = gone;
+  if m.effective_state <> 'archived' or m.archive_reason <> 'membermojo_import' or m.archived_at is null then raise exception 'gone not archived: %', to_jsonb(m); end if;
+  select * into u from public.users where id = gone_login;
+  if u.membership_status <> 'archived' or u.archived_at is null or u.retention_until is null then raise exception 'gone login not archived: %', to_jsonb(u); end if;
+  select * into m from public.members where id = gone_bare;
+  if m.effective_state <> 'archived' or m.portal_invitation_status <> 'not_requested' then raise exception 'bare member not archived or still invitable: %', to_jsonb(m); end if;
+  if exists (select 1 from public.member_invitation_pending where id = gone_bare) then raise exception 'archived member still waiting for an invitation'; end if;
+
+  if (select effective_state from public.members where id = boss) <> 'active' or (select membership_status from public.users where id = boss_login) <> 'active' then
+    raise exception 'an administrator login was archived';
+  end if;
+  -- A lapsed member with a website login is active again with their login, not put straight back to lapsed.
+  if (select effective_state from public.members where id = lapsed_login_member) <> 'active'
+    or (select membership_status from public.users where id = lapsed_login) <> 'active' then
+    raise exception 'a renewed lapsed member with a login is not active';
+  end if;
+  if (select effective_state from public.members where id = suspended) <> 'suspended' then raise exception 'suspended member changed'; end if;
+  if (select effective_state from public.members where id = twin) <> 'active' then raise exception 'same-name member archived'; end if;
+  if (select effective_state from public.members where id = kept_archived) <> 'archived' then raise exception 'officer-archived member was restored'; end if;
+
+  select * into m from public.members where id = returner;
+  if m.effective_state <> 'active' or m.archive_reason is not null or m.archived_at is not null then raise exception 'returner not restored: %', to_jsonb(m); end if;
+  select * into u from public.users where id = back_login;
+  if u.membership_status <> 'active' or u.archived_at is not null or u.retention_until is not null then raise exception 'returner login not restored: %', to_jsonb(u); end if;
+  if not exists (select 1 from public.membership_terms where member_id = returner and membership_year = yr and status = 'paid') then raise exception 'returner has no paid term'; end if;
+
+  if (select count(*) from public.audit_logs where action = 'membermojo.member-archived' and entity_id in (gone::text, gone_bare::text)) <> 2 then
+    raise exception 'each archive should be audited';
+  end if;
+  if exists (select 1 from public.membership_notifications where member_id in (gone, gone_bare, returner) and email_status = 'queued') then
+    raise exception 'the import queued an email';
+  end if;
+
+  -- An officer can still restore an archived login the usual way.
+  update public.users set membership_status = 'active', archived_at = null, archived_by = null, retention_until = null where id = gone_login;
+  select * into m from public.members where id = gone;
+  if m.effective_state = 'archived' or m.archive_reason is not null then raise exception 'restoring the login did not restore the member: %', to_jsonb(m); end if;
+end
+$test$;
+`);
+});

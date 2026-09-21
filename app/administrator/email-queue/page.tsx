@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import { QueueToolbar } from "./QueueToolbar";
 import styles from "./email-queue.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,7 @@ export default async function EmailQueuePage({ searchParams }: { searchParams: P
         <p className="eyebrow dark">Administrator only</p>
         <h1>Email queue</h1>
         <p>Every email the club sends goes through here. Tickets, sign-up codes and other messages someone is waiting for go out straight away. Bulk mail, such as renewal invitations, waits its turn so the club stays inside its daily sending limit.</p>
+        <p><HandbookHelp chapter="emails" section="queue">How the queue works, in the handbook</HandbookHelp></p>
       </div>
       <Mail aria-hidden="true"/>
     </header>

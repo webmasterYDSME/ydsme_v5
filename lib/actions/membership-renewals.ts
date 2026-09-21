@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireCapability } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase/admin";
-import { membershipToken, membershipTokenHash, createMemberRenewalCheckout, ensureMembershipPlanPrice } from "@/lib/membership";
+import { membershipToken, membershipTokenHash, createMemberRenewalCheckout, ensureMembershipPlanPrice, membershipBillingYear } from "@/lib/membership";
 import { membershipBillingEnabled } from "@/lib/features";
 import { writeAudit } from "@/lib/audit";
 
@@ -109,6 +109,34 @@ export async function sendRenewalReminders(form: FormData) {
   }
   revalidatePath("/admin/memberships", "layout");
   redirect(`${RENEWALS}?year=${year}&notice=${count > 0 ? "renewal-reminders-sent" : "renewal-reminders-none"}`);
+}
+/**
+ * Emails a lapsed member a new personal renewal link, valid for 30 days. A lapsed member cannot sign in and
+ * their old link stopped working when the grace period ended, so this is how an officer lets them come back.
+ * The database checks everything (the officer's permission, the member is lapsed and has an email address,
+ * renewals are open for the year being paid for) and records the send in the audit log.
+ */
+export async function sendNewRenewalLink(form: FormData) {
+  const memberId = z.uuid().parse(form.get("member_id"));
+  const year = membershipBillingYear();
+  const back = form.get("return_to") === "renewals" ? `${RENEWALS}?year=${year}&` : `/admin/memberships/members/${memberId}?`;
+  if (!membershipBillingEnabled()) redirect(`${back}error=renewals-unavailable`);
+  const { user } = await requireCapability("memberships.manage");
+  const admin = createServiceClient();
+  const token = membershipToken();
+  const { error } = await admin.rpc("reissue_membership_renewal_link", {
+    p_member_id: memberId, p_year: year, p_actor: user.id, p_token: token, p_token_hash: membershipTokenHash(token),
+  });
+  if (error) {
+    const reason = error.message.includes("membership_link_campaign_closed") ? "renewal-link-not-open"
+      : error.message.includes("membership_link_no_email") ? "renewal-link-no-email"
+      : error.message.includes("membership_link_member_unavailable") || error.message.includes("membership_link_year_invalid") ? "renewal-link-unavailable"
+      : "renewal-link-failed";
+    redirect(`${back}error=${reason}`);
+  }
+  await admin.rpc("request_membership_notification_delivery");
+  revalidatePath("/admin/memberships", "layout");
+  redirect(`${back}notice=renewal-link-sent`);
 }
 export async function payRenewalInvitation(form: FormData) {
   if (!membershipBillingEnabled()) redirect("/membership");

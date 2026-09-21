@@ -6,6 +6,7 @@ import { MembershipFlash } from "../_components/MembershipFlash";
 import { ReportsPanel } from "../_components/ReportsPanel";
 import { RetentionPanel } from "../_components/RetentionPanel";
 import styles from "../memberships.module.css";
+import { HandbookHelp } from "@/app/components/HandbookHelp";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function MembershipSetup({ searchParams }: { searchParams: 
 
   return <>
     <MembershipFlash/>
-    <p className={styles.tabNote}>The treasurer’s payment details, bookkeeping reports and removing old member records. Membership types and fees are on the Renewals tab.</p>
+    <p className={styles.tabNote}>The treasurer’s payment details, bookkeeping reports and removing old member records. Membership types and fees are on the Renewals tab. <HandbookHelp chapter="setup-and-reports">Setup in the handbook</HandbookHelp></p>
     <div className={styles.setupLayout}>
       <nav className={styles.subnav} aria-label="Setup sections">
         {tabs.map((item) => <Link key={item.key} href={item.key === "payment" ? "/admin/memberships/setup" : `/admin/memberships/setup?tab=${item.key}`} prefetch={false} aria-current={item.key === tab ? "page" : undefined}>{item.label}</Link>)}

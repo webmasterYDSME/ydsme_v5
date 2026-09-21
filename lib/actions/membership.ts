@@ -30,6 +30,7 @@ import {
   eligibleMembershipPlans,
   membershipBillingYear,
   proratedMembershipFee,
+  returningMemberFee,
 } from "@/lib/membership-rules";
 import {
   createMemberRenewalCheckout,
@@ -977,7 +978,9 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
     && ["officer", "application"].includes(pendingInitialTerm.source);
   const amount = completesInitialTerm ? pendingInitialTerm.amount_due_pence
     : transitionDate && (transitionDate.getUTCMonth() !== 0 || transitionDate.getUTCDate() !== 1)
-      ? proratedMembershipFee(price.amount_pence, transitionDate) : price.amount_pence;
+      ? proratedMembershipFee(price.amount_pence, transitionDate)
+      // A lapsed member coming back pays the part-year fee for the month the money was received.
+      : returningMemberFee({ effectiveState: member.effective_state, annualPence: price.amount_pence, membershipYear: year, onDate: new Date(`${receivedOn}T12:00:00Z`) });
   const received = assessAmountReceived(formData.get("amount_received"), formData.get("amount_note"), amount);
   if (received.kind === "invalid") redirect(`${back}&error=amount-received-invalid`);
   if (received.kind === "over-needs-note") redirect(`${back}&error=amount-difference-note`);
@@ -1529,7 +1532,7 @@ export async function updateMembershipPlan(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships/renewals?notice=plan-updated");
+  redirect("/admin/memberships/renewals?notice=plan-updated&panel=fees");
 }
 
 export async function configureMembershipPrice(formData: FormData) {
@@ -1630,6 +1633,6 @@ export async function configureMembershipPrice(formData: FormData) {
   updateTag(PUBLIC_MEMBERSHIP_PLANS_CACHE_TAG);
   revalidatePath("/membership");
   revalidatePath("/admin/memberships");
-  redirect("/admin/memberships/renewals?notice=price-saved");
+  redirect("/admin/memberships/renewals?notice=price-saved&panel=fees");
 }
 

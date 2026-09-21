@@ -85,6 +85,10 @@
 .registerMeta > span { font-size: 15px; }
 .register > .registerRow:not(.registerHead):hover { background: #f8f4e8; }
 .rowAction { justify-self: end; display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 12px 0 14px; border: 1px solid rgba(16,24,20,.22); border-radius: 6px; color: var(--ink, #101814); font-size: 13.5px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: background .15s, border-color .15s, color .15s; }
+.rowActions { justify-self: end; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.rowActionButton { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid rgba(16,24,20,.22); border-radius: 6px; background: transparent; color: var(--ink, #101814); font: inherit; font-size: 13.5px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+.rowActionButton:hover, .rowActionButton:focus-visible { background: #14302a; border-color: #14302a; color: #fff; }
+.rowActionButton:disabled { opacity: .6; cursor: default; }
 .rowAction svg { width: 15px; height: 15px; transition: transform .15s; }
 .rowAction:hover, .rowAction:focus-visible { background: #14302a; border-color: #14302a; color: #fff; }
 .rowAction:hover svg { transform: translateX(2px); }
@@ -164,6 +168,7 @@
   .registerRow > :first-child { grid-column: 1; grid-row: 1; }
   .registerMeta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; grid-column: 1 / -1; grid-row: 2; font-size: 14px; }
   .registerMeta > span { font-size: inherit; }
+  .registerRow > .rowActions { grid-column: 2; grid-row: 1; align-self: start; }
   .registerRow > .rowAction { grid-column: 2; grid-row: 1; align-self: start; min-height: 40px; }
 }
 @media (max-width: 720px) {
@@ -272,3 +277,18 @@
 .toastError { background: #7d2c1e; border-left: 5px solid #f0a08c; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* Membership types and fees panel, and the fee line on the Renewals card */
+.feeList { display: grid; gap: 12px; margin-top: 14px; }
+.feePlan { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid rgba(16,24,20,.14); border-radius: 8px; background: #f7f4ec; }
+.feePlanHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; }
+.feePlanHead strong { display: block; font: 500 22px/1.15 var(--font-display); }
+.feePlanHead small { display: block; margin-top: 3px; color: #56625b; font-size: 13px; }
+.feeYears { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0; }
+.feeYears > div { display: flex; align-items: baseline; gap: 8px; }
+.feeYears dt { color: #56625b; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.feeYears dd { margin: 0; font-size: 17px; font-weight: 700; }
+.feeLine { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; margin: 14px 0 0; padding: 10px 14px; border-radius: 6px; background: #f7f4ec; font-size: 14px; }
+.feeLine > strong { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #56625b; }
+.feeLine > span b { font-weight: 700; }
+.feeLine .cardLink { margin-left: auto; }

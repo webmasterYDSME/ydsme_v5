@@ -27,8 +27,8 @@ const INVITATIONS_PER_RUN = 10;
 /**
  * Website invitations for people added by the MemberMojo list import. Runs every five minutes while an
  * administrator has started the run. It works in every membership mode. Supabase Auth creates the login and
- * sends the secure link, so this cannot use the email queue, and it must stay under Supabase Auth's hourly
- * email limit: when that limit is reached the run waits 15 minutes and carries on by itself.
+ * sends the secure link, so this cannot use the email queue, but each invitation still takes a slot from the
+ * daily email budget, and it must stay under Supabase Auth's hourly email limit: when that limit is reached the run waits 15 minutes and carries on by itself.
  */
 async function sendMemberInvitationBatch(admin: SupabaseClient) {
   const { data: claimed, error: claimError } = await admin.rpc("claim_member_invitation_run");
@@ -63,17 +63,26 @@ async function sendMemberInvitationBatch(admin: SupabaseClient) {
         else { await record("linked", profiles[0].id as string, null); linked += 1; }
         continue;
       }
+      // The invitation email counts against the same daily allowance as the club's other mail. If the
+      // allowance is used up (or the provider has asked us to wait), stop and try again later.
+      const { data: slot, error: slotError } = await admin.rpc("reserve_email_slot", { p_class: "bulk", p_source: "invitation", p_notification_id: null });
+      if (!slotError && (slot === null || slot === undefined)) { rateLimited = true; break; }
+      const settleSlot = async (wasSent: boolean) => {
+        if (!slotError && slot !== null && slot !== undefined) await admin.rpc("release_email_slot", { p_ledger_id: slot, p_sent: wasSent });
+      };
       const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
         data: { full_name: person.full_name, membership_active: true, invite_context: "membermojo", membership_year: year },
         redirectTo: `${siteUrl}/auth/invite?next=/account`,
       });
       if (inviteError || !invitation.user) {
+        await settleSlot(false);
         const code = (inviteError as { code?: string } | null)?.code ?? "";
         if (inviteError?.status === 429 || code.includes("rate_limit")) { rateLimited = true; break; }
         await record("failed", null, "The invitation could not be sent.");
         failed += 1;
         continue;
       }
+      await settleSlot(true);
       await record("sent", invitation.user.id, null);
       sent += 1;
     }

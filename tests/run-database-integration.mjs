@@ -41,6 +41,7 @@ try {
     "tests/membership-payment-settings.local.test.mjs",
     "tests/membership-review-fixes.local.test.mjs",
     "tests/membership-retention-and-reminders.local.test.mjs",
+    "tests/membership-returning-member.local.test.mjs",
     "tests/public-project-featuring.local.test.mjs",
   ];
   run(process.execPath, ["--experimental-strip-types", "--test", ...localTests]);

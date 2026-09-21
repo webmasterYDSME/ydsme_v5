@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bell, BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
+  Bell, BookMarked, BookOpen, CalendarDays, ChevronsUpDown, Hammer, HandHeart, History, IdCard, KeyRound,
   LayoutDashboard, LogOut, Mail, Megaphone, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings,
   TicketCheck, UserRound, Wrench, X, type LucideIcon,
 } from "lucide-react";
@@ -33,6 +33,7 @@ const icons: Record<PortalIcon, LucideIcon> = {
   settings: Settings,
   audit: History,
   email: Mail,
+  handbook: BookMarked,
 };
 
 type PortalNavigationProps = {

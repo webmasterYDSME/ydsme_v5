@@ -53,7 +53,8 @@ begin
  if (select effective_state from public.members where id=mem2)<>'suspended' then raise exception 'denied membership still active'; end if;
  if not exists(select 1 from public.membership_notifications where member_id=mem2 and kind='membership.manual-refund-officer') then raise exception 'manual refund follow-up missing'; end if;
  if not exists(select 1 from public.membership_payments where term_id in(select id from public.membership_terms where member_id=mem2) and status='paid') then raise exception 'denial fabricated an automatic refund'; end if;
- insert into public.membership_renewal_campaigns(membership_year,opened_by) values(next_year,actor);
+ insert into public.membership_renewal_campaigns(membership_year,opened_by) values(next_year,actor)
+ on conflict (membership_year) do update set open=true;
  insert into public.members(full_name,contact_role,date_of_birth,current_plan_id,effective_state,source)
  values('Junior aging into Adult','self',make_date(next_year-18,1,1),(select id from public.membership_plans where slug='junior'),'active','website') returning id into age_member;
  if not public.queue_membership_renewal_invitation(age_member,next_year,actor,claim,repeat('c',64)) then raise exception 'renewal invitation not queued'; end if;

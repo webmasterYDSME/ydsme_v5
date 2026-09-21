@@ -5,7 +5,7 @@ export type PortalRole = "member" | "committee" | "administrator";
 
 export type PortalIcon =
   | "overview" | "workbench" | "library" | "memberships" | "accounts" | "donations"
-  | "announcements" | "events" | "bookings" | "workshops" | "settings" | "audit" | "email";
+  | "announcements" | "events" | "bookings" | "workshops" | "settings" | "audit" | "email" | "handbook";
 
 export type PortalNavItem = {
   key: string;
@@ -74,6 +74,8 @@ export function buildPortalNav(input: PortalNavInput): PortalNavSection[] {
     if (input.membershipOfficer || input.administrator) {
       items.push({ key: "donations", href: "/admin/donations", label: "Donations", icon: "donations" });
     }
+    // The handbook is for whoever looks after the register, whichever system currently runs membership.
+    if (input.membershipOfficer) items.push({ key: "handbook", href: "/admin/handbook", label: "Officer handbook", icon: "handbook" });
     sections.push({ id: "membership", label: "Membership and money", items });
   }
 

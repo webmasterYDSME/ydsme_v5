@@ -91,6 +91,15 @@ begin
   if n < 4 then raise exception 'stopping bulk mail changed % emails', n; end if;
   if exists (select 1 from public.membership_notifications where id = any(ids) and delivery_class='immediate' and email_status='cancelled') then raise exception 'immediate mail was stopped with the bulk mail'; end if;
 
+  -- A burst of immediate mail makes one request to the delivery function, not one per email.
+  update public.email_queue_settings set last_dispatch_at = null where id;
+  select count(*) into n from net.http_request_queue;
+  for k in select unnest(array['membership.activated','membership.payment-received','membership.application-received']) loop
+    insert into public.membership_notifications(member_id,recipient_email,recipient_user_id,kind,title,body,portal_visible,deduplication_key)
+     values(m,'queue-'||tag||'@example.test',u,k,'Burst '||k,'Body',false,'queue-burst-'||tag||'-'||gen_random_uuid());
+  end loop;
+  if (select count(*) from net.http_request_queue) - n <> 1 then raise exception 'a burst of immediate mail made % delivery requests', (select count(*) from net.http_request_queue) - n; end if;
+
   -- Only the service role may use any of this.
   if has_function_privilege('authenticated','public.claim_membership_notifications(integer)','execute')
     or has_function_privilege('authenticated','public.reserve_email_slot(text,text,uuid)','execute')

@@ -65,6 +65,17 @@ export function proratedMembershipFee(annualPence: number, onDate = new Date()) 
   return month === 12 ? annualPence : Math.round(annualPence * (13 - month) / 12);
 }
 
+/**
+ * The fee a member pays to renew for `membershipYear` on `onDate`. A lapsed member coming back during the
+ * calendar year they are paying for pays the part-year fee a new member would; everyone else (still in grace,
+ * or paying for next year) pays the full annual fee. Mirrors `membership_returning_member_fee_pence`.
+ */
+export function returningMemberFee(input: { effectiveState: string | null | undefined; annualPence: number; membershipYear: number; onDate?: Date }) {
+  const onDate = input.onDate ?? new Date();
+  return input.effectiveState === "lapsed" && input.membershipYear === londonDateParts(onDate).year
+    ? proratedMembershipFee(input.annualPence, onDate) : input.annualPence;
+}
+
 export function membershipRenewalAt(membershipYear: number) {
   return new Date(Date.UTC(membershipYear + 1, 0, 1, 0, 0, 0));
 }
@@ -127,8 +138,11 @@ export function buildRenewalChoices(input: {
   plans?: RenewalPlan[];
   currentYear: number;
   formatMoney: (pence: number) => string;
+  /** The day the fee is worked out for (a lapsed member pays the part-year fee for that month). Defaults to now. */
+  today?: Date;
 }): RenewalChoice[] {
   const { members, prices, transitions, terms, plans, currentYear, formatMoney } = input;
+  const today = input.today ?? new Date();
   return renewableMembers(members).flatMap((member) => [currentYear, currentYear + 1].map((membershipYear): RenewalChoice => {
     const honoraryRows = member.honorary_memberships;
     const honoraryForYear = honoraryRows?.find((item) => ["active", "scheduled"].includes(item.status)
@@ -177,6 +191,11 @@ export function buildRenewalChoices(input: {
         note: `Reduced from the ${formatMoney(price.amount_pence)} annual fee from the date honorary membership ends.`,
       };
     }
+    const returningFee = returningMemberFee({ effectiveState: member.effective_state, annualPence: price.amount_pence, membershipYear, onDate: today });
+    if (returningFee !== price.amount_pence) return {
+      member_id: member.id, membership_year: membershipYear, amount_pence: returningFee,
+      note: `Part-year fee for a returning member, the same as a new member: reduced from the ${formatMoney(price.amount_pence)} annual fee for the month the payment is received.`,
+    };
     return {
       member_id: member.id, membership_year: membershipYear, amount_pence: price.amount_pence,
       note: `Full annual fee for ${membershipYear}.`,
