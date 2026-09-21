@@ -28,7 +28,13 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
-  icons: { icon: { url: "/favicon.png", type: "image/png", sizes: "64x64" } },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "16x16 32x32 48x48" },
+      { url: "/favicon.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+  },
   openGraph: {
     type: "website",
     locale: "en_GB",
