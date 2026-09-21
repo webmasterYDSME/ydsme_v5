@@ -114,7 +114,7 @@ function sources(admin: Admin) {
   };
 }
 
-function configuration() {
+export function configuration() {
   const local = /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i;
   const localEmail = local.test(process.env.NEXT_PUBLIC_SITE_URL || "")
     && local.test(process.env.NEXT_PUBLIC_SUPABASE_URL || "")

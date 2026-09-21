@@ -227,7 +227,7 @@ export default async function AdminSection({ params, searchParams }: { params: P
   }
 
   const search = safeSearchTerm(query.q);
-  const membershipEnabled = membershipAdministrationEnabled();
+  const membershipEnabled = await membershipAdministrationEnabled();
   const administrator = session.role === "administrator";
   const canManageMemberStatus = administrator || session.membershipOfficer;
   const memberStatuses = membershipEnabled

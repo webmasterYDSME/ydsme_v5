@@ -24,7 +24,7 @@ const belongsToSection = (key?: string) => Boolean(key && sectionPrefixes.some((
 export default async function Account({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string; tab?: string }> }) {
   const [{ user, role }, query] = await Promise.all([requireUser(), searchParams]);
   const supabase = await createClient();
-  const membershipEnabled = membershipBillingEnabled();
+  const membershipEnabled = await membershipBillingEnabled();
 
   const [{ data: profile, error: profileError }, membership, newsletter, details, campaign] = await Promise.all([
     supabase.from("users").select("title,full_name,email,contact_number").eq("id", user.id).single(),

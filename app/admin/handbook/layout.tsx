@@ -16,7 +16,7 @@ export default async function HandbookLayout({ children }: { children: ReactNode
   const session = await requireUser();
   // Administrators count as membership officers. Other committee members need the responsibility.
   if (!session.membershipOfficer) redirect("/dashboard?notice=not-authorised");
-  const websiteMode = membershipMode() === "website";
+  const websiteMode = (await membershipMode()) === "website";
   const chapters: NavChapter[] = handbookChapters.map((chapter) => ({
     slug: chapter.slug,
     title: chapter.title,

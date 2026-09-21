@@ -27,7 +27,7 @@ export const startHere: HandbookChapter = {
           ["Screens you use", "Update members from MemberMojo (administrators), Website accounts, Email queue.", "Memberships (Inbox, Members, Renewals, Setup), plus the same administrator pages."],
           ["Emails to members", "The website sends no membership emails, apart from the invitation to use the website.", "The website sends the membership emails described in [Emails members receive](/admin/handbook/emails)."],
         ] },
-        { type: "p", text: "Chapters that only apply once the website runs membership are marked **Website mode** on the contents page. The website administrator changes the mode; if you think it is set wrongly, ask them." },
+        { type: "p", text: "Chapters that only apply once the website runs membership are marked **Website mode** on the contents page. An administrator changes the mode at **Membership system** (Administration), and it takes effect straight away. If you think it is set wrongly, ask them. See [Switching between MemberMojo and the website](/admin/handbook/switching-systems)." },
       ],
     },
     {
@@ -50,7 +50,7 @@ export const startHere: HandbookChapter = {
       blocks: [
         { type: "table", head: ["Person", "Can do"], rows: [
           ["Membership officer", "Everything in the Memberships workspace: add members, record and check payments, run renewals, change fees, make people honorary, send new renewal links, mark tasks done, and download reports. A committee member becomes a membership officer when an administrator gives them that responsibility."],
-          ["Administrator", "Everything a membership officer can, and also: import the MemberMojo list, see and manage the email queue, switch automatic removal of old records on or off, restore archived accounts, permanently delete an archived account, and change site settings."],
+          ["Administrator", "Everything a membership officer can, and also: import the MemberMojo list, switch between MemberMojo and the website, see and manage the email queue, switch automatic removal of old records on or off, restore archived accounts, permanently delete an archived account, and change site settings."],
           ["Committee member", "Can see the register of website accounts but not the Memberships workspace, unless they have been made a membership officer."],
           ["Member", "Sees and manages only their own membership, details and payments."],
         ] },

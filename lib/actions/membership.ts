@@ -86,7 +86,7 @@ const applicationSchema = z.object({
 });
 
 export async function submitMembershipApplication(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const fields = Object.fromEntries(formData);
   const parsed = applicationSchema.safeParse({ ...fields, date_of_birth: normalizeApplicationDate(fields.date_of_birth) });
   if (!parsed.success) redirect("/membership/apply?application=invalid");
@@ -253,7 +253,7 @@ export async function unsubscribeMembershipNewsletter(formData: FormData) {
 }
 
 export async function confirmGuardianMembershipConsent(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = z.string().min(20).max(200).parse(formData.get("token"));
   const admin = createServiceClient();
   const { data: application } = await admin.from("membership_applications")
@@ -289,7 +289,7 @@ export async function confirmGuardianMembershipConsent(formData: FormData) {
 }
 
 export async function continueApplicationCheckout(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = z.string().min(20).max(200).parse(formData.get("token"));
   const admin = createServiceClient();
   const { data } = await admin.from("membership_applications").select("id")
@@ -312,7 +312,7 @@ export async function continueApplicationCheckout(formData: FormData) {
 }
 
 export async function resendMembershipVerification(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase()).safeParse(formData.get("contact_email"));
   if (!email.success) redirect("/membership/apply?application=verification-resent");
   if (!await verifyTurnstile(String(formData.get("captchaToken") || ""))) {
@@ -825,7 +825,7 @@ export async function revokeHonoraryMembership(formData: FormData) {
 }
 
 export async function toggleMembershipAutoRenew(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const { user } = await requireUser();
   const enable = formData.get("enable") === "true";
   const admin = createServiceClient();
@@ -875,13 +875,13 @@ export async function toggleMembershipAutoRenew(formData: FormData) {
 }
 
 export async function openMembershipBillingPortal() {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const { user } = await requireUser();
   redirect(await createMembershipPortal(user.id));
 }
 
 export async function startMembershipRenewalCheckout(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const { user } = await requireUser();
   const autoRenew = formData.get("auto_renew") === "on";
   let checkoutUrl: string;
@@ -894,7 +894,7 @@ export async function startMembershipRenewalCheckout(formData: FormData) {
 }
 
 export async function requestStudentMembership() {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   await requireUser();
   const year = new Date().getUTCFullYear() + 1;
   const supabase = await createServerClient();
@@ -1017,7 +1017,7 @@ export async function confirmExistingMemberOfflineRenewal(formData: FormData) {
 }
 
 export async function markMembershipNotificationRead(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   await requireUser();
   const notificationId = idSchema.parse(formData.get("notification_id"));
   await (await createServerClient()).rpc("mark_own_membership_notification_read", {
@@ -1205,7 +1205,7 @@ export async function requestMemberContactChange(formData: FormData) {
 }
 
 export async function requestOwnMembershipContactChange(formData: FormData) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const { user } = await requireUser();
   const email = z.email().max(254).parse(String(formData.get("contact_email") || "").trim().toLowerCase());
   const role = z.enum(["self", "shared_household"]).parse(formData.get("contact_role"));
@@ -1252,7 +1252,7 @@ export async function requestOwnMembershipContactChange(formData: FormData) {
 }
 
 export async function confirmMembershipContactChange(formData: FormData) {
-  if (!membershipRecoveryEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipRecoveryEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = z.string().min(20).max(200).parse(formData.get("token"));
   const admin = createServiceClient();
   const { data: request } = await admin.from("membership_contact_change_requests")
@@ -1465,7 +1465,7 @@ export async function correctMemberEligibility(formData: FormData) {
 }
 
 export async function saveMembershipPaymentSettings(formData: FormData) {
-  if (!membershipAdministrationEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipAdministrationEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const { user } = await requireCapability("memberships.manage");
   const parsed = z.object({
     treasurer_name: z.string().trim().min(2).max(120),

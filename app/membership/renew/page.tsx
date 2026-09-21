@@ -26,7 +26,7 @@ function Card({ icon, title, children, done }: { icon: ReactNode; title: string;
 }
 
 export default async function Renewal({ searchParams }: { searchParams: Promise<{ token?: string; error?: string }> }) {
-  if (!membershipBillingEnabled()) redirect("/membership");
+  if (!(await membershipBillingEnabled())) redirect("/membership");
   const query = await searchParams;
   const token = query.token || "";
   if (token.length < 20 || token.length > 200) redirect("/membership");

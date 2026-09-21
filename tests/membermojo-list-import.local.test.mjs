@@ -3,10 +3,13 @@ import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { readLocalSupabaseEnvironment } from "./local-supabase.mjs";
 
-/** Runs a block of SQL inside a transaction that is always rolled back, so nothing is left in the local database. */
+/**
+ * Runs a block of SQL inside a transaction that is always rolled back, so nothing is left in the local database.
+ * Archiving only happens while MemberMojo runs membership, so every block starts in that mode.
+ */
 function runRolledBack(purpose, body) {
   readLocalSupabaseEnvironment(purpose);
-  const sql = `begin;\n${body}\nrollback;`;
+  const sql = `begin;\nupdate public.membership_mode_settings set mode = 'membermojo', website_since = null where id;\n${body}\nrollback;`;
   const result = spawnSync("docker", ["exec", "-i", "supabase_db_ydsme_v5", "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"], { input: sql, encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
 }

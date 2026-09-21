@@ -21,7 +21,7 @@ export default async function HandbookHome({ searchParams }: { searchParams: Pro
   const query = await searchParams;
   const raw = Array.isArray(query.q) ? query.q[0] : query.q;
   const q = (raw ?? "").trim().slice(0, 100);
-  const websiteMode = membershipMode() === "website";
+  const websiteMode = (await membershipMode()) === "website";
 
   if (q) {
     const hits = searchHandbook(handbookChapters, q);

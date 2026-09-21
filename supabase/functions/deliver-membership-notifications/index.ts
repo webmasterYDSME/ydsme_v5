@@ -51,8 +51,10 @@ export default {
     const replyTo = Deno.env.get("MEMBERSHIP_REPLY_TO");
     const siteUrl = (Deno.env.get("SITE_URL") || (isLocalSupabase ? "http://localhost:3010" : "")).replace(/\/$/, "");
     const mailpitUrl = (Deno.env.get("LOCAL_MAILPIT_URL") || (isLocalSupabase ? "http://inbucket:8025" : "")).replace(/\/$/, "");
-    const membershipMode = (Deno.env.get("MEMBERSHIP_MODE") || "membermojo").toLowerCase();
-    if (!["website", "pilot", "live", "drain"].includes(membershipMode)) {
+    // An administrator chooses who runs membership at Administrator > Membership system. If the setting
+    // cannot be read, MemberMojo is assumed and nothing is sent.
+    const { data: membershipMode, error: modeError } = await context.supabaseAdmin.rpc("membership_mode");
+    if (modeError || membershipMode !== "website") {
       return Response.json({ ok: true, result: { claimed: 0, sent: 0, failed: 0, paused: true } }, {
         headers: { "Cache-Control": "no-store" },
       });

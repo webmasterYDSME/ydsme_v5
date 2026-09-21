@@ -13,6 +13,7 @@ export const membermojoImport: HandbookChapter = {
       blocks: [
         { type: "p", text: "While MemberMojo runs membership, the list of active members you download from it is the definitive register. Importing it makes the website match: **everyone in the list is a member for the current year, and members who are not in the list are archived.** Only an administrator can use this page, at **Update members from MemberMojo** (Administration)." },
         { type: "note", tone: "info", text: "Importing does not email anyone. The invitation to use the website is a separate step that you start afterwards." },
+        { type: "note", tone: "warning", title: "Only while MemberMojo runs membership", text: "Once the website runs membership, an import still adds and renews the people in the file but **never archives anyone**, because members who join and pay on the website are not in MemberMojo. See [Switching between MemberMojo and the website](/admin/handbook/switching-systems)." },
       ],
     },
     {
@@ -58,6 +59,7 @@ export const membermojoImport: HandbookChapter = {
           "Suspended members, and members whose payment is being checked. They are left as they are.",
           "Anyone whose name is in the list, even if the email address is different.",
           "Anyone already archived.",
+          "Anyone who joined, renewed or was added on the website since it last took over from MemberMojo. This only matters if membership is handed back to MemberMojo. They are listed under **Not in the file, but kept**, as “Joined or paid on the website”.",
         ] },
         { type: "note", tone: "tip", text: "If an administrator or committee member is missing from MemberMojo, they stay on the register. Because nobody is exempt from lapsing, they will lapse in the usual way if they do not renew." },
       ],

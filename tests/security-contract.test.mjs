@@ -839,11 +839,12 @@ test("enables the complete membership platform with one flag and otherwise falls
     read("lib/actions/membership.ts"),
   ]);
   assert.match(features, /MEMBERMOJO_MEMBERSHIP_URL = "https:\/\/membermojo\.co\.uk\/york-model-engineers"/);
-  assert.match(features, /process\.env\.MEMBERSHIP_MODE/);
+  assert.doesNotMatch(features, /process\.env\.MEMBERSHIP_MODE/);
+  assert.match(features, /rpc\("membership_mode"\)/);
   assert.doesNotMatch(features, /process\.env\.ENABLE_MEMBERSHIP/);
   assert.match(features, /membershipBillingEnabled/);
   assert.match(features, /membershipAdministrationEnabled/);
-  assert.match(features, /membershipMode\(\) === "website"/);
+  assert.match(features, /\(await membershipMode\(\)\) === "website"/);
   assert.match(features, /membershipAdministrationEnabled = membershipPlatformEnabled/);
   assert.match(membershipPage, /href=\{enabled \? "\/membership\/apply" : MEMBERMOJO_MEMBERSHIP_URL\}/);
   assert.doesNotMatch(membershipPage, /id="membership-application"|submitMembershipApplication/);
@@ -851,14 +852,14 @@ test("enables the complete membership platform with one flag and otherwise falls
   assert.match(accountPage, /memberMojoLink=\{!membershipEnabled\}/);
   assert.match(accountPage, /href=\{MEMBERMOJO_MEMBERSHIP_URL\}/);
   for (const guardedRoute of [checkout, verification, guardian]) {
-    assert.match(guardedRoute, /if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+    assert.match(guardedRoute, /if \(!\(await membershipBillingEnabled\(\)\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
   }
   assert.match(switchAccount, /membershipBillingEnabled/);
   assert.match(settings, /query.tab === "membership"/);
   assert.match(settings, /tab: "payment"[\s\S]*?\/admin\/memberships\/setup/);
   assert.match(settings, /requireCapability\("settings.manage"\)/);
-  assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!membershipBillingEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
-  assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!membershipAdministrationEnabled\(\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+  assert.match(actions, /export async function confirmGuardianMembershipConsent[\s\S]*?if \(!\(await membershipBillingEnabled\(\)\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
+  assert.match(actions, /export async function saveMembershipPaymentSettings[\s\S]*?if \(!\(await membershipAdministrationEnabled\(\)\)\) redirect\(MEMBERMOJO_MEMBERSHIP_URL\)/);
 });
 
 test("keeps membership application and callback states on the dedicated application page", async () => {

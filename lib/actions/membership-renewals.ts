@@ -16,7 +16,7 @@ const RENEWALS = "/admin/memberships/renewals";
  * (sendRenewalInvitations) so an officer can look first and try a test email on themselves.
  */
 export async function openRenewalCampaign(form: FormData) {
-  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  if (!(await membershipBillingEnabled())) redirect(`${RENEWALS}?error=renewals-unavailable`);
   const { user, role } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   const admin = createServiceClient();
@@ -39,7 +39,7 @@ export async function openRenewalCampaign(form: FormData) {
  * Running it again only queues members who were missed.
  */
 export async function sendRenewalInvitations(form: FormData) {
-  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  if (!(await membershipBillingEnabled())) redirect(`${RENEWALS}?error=renewals-unavailable`);
   const { user, role } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   const admin = createServiceClient();
@@ -76,7 +76,7 @@ export async function sendRenewalInvitations(form: FormData) {
 
 /** Sends the officer a copy of a renewal invitation, addressed only to them, so they can see it before it goes to members. */
 export async function sendRenewalTestEmail(form: FormData) {
-  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  if (!(await membershipBillingEnabled())) redirect(`${RENEWALS}?error=renewals-unavailable`);
   const { user, role } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   if (!user.email) redirect(`${RENEWALS}?year=${year}&error=renewal-test-failed`);
@@ -93,7 +93,7 @@ export async function sendRenewalTestEmail(form: FormData) {
 
 /** Emails a reminder to invited members who have not paid. The database limits this to one reminder per member every seven days. */
 export async function sendRenewalReminders(form: FormData) {
-  if (!membershipBillingEnabled()) redirect(`${RENEWALS}?error=renewals-unavailable`);
+  if (!(await membershipBillingEnabled())) redirect(`${RENEWALS}?error=renewals-unavailable`);
   const { user, role } = await requireCapability("memberships.manage");
   const year = z.coerce.number().int().min(new Date().getUTCFullYear()).max(new Date().getUTCFullYear()+1).parse(form.get("membership_year"));
   const admin = createServiceClient();
@@ -120,7 +120,7 @@ export async function sendNewRenewalLink(form: FormData) {
   const memberId = z.uuid().parse(form.get("member_id"));
   const year = membershipBillingYear();
   const back = form.get("return_to") === "renewals" ? `${RENEWALS}?year=${year}&` : `/admin/memberships/members/${memberId}?`;
-  if (!membershipBillingEnabled()) redirect(`${back}error=renewals-unavailable`);
+  if (!(await membershipBillingEnabled())) redirect(`${back}error=renewals-unavailable`);
   const { user } = await requireCapability("memberships.manage");
   const admin = createServiceClient();
   const token = membershipToken();
@@ -139,7 +139,7 @@ export async function sendNewRenewalLink(form: FormData) {
   redirect(`${back}notice=renewal-link-sent`);
 }
 export async function payRenewalInvitation(form: FormData) {
-  if (!membershipBillingEnabled()) redirect("/membership");
+  if (!(await membershipBillingEnabled())) redirect("/membership");
   const token = z.string().min(20).max(200).parse(form.get("token"));
   const { data } = await createServiceClient().from("membership_renewal_invitations").select("member_id,membership_year")
     .eq("token_hash", membershipTokenHash(token)).gt("expires_at", new Date().toISOString()).maybeSingle();

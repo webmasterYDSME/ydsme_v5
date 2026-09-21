@@ -76,7 +76,7 @@ export async function updateMemberDetails(formData: FormData) {
 
 /** Marks every unread membership notice as read. */
 export async function markAllMembershipNotificationsRead() {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   await requireUser();
   const supabase = await createClient();
   const { data } = await supabase.rpc("get_own_membership_notifications", { p_limit: 50 });

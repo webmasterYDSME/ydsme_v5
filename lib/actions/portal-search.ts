@@ -14,7 +14,7 @@ import { loadMemberRegister } from "@/lib/membership-admin/records";
 export async function searchMembersForPortal(query: string): Promise<MemberSearchResult[]> {
   if (typeof query !== "string" || query.length > 100) return [];
   const session = await requireUser();
-  if (!session.membershipOfficer || !membershipAdministrationEnabled()) return [];
+  if (!session.membershipOfficer || !(await membershipAdministrationEnabled())) return [];
   const register = await loadMemberRegister();
   return matchMembers(register, query).map((member) => ({
     id: member.id,

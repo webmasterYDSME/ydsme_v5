@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { LOCAL_SUPABASE_URL, readLocalSupabaseEnvironment } from "./local-supabase.mjs";
+import { LOCAL_SUPABASE_URL, readLocalSupabaseEnvironment, holdLocalMembershipMode } from "./local-supabase.mjs";
 
 const local = readLocalSupabaseEnvironment("Browser smoke tests");
+holdLocalMembershipMode("website");
 const environment = {
   ...process.env,
   NEXT_PUBLIC_SUPABASE_URL: LOCAL_SUPABASE_URL,
@@ -11,7 +12,6 @@ const environment = {
   NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3013",
   JOURNEY_PORT: "3013",
   JOURNEY_START_MODE: "production",
-  MEMBERSHIP_MODE: "website",
 };
 
 for (const [command, args] of [

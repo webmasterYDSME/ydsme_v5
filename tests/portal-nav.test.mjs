@@ -43,7 +43,7 @@ test("hides Memberships while membership administration is off, but keeps Donati
 test("shows an administrator everything, with Administration last", () => {
   const sections = buildPortalNav({ ...base, role: "administrator", canViewContent: true, administrator: true, membershipOfficer: true });
   assert.deepEqual(sections.map((section) => section.label), [null, "Membership and money", "Website", "Members\u2019 area", "Administration"]);
-  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Email queue", "Important changes"]);
+  assert.deepEqual(sections.at(-1)?.items.map((item) => item.label), ["Site settings", "Membership system", "Email queue", "Important changes"]);
 });
 
 test("never repeats a link or an address", () => {
@@ -109,7 +109,7 @@ test("keeps member search behind the membership officer check and out of the cli
     read("app/components/PortalNavigation.tsx"),
   ]);
   assert.match(action, /^"use server";/);
-  assert.match(action, /requireUser\(\)[\s\S]*if \(!session\.membershipOfficer \|\| !membershipAdministrationEnabled\(\)\) return \[\]/);
+  assert.match(action, /requireUser\(\)[\s\S]*if \(!session\.membershipOfficer \|\| !\(await membershipAdministrationEnabled\(\)\)\) return \[\]/);
   assert.match(search, /searchMembersForPortal/);
   assert.match(shell, /canSearchMembers=\{membershipOfficer && membershipEnabled\}/);
   assert.match(shell, /cookieStore\.get\(portalSidebarCookie\)/);

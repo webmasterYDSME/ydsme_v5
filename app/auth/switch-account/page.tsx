@@ -12,7 +12,7 @@ function safeNext(value: string | undefined) {
 }
 
 export default async function SwitchAccount({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const [{ next }, currentUser] = await Promise.all([searchParams, getCurrentUser()]);
   const destination = safeNext(next);
   if (!currentUser) redirect(`/signin?next=${encodeURIComponent(destination)}`);

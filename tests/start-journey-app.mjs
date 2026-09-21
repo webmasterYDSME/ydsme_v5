@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
+import { holdLocalMembershipMode } from "./local-supabase.mjs";
 
 const status = execFileSync("npx", ["supabase", "status", "-o", "env"], { encoding: "utf8" });
 const local = Object.fromEntries(status.split("\n").flatMap((line) => {
@@ -8,6 +9,8 @@ const local = Object.fromEntries(status.split("\n").flatMap((line) => {
 if (local.API_URL !== "http://127.0.0.1:55321" || !local.PUBLISHABLE_KEY || !local.SERVICE_ROLE_KEY) {
   throw new Error("The isolated local Supabase stack is not available.");
 }
+
+holdLocalMembershipMode("website");
 
 const port = process.env.JOURNEY_PORT || "3010";
 if (!/^\d{4,5}$/.test(port)) throw new Error("JOURNEY_PORT must be a valid local port.");
@@ -20,7 +23,6 @@ const child = spawn("npx", ["next", production ? "start" : "dev", "-p", port], {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: local.PUBLISHABLE_KEY,
     SUPABASE_SERVICE_ROLE_KEY: local.SERVICE_ROLE_KEY,
     NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${port}`,
-    MEMBERSHIP_MODE: "website",
     JOURNEY_TEST_MODE: process.env.JOURNEY_TEST_MODE || "false",
     TURNSTILE_SECRET_KEY: "",
     NEXT_PUBLIC_TURNSTILE_SITEKEY: "",

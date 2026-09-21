@@ -103,7 +103,7 @@ test("the import is administrator-only, rate limited, and the old modes are gone
   assert.match(page, /requireRole\(\["administrator"\]\)/);
   assert.match(wrapper, /apply_membermojo_import/);
   assert.match(features, /MembershipMode = "membermojo" \| "website"/);
-  assert.match(features, /"pilot" \|\| configured === "live" \|\| configured === "drain"/);
+  assert.match(features, /data === "website"/);
   await assert.rejects(read("lib/membermojo-csv.ts"), { code: "ENOENT" });
 });
 

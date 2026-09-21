@@ -24,7 +24,7 @@ function digest(session: string, code: string) {
   return createHmac("sha256", secret).update(`${session}:${code}`).digest("hex");
 }
 export async function requestSignupCode(form: FormData) {
-  if (!membershipBillingEnabled()) return { error: "Membership applications are unavailable." };
+  if (!(await membershipBillingEnabled())) return { error: "Membership applications are unavailable." };
   const parsed = z.object({ email: z.email().max(254), fullName: z.string().trim().min(2).max(180) }).safeParse({
     email: String(form.get("email") || "").trim().toLowerCase(), fullName: form.get("fullName"),
   });
@@ -59,7 +59,7 @@ export async function requestSignupCode(form: FormData) {
   return { sent: true };
 }
 export async function verifySignupCode(code: string) {
-  if (!membershipBillingEnabled() || !/^\d{6}$/.test(code)) return { error: "Enter the six-digit code." };
+  if (!(await membershipBillingEnabled()) || !/^\d{6}$/.test(code)) return { error: "Enter the six-digit code." };
   const token = (await cookies()).get(membershipSignupCookieName)?.value;
   if (!token || !await consumeRateLimit("signup-code-verify", 30, 3600)) return { error: "Request a new code." };
   const hash = membershipTokenHash(token);

@@ -28,7 +28,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
     const user = Array.isArray(row.users) ? row.users[0] : row.users;
     return { id: row.user_id, full_name: user.full_name, email: user.email, role: row.role, officer: officerIds.has(row.user_id) };
   });
-  const membershipEnabled = membershipAdministrationEnabled();
+  const membershipEnabled = await membershipAdministrationEnabled();
   return <div className="portal-content">
     <header className="portal-heading"><div><p className="eyebrow dark">Administrator only</p><h1>People</h1><p>Manage account access and the public committee roster in one place.</p></div><PeopleEditorDialog accounts={accounts} actorId={session.user.id} membershipEnabled={membershipEnabled}/></header>
     <PortalTabs label="People" tabs={[{ href: "/admin/members", label: "Members", current: false }, { href: "/admin/people?tab=committee", label: "Committee", current: true }]}/>

@@ -24,7 +24,7 @@ const none: OwnNotifications = { notifications: [], unread: 0 };
  * so it is logged and treated as "nothing to show".
  */
 export const getOwnNotifications = cache(async (): Promise<OwnNotifications> => {
-  if (!membershipBillingEnabled()) return none;
+  if (!(await membershipBillingEnabled())) return none;
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("get_own_membership_notifications", { p_limit: 30 });
   if (error) {

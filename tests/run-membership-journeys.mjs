@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { LOCAL_SUPABASE_URL, readLocalSupabaseEnvironment } from "./local-supabase.mjs";
+import { LOCAL_SUPABASE_URL, readLocalSupabaseEnvironment, holdLocalMembershipMode } from "./local-supabase.mjs";
 
 const local = readLocalSupabaseEnvironment("Membership browser journeys");
+holdLocalMembershipMode("website");
 const password = process.env.JOURNEY_TEST_PASSWORD || "LocalJourneyOnly-2026!";
 const config = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
 const projectId = config.match(/^project_id\s*=\s*"([^"]+)"/m)?.[1];
@@ -21,7 +22,6 @@ const environment = {
   JOURNEY_MEMBERSHIP_TESTS: "true",
   JOURNEY_MEMBERSHIP_WORKSPACE: "true",
   JOURNEY_TEST_PASSWORD: password,
-  MEMBERSHIP_MODE: "website",
   TURNSTILE_SECRET_KEY: "",
   NEXT_PUBLIC_TURNSTILE_SITEKEY: "",
   RESEND_API_KEY: "",

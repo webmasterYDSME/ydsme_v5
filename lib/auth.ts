@@ -97,7 +97,7 @@ export async function requireRole(allowed: AppRole[]) {
 
 export async function requireCapability(capability: Capability) {
   const session = await requireUser();
-  if (capability === "memberships.manage" && !membershipAdministrationEnabled()) {
+  if (capability === "memberships.manage" && !(await membershipAdministrationEnabled())) {
     redirect("/dashboard?notice=not-authorised");
   }
   if (!hasCapability(session.role, capability)

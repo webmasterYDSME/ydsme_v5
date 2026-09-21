@@ -72,7 +72,7 @@ export default async function MembershipRenewals({ searchParams }: { searchParam
       <RenewalsOverview
         year={year} years={years} yearHref={(option) => `${BASE}?year=${option}`}
         open={work.campaignOpen} summary={summary} lastReminderAt={work.lastReminderAt}
-        missingFees={missingFees} billingOn={membershipBillingEnabled()}
+        missingFees={missingFees} billingOn={await membershipBillingEnabled()}
         queue={queueOverview ? { waiting: queueOverview.queued_bulk, perDay: bulkPerDay(queueOverview.budget) } : null}
         queueHref={role === "administrator" ? "/administrator/email-queue" : null}
         fees={feeSummary(plans, prices, year)} feesHref={feesHref}

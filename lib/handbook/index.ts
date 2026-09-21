@@ -10,6 +10,7 @@ import { payments } from "./chapters/payments";
 import { renewals } from "./chapters/renewals";
 import { setupAndReports } from "./chapters/setup-and-reports";
 import { startHere } from "./chapters/start-here";
+import { switchingSystems } from "./chapters/switching-systems";
 import { troubleshooting } from "./chapters/troubleshooting";
 import { typesAndFees } from "./chapters/types-and-fees";
 import type { HandbookChapter } from "./types";
@@ -26,6 +27,7 @@ export const handbookChapters: HandbookChapter[] = [
   honorary,
   emails,
   membermojoImport,
+  switchingSystems,
   oldRecords,
   setupAndReports,
   troubleshooting,

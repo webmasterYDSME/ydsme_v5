@@ -11,7 +11,7 @@ import styles from "../confirmation.module.css";
 export const dynamic = "force-dynamic";
 
 export default async function MembershipContactChange({ searchParams }: { searchParams: Promise<{ token?: string; result?: string }> }) {
-  if (!membershipRecoveryEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipRecoveryEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const query = await searchParams;
   if (query.result) return <PageShell headerTheme="light"><div className={styles.page}><section className={styles.card} aria-labelledby="contact-change-title">
     <div className={styles.icon} aria-hidden="true">{query.result === "confirmed" ? <MailCheck/> : <ShieldCheck/>}</div>

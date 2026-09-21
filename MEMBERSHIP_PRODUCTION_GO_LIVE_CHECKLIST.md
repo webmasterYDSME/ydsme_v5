@@ -10,13 +10,13 @@ This checklist governs the replacement of MemberMojo by the website membership p
 
 The implementation is suitable for controlled preview and pilot testing, but it is not yet safe to replace MemberMojo in production. The current production audit found undeployed routes, unapplied database migrations, missing or invalid live Stripe configuration, no imported membership records, and incomplete end-to-end production verification.
 
-Do not set `MEMBERSHIP_MODE=live` merely because the application builds or a single payment succeeds. Go-live requires financial reconciliation, entitlement integrity, portal isolation, notification delivery, recovery testing, and an approved rollback rehearsal.
+Do not switch the Membership system to the website merely because the application builds or a single payment succeeds. Go-live requires financial reconciliation, entitlement integrity, portal isolation, notification delivery, recovery testing, and an approved rollback rehearsal.
 
 ## Current production snapshot
 
 | Area | Current state | Launch status |
 | --- | --- | --- |
-| Rollout mode | `MEMBERSHIP_MODE=membermojo` | Safe holding state |
+| Rollout mode | Membership system: MemberMojo | Safe holding state |
 | Public membership route | `/membership` returns 404 after the production redirect | Blocked |
 | Stripe webhook route | `/api/stripe/webhook` returns 404 after the production redirect | Blocked |
 | Resend webhook route | `/api/resend/webhook` returns 404 after the production redirect | Blocked |
@@ -61,7 +61,7 @@ Re-run this audit immediately before release; do not rely on this snapshot as pr
 
 ## 3. Production application and database — Required
 
-- [ ] Keep production at `MEMBERSHIP_MODE=membermojo` during schema and code deployment.
+- [ ] Keep production's Membership system on MemberMojo during schema and code deployment.
 - [ ] Confirm preview and production use different Supabase project references.
 - [ ] Review `supabase db push --dry-run` output against production.
 - [ ] Apply all pending additive migrations using the approved release workflow.
@@ -81,8 +81,8 @@ Never paste secret values into this checklist, commits, logs, screenshots, or su
 
 ### Vercel production
 
-- [ ] `MEMBERSHIP_MODE=membermojo` before deployment and migration.
-- [ ] `MEMBERSHIP_MODE=pilot` is used only in an isolated local or preview environment with its own database.
+- [ ] The Membership system (Administrator > Membership system) is on MemberMojo before deployment and migration.
+- [ ] The website is switched on only in an isolated local or preview environment with its own database, until sections 1–11 have passed.
 - [ ] `NEXT_PUBLIC_SITE_URL=https://yorkmodelengineers.co.uk` and redirects preserve secure links.
 - [ ] `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` is a valid live publishable key for the production Stripe account.
 - [ ] `STRIPE_RESTRICTED_KEY` is a newly created live restricted key with only the permissions required by the website.
@@ -292,7 +292,7 @@ Complete each journey from the browser and verify the database, Stripe state, of
 
 ## 12. Production pilot — Required
 
-- [ ] Set `MEMBERSHIP_MODE=pilot` only after sections 1–11 have passed.
+- [ ] Switch the production Membership system to the website only after sections 1–11 have passed.
 - [ ] Use named, controlled pilot addresses; do not use existing members without an agreed test/reset plan.
 - [ ] Confirm non-allowlisted visitors still receive the MemberMojo journey and cannot create website payments.
 - [ ] Complete at least one approved live low-risk payment using a controlled real member/test participant and reconcile it to Stripe settlement records.
@@ -317,7 +317,7 @@ Every item below must be true at the same decision meeting.
 - [ ] Support coverage, monitoring dashboards, and emergency contacts are active.
 - [ ] The rollback/drain procedure has been rehearsed and its authorised operator is available.
 - [ ] Take and record a final backup/recovery point.
-- [ ] Change `MEMBERSHIP_MODE` from `pilot` to `live` and redeploy.
+- [ ] Import the latest MemberMojo list, then switch the Membership system to the website (the readiness checks must show nothing to fix, and any warning is accepted with a recorded reason).
 - [ ] Confirm MemberMojo links/copy are removed only after the live deployment passes smoke tests.
 - [ ] Preserve MemberMojo source and import records read-only under the approved retention rules.
 
@@ -350,17 +350,17 @@ Every item below must be true at the same decision meeting.
 
 ## 15. Emergency drain and rollback
 
-Use `drain` when new financial work must stop but signed webhook reconciliation and officer recovery must continue. Use `membermojo` only for a deliberate fallback in which new website membership journeys must return to MemberMojo.
+Switching back to MemberMojo stops new financial work while signed webhook reconciliation continues. It is one confirmation on Administrator > Membership system, takes effect at once, and can also stop the queued membership emails. Card renewals already set up in Stripe continue until they are cancelled there.
 
-- [ ] Set `MEMBERSHIP_MODE=drain` and redeploy when duplicate charging, incorrect entitlement, portal data exposure, webhook corruption, or widespread delivery failure is suspected.
-- [ ] Confirm drain mode blocks new public applications, Checkout creation, reminders, renewal charging commands, and lapse automation.
+- [ ] Switch back to MemberMojo when duplicate charging, incorrect entitlement, portal data exposure, webhook corruption, or widespread delivery failure is suspected.
+- [ ] Confirm MemberMojo mode blocks new public applications, Checkout creation, reminders, renewal charging commands, and lapse automation.
 - [ ] Keep signed webhooks, existing payment reconciliation, officer queues, and recovery tooling available.
 - [ ] Preserve all event, payment, audit, and command records; do not delete or edit financial history.
 - [ ] Expire or disable unsafe open Checkout sessions through an audited recovery action.
 - [ ] Notify affected members in provider-neutral language after the incident scope is known.
 - [ ] Reconcile Stripe independently before restoring service.
 - [ ] Prefer rolling back application code while leaving additive migrations in place.
-- [ ] Return to `pilot`, repeat affected journeys, and obtain fresh approval before returning to `live`.
+- [ ] Repeat the affected journeys on a preview database, and obtain fresh approval before switching the production Membership system to the website again.
 - [ ] Document the incident, root cause, affected records, financial reconciliation, member communications, and preventative action.
 
 ## Release evidence and sign-off

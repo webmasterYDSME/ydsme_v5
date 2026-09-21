@@ -47,7 +47,7 @@ export const setupAndReports: HandbookChapter = {
       blocks: [
         { type: "list", items: [
           "Fees and membership types are not in Setup: they live on the Renewals tab. See [Membership types and fees](/admin/handbook/types-and-fees).",
-          "Email limits, the queue and the choice between MemberMojo and website mode are for the website administrator.",
+          "Email limits, the queue and the choice between MemberMojo and website mode are for the website administrator. See [Switching between MemberMojo and the website](/admin/handbook/switching-systems).",
         ] },
       ],
     },

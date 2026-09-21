@@ -11,7 +11,7 @@ import styles from "./memberships.module.css";
 export const dynamic = "force-dynamic";
 
 export default async function MembershipLayout({ children }: { children: ReactNode }) {
-  if (!membershipAdministrationEnabled()) redirect("/administrator/member-import");
+  if (!(await membershipAdministrationEnabled())) redirect("/administrator/member-import");
   await requireCapability("memberships.manage");
   const inboxCount = await countInboxTasks();
   return <div className={`portal-content membership-admin-page ${styles.workspace}`}>

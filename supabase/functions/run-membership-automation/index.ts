@@ -96,11 +96,11 @@ async function sendMemberInvitationBatch(admin: SupabaseClient) {
 export default {
   fetch: withSupabase({ auth: "secret" }, async (request, context) => {
     if (request.method !== "POST") return Response.json({ ok: false }, { status: 405 });
-    // "website" (or the older pilot, live, drain) means the website runs membership. Anything else means
-    // MemberMojo still does: the daily lifecycle keeps access in step with the imported list, but nothing
-    // is charged and no member is emailed by the website.
-    const configured = (Deno.env.get("MEMBERSHIP_MODE") || "membermojo").toLowerCase();
-    const membermojoMode = !["website", "pilot", "live", "drain"].includes(configured);
+    // The membership_mode setting says who runs membership. "website" means the website does. Anything else,
+    // including a setting that cannot be read, means MemberMojo still does: the daily lifecycle keeps access
+    // in step with the imported list, but nothing is charged and no member is emailed by the website.
+    const { data: configured, error: modeError } = await context.supabaseAdmin.rpc("membership_mode");
+    const membermojoMode = Boolean(modeError) || configured !== "website";
     const body = await request.json().catch(() => ({})) as { job?: string };
     if (body.job === "invitations") return await sendMemberInvitationBatch(context.supabaseAdmin);
     if (membermojoMode && body.job === "commands") return Response.json({ ok: true, paused: true });

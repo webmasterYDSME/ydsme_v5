@@ -82,7 +82,7 @@ test("the dashboard opens with the member's own tiles, and only officers see the
   assert.match(page, /key: "running-day", label: "Next running day"/);
   assert.match(page, /greetingFor\(londonHour\(\)\)/);
   // Officers only, and only when membership administration is on.
-  assert.match(page, /membershipOfficer && membershipAdministrationEnabled\(\) \? loadAttention\(\)/);
+  assert.match(page, /membershipOfficer && \(await membershipAdministrationEnabled\(\)\) \? loadAttention\(\)/);
   assert.match(page, /attention \? <AttentionStrip/);
   // A fault reading the member's own record or the Inbox never stops the page.
   assert.match(page, /getMembershipAccount\(user\.id\)\.catch/);

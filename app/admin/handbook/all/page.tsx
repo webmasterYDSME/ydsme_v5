@@ -8,8 +8,8 @@ import styles from "../handbook.module.css";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "The whole handbook · Membership officer handbook" };
 
-export default function WholeHandbook() {
-  const websiteMode = membershipMode() === "website";
+export default async function WholeHandbook() {
+  const websiteMode = (await membershipMode()) === "website";
   return <div style={{ display: "grid", gap: 26 }}>
     <section className={`${styles.card} ${styles.noPrint}`}>
       <h2 className={styles.h2}>The whole handbook</h2>

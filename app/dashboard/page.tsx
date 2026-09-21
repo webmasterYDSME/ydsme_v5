@@ -42,7 +42,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const notice = query.notice ? dashboardNotices[query.notice] : undefined;
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
-  const membershipEnabled = membershipBillingEnabled();
+  const membershipEnabled = await membershipBillingEnabled();
   const [sharedSnapshot, documentCounts, feedSnapshotResult, noticesResult, workbenchProjects, ownProjects, membership, campaign, attention] = await Promise.all([
     getDashboardSharedSnapshot(today),
     getMemberDocumentCounts(),
@@ -54,7 +54,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     // A fault while reading the membership record hides that tile; it must not stop the dashboard opening.
     membershipEnabled ? getMembershipAccount(user.id).catch(() => undefined) : Promise.resolve(null),
     membershipEnabled ? getOpenMembershipRenewalCampaign().catch(() => null) : Promise.resolve(null),
-    membershipOfficer && membershipAdministrationEnabled() ? loadAttention() : Promise.resolve(null),
+    membershipOfficer && (await membershipAdministrationEnabled()) ? loadAttention() : Promise.resolve(null),
   ]);
   const events = sharedSnapshot.events;
   const workshops = sharedSnapshot.workshops;

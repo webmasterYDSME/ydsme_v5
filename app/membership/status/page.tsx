@@ -34,7 +34,7 @@ const statusCopy: Record<string, { title: string; body: string }> = {
 };
 
 export default async function MembershipStatus({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
-  if (!membershipBillingEnabled()) redirect(MEMBERMOJO_MEMBERSHIP_URL);
+  if (!(await membershipBillingEnabled())) redirect(MEMBERMOJO_MEMBERSHIP_URL);
   const token = (await searchParams).token ?? "";
   if (token.length < 20 || token.length > 200) redirect("/membership/apply?application=status-link-invalid");
   const { data, error } = await createServiceClient().from("membership_applications")

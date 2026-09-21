@@ -69,7 +69,8 @@ function ApplyForm({ preview }: { preview: MemberImportPreview }) {
   </section>;
 }
 
-export function MemberMojoImportForm() {
+/** `archives` is false while the website runs membership: the import then never archives anyone. */
+export function MemberMojoImportForm({ archives = true }: { archives?: boolean }) {
   const [state, formAction] = useActionState(previewMemberList, previewInitial);
   const preview = state.preview;
   return <div className="member-import-workspace">
@@ -78,7 +79,7 @@ export function MemberMojoImportForm() {
       <form action={formAction} className="stack-form member-import-form">
         <label>MemberMojo member-list file
           <input type="file" name="file" accept="text/csv,.csv" required/>
-          <small>Choose the CSV downloaded from MemberMojo. We read the name, email, Membership type, title, date of birth, phone number and address. Everyone in the file is made a full member for the current year. Members who are not in the file are archived.</small>
+          <small>Choose the CSV downloaded from MemberMojo. We read the name, email, Membership type, title, date of birth, phone number and address. Everyone in the file is made a full member for the current year.{archives ? " Members who are not in the file are archived." : " Nobody is archived for being missing from it."}</small>
         </label>
         <PendingSubmitButton className="button dark" pendingLabel="Checking the file…"><FileSearch/>Show me what will happen</PendingSubmitButton>
       </form>

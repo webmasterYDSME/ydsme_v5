@@ -24,7 +24,7 @@ export default async function HandbookChapterPage({ params }: { params: Promise<
   const index = handbookChapters.findIndex((item) => item.slug === chapter.slug);
   const previous = handbookChapters[index - 1];
   const next = handbookChapters[index + 1];
-  const websiteMode = membershipMode() === "website";
+  const websiteMode = (await membershipMode()) === "website";
 
   return <article className={styles.card} aria-labelledby="chapter-title">
     <header className={styles.chapterHead}>

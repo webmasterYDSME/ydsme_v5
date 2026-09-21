@@ -10,8 +10,8 @@ import { getOwnNotifications } from "@/lib/member-notifications";
 import { NotificationList } from "@/app/components/NotificationList";
 
 export async function PortalShell({ children, role, name, membershipOfficer = false }: { children: ReactNode; role: AppRole; name: string; membershipOfficer?: boolean }) {
-  const membershipEnabled = membershipAdministrationEnabled();
-  const showNotifications = membershipBillingEnabled();
+  const membershipEnabled = await membershipAdministrationEnabled();
+  const showNotifications = await membershipBillingEnabled();
   const [membershipTaskCount, cookieStore, own] = await Promise.all([
     membershipOfficer && membershipEnabled ? getMembershipNavigationTaskCount() : 0,
     cookies(),
