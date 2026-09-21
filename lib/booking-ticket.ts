@@ -1,5 +1,8 @@
 import "server-only";
 
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import QRCode from "qrcode";
 import sharp from "sharp";
 
@@ -32,6 +35,44 @@ const escapeXml = (value: string) => value
   .replaceAll(">", "&gt;")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&apos;");
+
+/*
+ * The ticket's text is drawn by sharp from SVG, which looks fonts up on the machine it runs on. A Mac has Arial and Georgia;
+ * the Linux servers that run preview and production have no fonts at all, so every letter came out as an empty box.
+ * The fonts are therefore shipped with the app in lib/ticket-fonts and fontconfig is pointed at them before the first
+ * ticket is drawn (next.config.ts includes them in the deployment). They are Latin-only subsets of Liberation Sans and
+ * Serif (SIL Open Font License, see lib/ticket-fonts/README.txt), about 65 KB in all, renamed as the licence requires.
+ * The serif is used only at weight 600 or more, so only its bold face is bundled. The Arial and Georgia names stay in the
+ * font lists for a local machine that lacks the bundled ones.
+ */
+const TICKET_SANS = "YME Ticket Sans, Arial, sans-serif";
+const TICKET_SERIF = "YME Ticket Serif, Georgia, serif";
+const TICKET_FONT_DIRECTORY = path.join(process.cwd(), "lib", "ticket-fonts");
+let ticketFontsReady = false;
+
+function pointRendererAtTicketFonts() {
+  if (ticketFontsReady) return;
+  ticketFontsReady = true;
+  if (!existsSync(path.join(TICKET_FONT_DIRECTORY, "TicketSans-Regular.ttf"))) {
+    console.error(`Ticket fonts are missing from ${TICKET_FONT_DIRECTORY}; ticket text may not draw.`);
+    return;
+  }
+  try {
+    const workDirectory = path.join(tmpdir(), "ydsme-ticket-fonts");
+    mkdirSync(workDirectory, { recursive: true });
+    const configPath = path.join(workDirectory, "fonts.conf");
+    writeFileSync(configPath, `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${escapeXml(TICKET_FONT_DIRECTORY)}</dir>
+  <cachedir>${escapeXml(path.join(workDirectory, "cache"))}</cachedir>
+</fontconfig>
+`);
+    process.env.FONTCONFIG_FILE = configPath;
+  } catch (error) {
+    console.error("Could not set up the ticket fonts", error);
+  }
+}
 
 function hashValue(value: string) {
   let hash = 2166136261;
@@ -94,7 +135,7 @@ export async function generateBookingTicket(details: BookingTicketDetails) {
   const patternOffset = seed % 54;
   const titleStart = titleLines.length === 1 ? 410 : titleLines.length === 2 ? 360 : 320;
   const titleMarkup = titleLines.map((line, index) =>
-    `<text x="80" y="${titleStart + index * 92}" fill="${theme.paper}" font-family="Georgia, serif" font-size="82" font-weight="600">${escapeXml(line)}</text>`,
+    `<text x="80" y="${titleStart + index * 92}" fill="${theme.paper}" font-family="${TICKET_SERIF}" font-size="82" font-weight="600">${escapeXml(line)}</text>`,
   ).join("");
   const qrCode = QRCode.create(verificationUrl, { errorCorrectionLevel: "M" });
   const qrMargin = 2;
@@ -124,38 +165,39 @@ export async function generateBookingTicket(details: BookingTicketDetails) {
     <circle cx="905" cy="130" r="66" fill="${theme.paper}" fill-opacity=".06"/>
     <circle cx="850" cy="78" r="36" fill="${theme.paper}" fill-opacity=".05"/>
     <rect x="0" y="0" width="20" height="1920" fill="${theme.accent}"/>
-    <text x="80" y="100" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="25" font-weight="700" letter-spacing="5">YORK MODEL ENGINEERS</text>
-    <text x="80" y="154" fill="${theme.paper}" fill-opacity=".72" font-family="Arial, sans-serif" font-size="19" font-weight="700" letter-spacing="4">MOBILE BOARDING TICKET · ROUTE ${routeNumber}</text>
+    <text x="80" y="100" fill="${theme.accent}" font-family="${TICKET_SANS}" font-size="25" font-weight="700" letter-spacing="5">YORK MODEL ENGINEERS</text>
+    <text x="80" y="154" fill="${theme.paper}" fill-opacity=".72" font-family="${TICKET_SANS}" font-size="19" font-weight="700" letter-spacing="4">MOBILE BOARDING TICKET · ROUTE ${routeNumber}</text>
     <path d="M80 218H1000" stroke="${theme.paper}" stroke-opacity=".22" stroke-width="2" stroke-dasharray="10 12"/>
     <rect x="80" y="248" width="225" height="45" rx="22" fill="${theme.highlight}"/>
-    <text x="193" y="278" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="19" font-weight="700" letter-spacing="3">PUBLIC EVENT</text>
+    <text x="193" y="278" text-anchor="middle" fill="#fff" font-family="${TICKET_SANS}" font-size="19" font-weight="700" letter-spacing="3">PUBLIC EVENT</text>
     ${titleMarkup}
     <g transform="translate(80 650)">
-      <text x="0" y="55" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="190" font-weight="800">${date.day}</text>
-      <text x="300" y="-5" fill="${theme.paper}" fill-opacity=".62" font-family="Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="4">DATE &amp; DEPARTURE</text>
-      <text x="300" y="54" fill="${theme.paper}" font-family="Georgia, serif" font-size="51" font-weight="600">${escapeXml(date.weekday)}</text>
-      <text x="300" y="112" fill="${theme.paper}" font-family="Arial, sans-serif" font-size="29">${escapeXml(date.monthYear)} · ${escapeXml(details.startTime.slice(0, 5))}</text>
+      <text x="0" y="55" fill="${theme.accent}" font-family="${TICKET_SANS}" font-size="190" font-weight="800">${date.day}</text>
+      <text x="300" y="-5" fill="${theme.paper}" fill-opacity=".62" font-family="${TICKET_SANS}" font-size="20" font-weight="700" letter-spacing="4">DATE &amp; DEPARTURE</text>
+      <text x="300" y="54" fill="${theme.paper}" font-family="${TICKET_SERIF}" font-size="51" font-weight="600">${escapeXml(date.weekday)}</text>
+      <text x="300" y="112" fill="${theme.paper}" font-family="${TICKET_SANS}" font-size="29">${escapeXml(date.monthYear)} · ${escapeXml(details.startTime.slice(0, 5))}</text>
     </g>
     <path d="M80 900H1000" stroke="${theme.paper}" stroke-opacity=".22" stroke-width="2" stroke-dasharray="10 12"/>
     <g transform="translate(80 960)">
       <rect width="430" height="150" rx="14" fill="${theme.paper}" fill-opacity=".1" stroke="${theme.paper}" stroke-opacity=".16"/>
-      <text x="32" y="46" fill="${theme.paper}" fill-opacity=".62" font-family="Arial, sans-serif" font-size="18" font-weight="700" letter-spacing="3">LEAD VISITOR</text>
-      <text x="32" y="103" fill="${theme.paper}" font-family="Georgia, serif" font-size="38" font-weight="600">${leadName}</text>
+      <text x="32" y="46" fill="${theme.paper}" fill-opacity=".62" font-family="${TICKET_SANS}" font-size="18" font-weight="700" letter-spacing="3">LEAD VISITOR</text>
+      <text x="32" y="103" fill="${theme.paper}" font-family="${TICKET_SERIF}" font-size="38" font-weight="600">${leadName}</text>
       <rect x="460" width="460" height="150" rx="14" fill="${theme.accent}"/>
-      <text x="495" y="47" fill="${theme.background}" fill-opacity=".7" font-family="Arial, sans-serif" font-size="18" font-weight="800" letter-spacing="3">GROUP ADMISSION</text>
-      <text x="495" y="111" fill="${theme.background}" font-family="Arial, sans-serif" font-size="47" font-weight="800">${details.partySize} ${details.partySize === 1 ? "VISITOR" : "VISITORS"}</text>
+      <text x="495" y="47" fill="${theme.background}" fill-opacity=".7" font-family="${TICKET_SANS}" font-size="18" font-weight="800" letter-spacing="3">GROUP ADMISSION</text>
+      <text x="495" y="111" fill="${theme.background}" font-family="${TICKET_SANS}" font-size="47" font-weight="800">${details.partySize} ${details.partySize === 1 ? "VISITOR" : "VISITORS"}</text>
     </g>
     <rect x="80" y="1170" width="920" height="500" rx="28" fill="${theme.paper}"/>
-    <text x="540" y="1234" text-anchor="middle" fill="${theme.highlight}" font-family="Arial, sans-serif" font-size="19" font-weight="800" letter-spacing="4">SCAN AT SITE CONTROL</text>
+    <text x="540" y="1234" text-anchor="middle" fill="${theme.highlight}" font-family="${TICKET_SANS}" font-size="19" font-weight="800" letter-spacing="4">SCAN AT SITE CONTROL</text>
     <rect x="360" y="1264" width="360" height="360" rx="14" fill="#fff"/>
     <path d="${qrPath.join("")}" fill="${theme.background}" shape-rendering="crispEdges"/>
     <circle cx="80" cy="1420" r="34" fill="${theme.background}"/><circle cx="1000" cy="1420" r="34" fill="${theme.background}"/>
-    <text x="540" y="1740" text-anchor="middle" fill="${theme.paper}" fill-opacity=".58" font-family="Arial, sans-serif" font-size="17" font-weight="700" letter-spacing="3">BOOKING REFERENCE</text>
-    <text x="540" y="1805" text-anchor="middle" fill="${theme.accent}" font-family="Georgia, serif" font-size="54" font-weight="700" letter-spacing="5">${referenceCode}</text>
-    <text x="540" y="1862" text-anchor="middle" fill="${theme.paper}" fill-opacity=".7" font-family="Arial, sans-serif" font-size="18">Dringhouses · York · YO24 2JE</text>
+    <text x="540" y="1740" text-anchor="middle" fill="${theme.paper}" fill-opacity=".58" font-family="${TICKET_SANS}" font-size="17" font-weight="700" letter-spacing="3">BOOKING REFERENCE</text>
+    <text x="540" y="1805" text-anchor="middle" fill="${theme.accent}" font-family="${TICKET_SERIF}" font-size="54" font-weight="700" letter-spacing="5">${referenceCode}</text>
+    <text x="540" y="1862" text-anchor="middle" fill="${theme.paper}" fill-opacity=".7" font-family="${TICKET_SANS}" font-size="18">Dringhouses · York · YO24 2JE</text>
     <path d="M120 1890H960" stroke="${theme.accent}" stroke-opacity=".45" stroke-width="3"/>
   </svg>`);
 
+  pointRendererAtTicketFonts();
   const buffer = await sharp(svg)
     .png({ compressionLevel: 9, palette: true, quality: 100 })
     .toBuffer();

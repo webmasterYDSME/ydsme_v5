@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
     ],
   },
   poweredByHeader: false,
+  // The booking ticket draws its text from these font files (lib/booking-ticket.ts); the servers have no fonts of their own.
+  outputFileTracingIncludes: { "/**": ["./lib/ticket-fonts/*"] },
   async headers() {
     return [{
       source: "/:path*",
