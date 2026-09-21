@@ -19,6 +19,11 @@ if (profileError) throw profileError;
 assert.equal(profiles.length, 2, "Run the journey fixture setup first.");
 const memberId = profiles.find((profile) => profile.email === "journey.member@example.test").id;
 const unique = crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+// Bookings are refused for days that have already passed, so the fixtures use dates well in the future.
+const daysFromNow = (days) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+const workshopDate = daysFromNow(30);
+const eventDate = daysFromNow(31);
+const abuseEventDate = daysFromNow(32);
 let workshopId;
 let eventId;
 let abuseEventId;
@@ -27,7 +32,7 @@ try {
   const workshopResult = await admin.from("workshops").insert({
     title: `Concurrency workshop ${unique}`,
     descriptions: "Atomic final-place contract test",
-    date: "2026-09-20",
+    date: workshopDate,
     start_time: "10:00",
     end_time: "11:00",
     host_name: "Contract test",
@@ -56,8 +61,8 @@ try {
   const eventResult = await admin.from("events").insert({
     name: `Concurrency event ${unique}`,
     descriptions: "Atomic final-place contract test",
-    start_date: "2026-09-21",
-    end_date: "2026-09-21",
+    start_date: eventDate,
+    end_date: eventDate,
     start_time: "10:00",
     end_time: "11:00",
     event_type: "public",
@@ -79,8 +84,8 @@ try {
   const abuseEventResult = await admin.from("events").insert({
     name: `Concurrent abuse event ${unique}`,
     descriptions: "Atomic rapid-repeat contract test",
-    start_date: "2026-09-22",
-    end_date: "2026-09-22",
+    start_date: abuseEventDate,
+    end_date: abuseEventDate,
     start_time: "10:00",
     end_time: "11:00",
     event_type: "public",
