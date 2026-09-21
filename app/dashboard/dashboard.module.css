@@ -20,8 +20,8 @@
 }
 
 .tile {
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   min-width: 0;
   padding: 20px 22px 22px;
@@ -54,14 +54,14 @@
   overflow-wrap: anywhere;
 }
 
-.tileDetail { margin: 0; color: #5a645e; font-size: 14px; line-height: 1.55; }
+.tileDetail { margin: 0 0 8px; color: #5a645e; font-size: 14px; line-height: 1.55; }
 
 .tileAction {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  justify-self: start;
-  margin-top: 8px;
+  align-self: flex-start;
+  margin-top: auto; /* pins the link to the bottom so it lines up across tiles of different heights */
   padding: 0;
   border: 0;
   background: none;

@@ -31,6 +31,9 @@
 
 .form { display: grid; gap: 16px; margin-top: 14px; max-width: 640px; }
 .form label { display: grid; gap: 7px; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: #59625c; }
+/* Only the word to type is bold: the label is already 700 here, since DM Sans is loaded at 400-700, so the rest of it drops to 500. */
+.confirm > span { font-weight: 500; }
+.confirm > span b { font-weight: 700; color: var(--ink); }
 .form input[type="text"], .form textarea { padding: 10px 12px; border: 1px solid #a9a597; border-radius: 4px; background: #fff; font: 400 15px/1.5 var(--font-sans); text-transform: none; letter-spacing: 0; color: inherit; }
 .form input[type="text"] { min-height: 46px; }
 .form textarea { min-height: 84px; resize: vertical; }

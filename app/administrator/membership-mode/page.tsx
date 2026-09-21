@@ -132,7 +132,7 @@ export default async function MembershipSystemPage({ searchParams }: { searchPar
               <input type="checkbox" name="accept_warnings"/>
               <span>I have read the {plural(cautions.length, "thing")} marked “Check” above and want to switch anyway.</span>
             </label> : null}
-            <label><span>Type <b>{WEBSITE_CONFIRMATION_WORD}</b> to confirm</span>
+            <label className={styles.confirm}><span>Type <b>{WEBSITE_CONFIRMATION_WORD}</b> to confirm</span>
               <input type="text" name="confirmation" required autoComplete="off" autoCapitalize="none" spellCheck={false} aria-describedby="confirm-help"/>
               <small id="confirm-help">You can switch back to MemberMojo at any time, with one click.</small>
             </label>
