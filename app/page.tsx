@@ -39,7 +39,7 @@ export default async function Home() {
           <p className="eyebrow">York · Since 1929</p>
           <h1 id="home-hero-title">Small engines.<br/><em>Grand adventures.</em></h1>
           <p className="hero-lede">Five woodland acres. Three miniature railways. Generations of makers keeping steam, skill and wonder in motion.</p>
-          <div className="button-row"><Link className="button brass" href="/visitors">Plan your visit <ArrowRight size={17}/></Link><Link className="button ghost" href="/membership">Join the society</Link></div>
+          <div className="button-row"><a className="button brass" href="#what-we-do">Explore what we do <ArrowRight size={17}/></a><Link className="button ghost" href="/membership">Join the society</Link></div>
         </div>
         {nextEvent ? <Link className="next-running-badge" href="/events"><span className="next-running-kicker"><i aria-hidden="true"/> Next public running</span><time className="next-running-date" dateTime={`${nextEvent.start_date}T${nextEvent.start_time.slice(0,5)}`}><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><span>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()}<small>{format(parseISO(nextEvent.start_date), "yyyy")}</small></span></time><span className="next-running-name">{nextEvent.name}</span><span className="next-running-detail">{format(parseISO(nextEvent.start_date), "EEE")} · {nextEvent.start_time.slice(0,5)}</span><span className="next-running-arrow" aria-hidden="true"><ArrowUpRight/></span></Link> : null}
         <div className="track-line"><InteractiveSteamTrain announcements={announcements.map(({ id, title, body }) => ({ id, title, body }))}/></div>
@@ -47,7 +47,7 @@ export default async function Home() {
 
       <section className="ticker" aria-label="Club highlights"><div>FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM <i/> YORK’S HIDDEN RAILWAY <i/> FREE ENTRY <i/> FREE RIDES <i/> OPEN DAYS <i/> LIVE STEAM</div></section>
 
-      <section className="section intro-grid">
+      <section className="section intro-grid" id="what-we-do">
         <Reveal><div><p className="eyebrow dark">Welcome aboard</p><SectionHeading>Engineering,<br/>but make it <em>magic.</em></SectionHeading></div></Reveal>
         <Reveal delay={0.12}><div className="intro-copy"><p className="large-copy">Alongside the East Coast Main Line in Dringhouses sits an unexpected world of polished brass, coal smoke and precisely profiled steel rail.</p><p>We’re a friendly society of model engineers and artisans, maintaining nearly five acres of landscaped woodland where ideas become working machines.</p><Link className="text-link" href="/club-history">Read our 97-year story <ArrowRight size={16}/></Link></div></Reveal>
       </section>
