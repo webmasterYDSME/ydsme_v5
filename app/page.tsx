@@ -2,10 +2,10 @@ import { ArrowRight, ArrowUpRight, CalendarDays, Gauge, Globe2, Handshake, MapPi
 import Image from "next/image";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { InteractiveSteamTrain, Reveal, SectionHeading } from "./components/RailSite";
+import { Reveal, SectionHeading } from "./components/RailSite";
 import { PageShell } from "./components/PageShell";
 import { TargetDonation } from "./components/DonationCards";
-import { getCarriageAnnouncements, getDonationSettings, getPublicEvents } from "@/lib/data";
+import { getDonationSettings, getPublicEvents } from "@/lib/data";
 import { publicPageMetadata } from "@/lib/seo";
 import { getPublicFeaturedProjects } from "@/lib/public-projects";
 import styles from "./home.module.css";
@@ -31,7 +31,7 @@ const interests = [
 ];
 
 export default async function Home() {
-  const [publicEvents, donations, announcements, projects] = await Promise.all([getPublicEvents(), getDonationSettings(), getCarriageAnnouncements(1), getPublicFeaturedProjects(3)]);
+  const [publicEvents, donations, projects] = await Promise.all([getPublicEvents(), getDonationSettings(), getPublicFeaturedProjects(3)]);
   const nextEvent = publicEvents.find((event) => event.display_in_homepage) ?? publicEvents[0];
   return (
     <PageShell>
@@ -47,7 +47,6 @@ export default async function Home() {
           <div className="button-row"><a className="button brass" href="#what-we-do">Explore what we do <ArrowRight size={17}/></a><Link className="button ghost" href="/visitors">Plan a visit</Link></div>
         </div>
         {nextEvent ? <Link className="next-running-badge" href="/events"><span className="next-running-kicker"><i aria-hidden="true"/> Next public event</span><time className="next-running-date" dateTime={`${nextEvent.start_date}T${nextEvent.start_time.slice(0,5)}`}><strong>{format(parseISO(nextEvent.start_date), "dd")}</strong><span>{format(parseISO(nextEvent.start_date), "MMM").toUpperCase()}<small>{format(parseISO(nextEvent.start_date), "yyyy")}</small></span></time><span className="next-running-name">{nextEvent.name}</span><span className="next-running-detail">{format(parseISO(nextEvent.start_date), "EEE")} · {nextEvent.start_time.slice(0,5)}</span><span className="next-running-arrow" aria-hidden="true"><ArrowUpRight/></span></Link> : null}
-        <div className="track-line"><InteractiveSteamTrain announcements={announcements.map(({ id, title, body }) => ({ id, title, body }))}/></div>
       </section>
 
       <section className="ticker" aria-label="Club highlights"><div>MODEL ENGINEERING <i/> CLOCKS &amp; MECHANISMS <i/> WORKSHOP SKILLS <i/> MINIATURE RAILWAYS <i/> MAKING &amp; COMMUNITY <i/> OPEN DAYS <i/> LIVE STEAM</div></section>

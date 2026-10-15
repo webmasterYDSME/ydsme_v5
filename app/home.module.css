@@ -25,8 +25,6 @@
   max-width: none;
 }
 
-.home :global(.hero:has(.train-consist) .hero-copy) { margin-inline: 0; }
-
 .home :global(.hero h1) {
   font-size: clamp(58px, 6.4vw, 92px);
   line-height: .98;
