@@ -28,11 +28,11 @@
 .home :global(.hero:has(.train-consist) .hero-copy) { margin-inline: 0; }
 
 .home :global(.hero h1) {
-  font-size: clamp(68px, 8vw, 112px);
-  line-height: .88;
+  font-size: clamp(58px, 6.4vw, 92px);
+  line-height: .98;
 }
 
-.home :global(.hero-lede) { max-width: 42ch; }
+.home :global(.hero-lede) { max-width: 55ch; }
 .home :global(.next-running-badge) {
   top: auto;
   right: var(--public-content-inline);
@@ -88,6 +88,9 @@
   min-height: 0;
 }
 .home :global(.twinning-visual) { min-height: 500px; padding: 48px; }
+.twinningIdentity { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+.twinningIdentity img { flex-shrink: 0; width: 104px; height: auto; }
+.twinningIdentity :global(.eyebrow) { margin: 0; }
 .home :global(.twinning-copy),
 .home :global(.visit-copy) { padding: 24px 0; background: none; min-width: 0; }
 .home :global(.twinning-copy h2),
@@ -151,6 +154,8 @@
 }
 
 @media (max-width: 700px) {
+  .twinningIdentity { gap: 16px; }
+  .twinningIdentity img { width: 80px; }
   .home :global(.interest-rail) { grid-template-columns: minmax(0, 1fr); }
   .home :global(.interest) { padding-inline: 0; grid-template-columns: 28px minmax(0, 1fr) auto; }
   .home :global(.interest-rail > :nth-child(odd) .interest) { border-right: 0; }
@@ -166,3 +171,13 @@
   .home :global(.button-row .button),
   .home :global(.visit-actions .button) { flex: 0 1 auto; width: 100%; }
 }
+
+.projectLinks { list-style: none; padding: 0; margin: 24px 0; }
+.projectLinks li { padding: 20px 0; border-top: 1px solid var(--line); }
+.projectLinks a { display: flex; justify-content: space-between; align-items: center; gap: 16px; font-size: 20px; }
+.projectLinks svg { flex-shrink: 0; }
+.projectLinks p { margin: 12px 0 0; }
+.home :global(.interest-copy small) { display: block; line-height: 1.6; margin-top: 8px; font-size: 14px; font-weight: 400; letter-spacing: normal; text-transform: none; color: #4e5b53; }
+.home :global(.interest-rail > :last-child:nth-child(odd)) { grid-column: 1 / -1; }
+.home :global(.interest-rail > :last-child .interest) { border-right: 0; }
+.home :global(.feature-card .text-link) { margin-top: 16px; }

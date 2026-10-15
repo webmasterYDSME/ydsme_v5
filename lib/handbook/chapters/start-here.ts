@@ -5,7 +5,7 @@ export const startHere: HandbookChapter = {
   title: "Start here",
   summary: "What the membership system does, who can do what, and how a typical week goes.",
   audience: "everyone",
-  reviewed: "2026-09-21",
+  reviewed: "2026-10-15",
   sections: [
     {
       id: "what-it-does",
@@ -20,6 +20,7 @@ export const startHere: HandbookChapter = {
       id: "two-modes",
       title: "MemberMojo or the website?",
       blocks: [
+        { type: "p", text: "The public [Membership page](/membership) introduces the Society’s wider engineering interests under **Bring your curiosity**. **Ask about membership** opens an email to the Society’s configured contact address; it does not start an application. The joining button remains **Join or renew** in MemberMojo mode and **Apply to join** in website mode. Fees and application rules are unchanged." },
         { type: "p", text: "The Society is moving its membership from MemberMojo to this website. The website can run in one of two modes, and the mode decides which screens exist. The banner at the top of every handbook page shows which mode it is in now." },
         { type: "table", head: ["", "MemberMojo mode", "Website mode"], rows: [
           ["Who runs membership", "MemberMojo. Members join and renew there.", "This website. Members join and renew here."],

@@ -199,7 +199,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <h1>{greetingFor(londonHour())}{firstName ? `, ${firstName}` : ""}.</h1>
         <p>Here is what is happening at the Society.</p>
       </div>
-      <Link href="/events" prefetch={false} className="button outline dashboard-public-link"><span>Public website</span><ArrowUpRight aria-hidden="true"/></Link>
+      <Link href="/" prefetch={false} className="button outline dashboard-public-link"><span>Public website</span><ArrowUpRight aria-hidden="true"/></Link>
     </header>
 
     {query.error ? <p className="form-message error">{query.error}</p> : null}

@@ -22,7 +22,7 @@ Who runs membership is a setting an administrator changes at `/administrator/mem
 
 `npm run supabase:start` also installs local-only Vault values used by scheduled jobs. Membership emails are sent to Mailpit immediately after they are queued; a one-minute job retries any delivery interrupted by a transient failure.
 
-The local database currently contains a private production snapshot for development. Its ignored export files live under `supabase/.temp/`; never commit, upload or share them. `supabase db reset` erases the local snapshot and rebuilds only the schema because automatic production-data seeding is intentionally disabled.
+The local database contains a private snapshot of the hosted preview project, copied on 15 October 2026, including application data and Auth users/identities. Active login sessions and hosted service secrets are not copied. Of 162 preview Storage records, 43 files were available and copied; the other 119 returned not found from preview. Its ignored export files live under `supabase/.temp/`; never commit, upload or share them. `supabase db reset` erases the local snapshot and rebuilds only the schema because automatic production-data seeding is intentionally disabled.
 
 ## Local Stripe membership testing
 
