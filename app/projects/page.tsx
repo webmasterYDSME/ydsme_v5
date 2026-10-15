@@ -11,8 +11,8 @@ import styles from "./projects.module.css";
 export const dynamic = "force-dynamic";
 export const metadata = {
   ...publicPageMetadata({
-    title: "Completed Member Projects",
-    description: "Explore completed model engineering projects shared publicly by York Model Engineers members.",
+    title: "Members’ Engineering Projects",
+    description: "Explore the making, problem-solving and craftsmanship behind completed projects shared by York Model Engineers members.",
     path: "/projects",
     keywords: ["model engineering projects", "miniature railway projects", "member workshop projects"],
   }),
@@ -26,7 +26,7 @@ export default async function PublicProjectsPage() {
     <section className={`section public-projects-page ${styles.projects}`} aria-labelledby="public-projects-heading">
       <header className="public-projects-heading">
         <div><p className="eyebrow dark">Made by Society members</p><h1 id="public-projects-heading">From the workbench.</h1></div>
-        <p>Completed builds, restorations and workshop stories shared by their owners.</p>
+        <p>Builds, repairs, restorations and the engineering behind them. Explore completed projects and workshop stories shared with their owners’ permission.</p>
       </header>
 
       {projects.length ? <div className="public-project-grid">
@@ -45,7 +45,7 @@ export default async function PublicProjectsPage() {
             </div>
           </article>
         </Reveal>)}
-      </div> : <div className="public-projects-empty"><Hammer aria-hidden="true"/><h2>The showcase is being prepared.</h2><p>Completed projects will appear here.</p></div>}
+      </div> : <div className="public-projects-empty"><Hammer aria-hidden="true"/><h2>The showcase is being prepared.</h2><p>The first public project stories are being prepared. Each project is shared with its owner’s permission and reviewed before publication.</p></div>}
     </section>
   </PageShell>;
 }

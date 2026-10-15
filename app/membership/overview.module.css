@@ -66,3 +66,10 @@
 @media (max-width: 560px) {
   .overview :global(.tier-grid) { grid-template-columns: minmax(0, 1fr); }
 }
+
+.questions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--membership-column-gap); border-top: 1px solid var(--line); }
+.questions h2 { font: 500 clamp(42px, 5vw, 68px)/1 var(--font-display); margin: 0; }
+.questions h2 em { color: var(--rust); }
+.questions p { line-height: 1.75; }
+.questions :global(.text-link) { margin-top: 16px; }
+@media (max-width: 700px) { .questions { grid-template-columns: minmax(0, 1fr); } }

@@ -19,8 +19,8 @@ import styles from "./events.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
-  title: "Public Running Days & Events",
-  description: "See upcoming public running days, miniature railway events and special live-steam dates at York Model Engineers.",
+  title: "Events & Visits",
+  description: "Explore public open days, railway running events and the Society’s programme. Check each event for who can attend and whether booking is needed.",
   path: "/events",
   keywords: ["York miniature railway events", "live steam events York", "public running days"],
 });
@@ -56,7 +56,7 @@ export default async function Events() {
   return <PageShell><div className={styles.events}>
     {featured ? <div className="events-opening">
       <section className="section events-feature" id={`event-${featured.id}`} aria-labelledby="featured-event-title">
-        <div className="events-feature-heading"><p className="eyebrow">The public running board</p><span>Next public event</span></div>
+        <div className="events-feature-heading"><p className="eyebrow">Events & visits</p><span>Next public event</span></div>
         <div className="events-feature-layout">
           <EventArtwork src={artworkUrl(featured)} name={featured.name} featured/>
           <div className="events-feature-copy">
@@ -73,11 +73,11 @@ export default async function Events() {
         </div>
       </section>
       <section className="section events-about" id="about-event" aria-labelledby="about-event-title">
-        <div><p className="eyebrow dark">A day at the railway</p><h2 id="about-event-title">About <em>this event</em></h2></div>
+        <div><p className="eyebrow dark">Plan your visit</p><h2 id="about-event-title">About <em>this event</em></h2></div>
         <p className="event-description">{featured.descriptions}</p>
       </section>
     </div> : <>
-      <InnerHero kicker="The public running board" title={<>What’s next<br/><em>down the line.</em></>} copy="Public open days and special running days at York Model Engineers." image="/images/events.webp" imageAlt="Visitors riding miniature trains during a public open day at York Model Engineers" imagePosition="65% center" imageTone="bright"/>
+      <InnerHero kicker="Events & visits" title={<>What’s on<br/><em>at the Society.</em></>} copy="Public open days, railway running events and gatherings at York Model Engineers. Check each listing for who can attend." image="/images/events.webp" imageAlt="Visitors riding miniature trains during a public open day at York Model Engineers" imagePosition="65% center" imageTone="bright"/>
       <section className="section events-empty"><p className="eyebrow dark">Timetable update</p><h2>More public dates are on their way.</h2><p>There are no upcoming public events listed. Check back soon, or explore our visitor information to plan a future visit.</p><Link className="button dark" href="/visitors">Visitor information<ArrowRight size={17}/></Link></section>
     </>}
 

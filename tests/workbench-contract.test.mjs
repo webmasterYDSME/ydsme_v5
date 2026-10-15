@@ -118,8 +118,8 @@ test("publishes only owner-consented and independently reviewed project snapshot
   assert.match(publicIndex, /robots: \{ index: true, follow: true \}/);
   assert.match(publicDetail, /reviewed before publication/);
   assert.match(publicDetail, /robots: \{ index: true, follow: true \}/);
-  assert.doesNotMatch(navigation, /const headerNav = [^\n]*Projects/);
-  assert.match(navigation, /const footerNav = \[\["Projects","\/projects"\],\.\.\.headerNav\]/);
+  assert.match(navigation, /const headerNav = [^\n]*\["Projects","\/projects"\]/);
+  assert.match(navigation, /const footerNav = \[\.\.\.headerNav/);
   assert.match(sitemap, /path: "\/projects"/);
   assert.match(sitemap, /getPublicFeaturedProjectSitemapEntries/);
   assert.match(sitemap, /`\$\{SITE_URL\}\/projects\/\$\{project\.slug\}`/);
