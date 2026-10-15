@@ -88,6 +88,9 @@
   min-height: 0;
 }
 .home :global(.twinning-visual) { min-height: 500px; padding: 48px; }
+.twinningIdentity { display: flex; align-items: center; gap: 24px; margin-bottom: 24px; }
+.twinningIdentity img { flex-shrink: 0; width: 104px; height: auto; }
+.twinningIdentity :global(.eyebrow) { margin: 0; }
 .home :global(.twinning-copy),
 .home :global(.visit-copy) { padding: 24px 0; background: none; min-width: 0; }
 .home :global(.twinning-copy h2),
@@ -151,6 +154,8 @@
 }
 
 @media (max-width: 700px) {
+  .twinningIdentity { gap: 16px; }
+  .twinningIdentity img { width: 80px; }
   .home :global(.interest-rail) { grid-template-columns: minmax(0, 1fr); }
   .home :global(.interest) { padding-inline: 0; grid-template-columns: 28px minmax(0, 1fr) auto; }
   .home :global(.interest-rail > :nth-child(odd) .interest) { border-right: 0; }

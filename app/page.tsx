@@ -76,7 +76,10 @@ export default async function Home() {
           <p>Two clubs <i/> one shared passion</p>
         </div>
         <div className="twinning-copy">
-          <p className="eyebrow">Friends across the world</p>
+          <div className={styles.twinningIdentity}>
+            <Image src="/hornsby-logo.png" alt="Hornsby Model Engineers Co-operative Ltd" width={104} height={104} sizes="(max-width: 700px) 80px, 104px" quality={75}/>
+            <p className="eyebrow">Friends across the world</p>
+          </div>
           <h2 id="twinning-title">One craft.<br/><em>Two hemispheres.</em></h2>
           <p>We are proud to be twinned with <strong>Hornsby Model Engineers</strong>, home of the Galston Valley Railway in New South Wales, Australia.</p>
           <div className="twinning-note"><Handshake aria-hidden="true"/><span><strong>Proudly twinned</strong> by friendship, craftsmanship and a shared love of miniature railways.</span></div>
