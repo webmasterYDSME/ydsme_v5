@@ -164,8 +164,9 @@ test("publishes and caches announcements through safe active and news projection
   assert.match(actions, /archiveAnnouncement[\s\S]*updateTag\(ANNOUNCEMENTS_CACHE_TAG\)/);
   assert.match(actions, /restoreAnnouncement[\s\S]*updateTag\(ANNOUNCEMENTS_CACHE_TAG\)/);
   assert.match(data, /isMissingProjection\(error\)[\s\S]*return \[\] as AnnouncementRecord\[\]/);
-  assert.match(home, /getCarriageAnnouncements\(1\)/);
-  assert.match(home, /<InteractiveSteamTrain announcements=/);
+  // The homepage no longer displays the train; announcements remain available through News.
+  assert.doesNotMatch(home, /getCarriageAnnouncements/);
+  assert.doesNotMatch(home, /InteractiveSteamTrain|className="track-line"/);
   assert.match(train, /setInterval\([\s\S]*setAnnouncementIndex/);
   assert.match(train, /announcement \? <Link className="train-banner" href="\/news"/);
   assert.match(train, /announcement \? <span className="train-coupler(?: [^"]*)?"/);
