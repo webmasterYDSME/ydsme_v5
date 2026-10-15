@@ -13,8 +13,8 @@ const sans = DM_Sans({ variable: "--font-sans", subsets: ["latin"], weight: ["40
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://yorkmodelengineers.co.uk"),
-  title: { default: "York Model Engineers | Miniature Railways & Live Steam in York", template: "%s | York Model Engineers" },
-  description: "Miniature railways, model engineering and live steam in five woodland acres at Dringhouses, York.",
+  title: { default: "York Model Engineers | Engineering, Making & Community", template: "%s | York Model Engineers" },
+  description: "Model engineering, clockmaking, workshop skills and working machines in York, with miniature railways and public open days in Dringhouses.",
   applicationName: "York Model Engineers",
   category: "Model engineering and miniature railways",
   robots: {
@@ -40,14 +40,14 @@ export const metadata: Metadata = {
     locale: "en_GB",
     siteName: "York Model Engineers",
     url: "/",
-    title: "York Model Engineers — Small engines. Grand adventures.",
-    description: "Live steam, model engineering and miniature railways in five woodland acres at Dringhouses, York.",
+    title: "York Model Engineers | Engineering, Making & Community",
+    description: "A community for people who enjoy making things, understanding how they work and sharing practical skills.",
     images: [{ url: "/og.png", width: 1200, height: 630, alt: "York Model Engineers miniature steam locomotive" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "York Model Engineers — Small engines. Grand adventures.",
-    description: "Live steam, model engineering and miniature railways in Dringhouses, York.",
+    title: "York Model Engineers | Engineering, Making & Community",
+    description: "Model engineering, craftsmanship and community in York.",
     images: ["/og.png"],
   },
 };

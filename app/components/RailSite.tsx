@@ -11,8 +11,8 @@ import { ArrowUpRight, Globe2, MapPin, Menu, X } from "lucide-react";
 import { CoalTenderArtwork, LocomotiveArtwork, WagonWheelArtwork } from "./TrainArtwork";
 import type { PostalAddress, PublicSiteConfig } from "@/lib/data";
 
-const headerNav = [["What we do","/#what-we-do"],["Visitors","/visitors"],["Events","/events"],["Our story","/club-history"],["Committee","/committees"],["Membership","/membership"]];
-const footerNav = [["Projects","/projects"],...headerNav];
+const headerNav = [["What we do","/#what-we-do"],["Projects","/projects"],["Events & visits","/events"],["About","/club-history"],["Membership","/membership"]];
+const footerNav = [...headerNav,["Visitor information","/visitors"],["Committee","/committees"]];
 
 export function Reveal({children, delay=0}:{children:ReactNode;delay?:number}) {
   const ref=useRef<HTMLDivElement>(null);
@@ -199,7 +199,7 @@ export function RailSiteFrame({children, siteConfig, headerTheme="overlay", isAu
     </header>
     <main id="main-content">{children}</main>
     <footer className={`site-footer ${frameStyles.footer}`}>
-      <div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={92} height={92} quality={55} /></span><div><h2>Made by hand.<br/><em>Moved by steam.</em></h2><p>Miniature railways and model engineering in York since 1929.</p></div></div>
+      <div className="footer-brand"><span className="brand-logo footer-logo"><Image src="/ydsme-logo-detailed-gold-lions.png" alt="" width={92} height={92} quality={55} /></span><div><h2>Made with skill.<br/><em>Shared with enthusiasm.</em></h2><p>Model engineering, craftsmanship and community in York.</p></div></div>
       <section className="footer-visit" aria-labelledby="footer-visit-title"><h3 id="footer-visit-title">Visit</h3><address><a className="footer-address-link" href="https://www.google.com/maps/dir/?api=1&amp;destination=53.94183%2C-1.11166" target="_blank" rel="noreferrer" aria-label="Get directions to the exact club entrance coordinates (opens in a new tab)"><MapPin aria-hidden="true"/><span><AddressLines address={siteConfig.clubAddress}/></span><ArrowUpRight aria-hidden="true"/></a></address><a className="footer-email" href={`mailto:${siteConfig.email}`}>{siteConfig.email}</a>{siteConfig.telephone ? <a href={`tel:${siteConfig.telephone.replace(/[^+\d]/g, "")}`}>{siteConfig.telephone}</a> : null}</section>
       <nav className="footer-navigation" aria-label="Footer navigation"><h3>Explore</h3><Link href="/news">News</Link>{footerNav.map(([label,href])=>path==="/" && href.startsWith("/#") ? <a key={href} href={href}>{label}</a> : <Link key={href} href={href}>{label}</Link>)}</nav>
       <nav className="footer-navigation" aria-label="Legal navigation"><h3>Legal</h3><a href="/documents/visitor-safety-guide.pdf" target="_blank" rel="noreferrer">Health &amp; safety</a><Link href="/privacy-policy">Privacy</Link><Link href="/cookie-policy">Cookies</Link></nav>

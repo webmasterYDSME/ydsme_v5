@@ -7,6 +7,9 @@ export const DEFAULT_OG_IMAGE = "/og.png";
 
 const sharedKeywords = [
   "York Model Engineers",
+  "clockmaking",
+  "workshop skills",
+  "working machinery",
   "miniature railway York",
   "live steam York",
   "model engineering club",
@@ -28,7 +31,7 @@ export function publicPageMetadata({
   image?: { url: string; alt: string };
 }): Metadata {
   return {
-    title: path === "/" ? { absolute: `${title} | ${SITE_NAME}` } : title,
+    title: path === "/" ? { absolute: `${SITE_NAME} | ${title}` } : title,
     description,
     keywords: [...sharedKeywords, ...keywords],
     alternates: { canonical: path },
@@ -71,7 +74,7 @@ export const organisationJsonLd = {
   logo: `${SITE_URL}/ydsme-logo-detailed-gold-lions.png`,
   image: `${SITE_URL}${DEFAULT_OG_IMAGE}`,
   description:
-    "A volunteer model engineering society operating miniature railways and live-steam events in Dringhouses, York.",
+    "A model engineering society in York bringing together people interested in making, clockmaking, tools and working machinery, with miniature railways and public open days in Dringhouses.",
   foundingDate: "1929-09-15",
   email: "secretary@yorkmodelengineers.co.uk",
   address: {

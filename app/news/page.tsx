@@ -8,10 +8,10 @@ import styles from "./news.module.css";
 
 export const dynamic = "force-dynamic";
 export const metadata = publicPageMetadata({
-  title: "News & Public Announcements",
+  title: "Society News",
   description: "Read the latest public announcements and Society updates from York Model Engineers.",
   path: "/news",
-  keywords: ["York Model Engineers news", "miniature railway announcements"],
+  keywords: ["York Model Engineers news", "engineering society updates"],
 });
 
 export default async function News() {
@@ -20,8 +20,8 @@ export default async function News() {
   return <PageShell headerTheme="light">
     <section className={`section news-board ${styles.news}`} aria-labelledby="news-heading">
       <header className="news-heading">
-        <div><p className="eyebrow dark">The Society noticeboard</p><h1 id="news-heading">News from the line.</h1></div>
-        <p>Public notices and the latest updates for visitors, members and friends of the railway, with the newest announcement first.</p>
+        <div><p className="eyebrow dark">The Society noticeboard</p><h1 id="news-heading">Society news.</h1></div>
+        <p>Public notices, project updates and news from across the Society, with the newest announcement first.</p>
       </header>
       {announcements.length ? <div className="news-list">
         {announcements.map((announcement, index) => <Reveal key={announcement.id} delay={index * 0.05}>
@@ -30,7 +30,7 @@ export default async function News() {
             <div><h2>{announcement.title}</h2><p>{announcement.body}</p></div>
           </article>
         </Reveal>)}
-      </div> : <div className="empty-state news-empty"><Megaphone aria-hidden="true"/><h3>No announcements right now.</h3><p>When there is news from the Society, it will appear here and aboard the homepage train.</p></div>}
+      </div> : <div className="empty-state news-empty"><Megaphone aria-hidden="true"/><h3>No announcements right now.</h3><p>When there is news from the Society, it will appear here.</p></div>}
     </section>
   </PageShell>;
 }
