@@ -58,7 +58,7 @@ export default async function Home() {
       </section>
 
       <section className="section" aria-labelledby="interests-title">
-        <Reveal><div className="section-heading-row"><div><p className="eyebrow dark">What we do</p><h2 className="section-heading" id="interests-title">Explore our <em>interests.</em></h2></div><p>Model engineering brings together many kinds of making. Explore the tools, materials and mechanisms that turn ideas into working projects.</p></div></Reveal>
+        <Reveal><div className="section-heading-row"><div><p className="eyebrow dark">What we do</p><h2 className="section-heading" id="interests-title">Explore our <em>interests.</em></h2></div><p>Model engineering brings together many kinds of skills. Explore the tools, materials and mechanisms that turn ideas into working projects.</p></div></Reveal>
         <div className="interest-rail">{interests.map((item, i)=><Reveal key={item.name} delay={i*.04}><div className={item.isNew ? "interest interest-new" : "interest"}><span className="interest-number">{String(i+1).padStart(2,"0")}</span><div className="interest-copy"><div className="interest-title-row"><p>{item.name}</p>{item.isNew ? <span className="interest-new-badge"><Sparkles aria-hidden="true"/>New</span> : null}</div>{item.detail ? <small>{item.detail}</small> : null}</div><Gauge className="interest-gauge" size={18}/></div></Reveal>)}</div>
       </section>
 
